@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+Herald.xcodeproj/xcuserdata/
+DerivedData/
+.DS_Store
+Herald.xcodeproj/
+release/
+*.dmg
