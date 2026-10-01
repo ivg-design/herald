@@ -160,8 +160,10 @@ previous one for the same `app`. Stored at `~/Library/Application Support/Herald
 
 Field types: `text`, `number`, `date`, `url`, `image`, `bool`, `list`. `sample` drives the Designer preview.
 A notification refers to the manifest through `app`; bindings read top-level keys first, then `metadata`.
-Notifications may carry the issuer's actions in `actions` (or as `buttons`, which still works) and choose a
-template with `template`; otherwise the manifest's `defaultTemplate` applies.
+Notifications may carry the issuer's actions in `actions` (or as `buttons`, which still works; `buttons` wins
+when both are sent), or name actions the manifest declares with `actionIds: ["markRead"]`, and choose a
+template with `template`; otherwise the manifest's `defaultTemplate` applies. A notification that names no
+action gets none, even when the manifest declares some.
 
 ### POST /v1/preview
 

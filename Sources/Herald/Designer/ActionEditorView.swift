@@ -83,7 +83,7 @@ struct ActionEditorView: View {
                         .controlSize(.small)
                     }
                 }
-                Text("Your actions are yours: a command or script you add runs after one confirmation per template.")
+                Text("Your actions are yours: a command, script or Shortcut you add runs after one confirmation per template.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 

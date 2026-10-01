@@ -42,6 +42,36 @@ final class RouterTests: XCTestCase {
         return HTTPRequest(method: method, path: path, query: query, headers: h, body: Data(body.utf8))
     }
 
+    func testPayloadActionsAreTheIssuersButtonsNotMetadata() async throws {
+        // The documented name `actions`, in the manifest's wire form, reaches the backend as `buttons`.
+        var r = await router.handle(req("POST", "/v1/notify", body: """
+        {"app":"x","title":"T","actions":[{"id":"markRead","label":"Mark as Read","kind":"callback"},
+                                          {"label":"Open","url":"https://example.com"}]}
+        """))
+        XCTAssertEqual(r.status, 200, String(data: r.body, encoding: .utf8) ?? "")
+        var n = try XCTUnwrap(backend.notified.last)
+        XCTAssertEqual(n.buttons?.map(\.label), ["Mark as Read", "Open"])
+        XCTAssertNotNil(n.buttons?.first?.callback, "kind callback means call the issuer back")
+        XCTAssertEqual(n.buttons?.last?.url, "https://example.com")
+        XCTAssertNil(n.metadata, "not diverted into metadata")
+
+        // `buttons` wins when both are sent, and `actionIds` is a notification property of its own.
+        r = await router.handle(req("POST", "/v1/notify", body: #"{"app":"x","title":"T","buttons":[{"label":"A"}],"actions":[{"label":"B"}],"actionIds":["markRead"]}"#))
+        XCTAssertEqual(r.status, 200)
+        n = try XCTUnwrap(backend.notified.last)
+        XCTAssertEqual(n.buttons?.map(\.label), ["A"])
+        XCTAssertEqual(n.actionIds, ["markRead"])
+        XCTAssertNil(n.metadata)
+
+        // A list that is not made of objects is a manifest field that happens to be called `actions`.
+        r = await router.handle(req("POST", "/v1/notify", body: #"{"app":"x","title":"T","actions":["a","b"]}"#))
+        XCTAssertEqual(r.status, 200)
+        n = try XCTUnwrap(backend.notified.last)
+        XCTAssertNil(n.buttons)
+        guard case .object(let meta)? = n.metadata else { return XCTFail("expected metadata") }
+        XCTAssertEqual(meta["actions"], .array([.string("a"), .string("b")]))
+    }
+
     func testHealthNeedsNoAuth() async throws {
         let r = await router.handle(req("GET", "/v1/health", token: nil))
         XCTAssertEqual(r.status, 200)

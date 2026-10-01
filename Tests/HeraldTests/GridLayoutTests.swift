@@ -392,6 +392,37 @@ final class GridLayoutTests: XCTestCase {
         XCTAssertEqual(list[1].action.kind, .url)
     }
 
+    func testButtonsActionsAndActionIdsResolveToTheSameListThePreviewShows() throws {
+        let m = emailManifest()
+        // `actionIds` look the actions up in the manifest; `actions` reaches the model as `buttons` (see RouterTests).
+        let viaIds = BannerData.actions(for: notification { $0.actionIds = ["markRead", "archive"] }, manifest: m, rules: [])
+        let viaButtons = BannerData.actions(for: notification { $0.buttons = m.actions }, manifest: m, rules: [])
+        XCTAssertEqual(viaIds.map(\.action), viaButtons.map(\.action))
+        XCTAssertEqual(viaIds.map(\.id), ["markRead", "archive"])
+
+        // The sample preview is an issuer that names every declared action, through the same function.
+        let plan = try PreviewPlan.make(PreviewSpec(app: "webwatcher.email"), manifest: m, stored: { _ in nil })
+        XCTAssertEqual(plan.actions.map(\.action), viaIds.map(\.action))
+        let live = BannerData.actions(for: plan.notification, manifest: m, rules: [])
+        XCTAssertEqual(live.map(\.id), plan.actions.map(\.id), "what the banner would resolve from the preview's own notification")
+
+        // Manifest actions are not shown just because the manifest declares them.
+        XCTAssertTrue(BannerData.actions(for: notification(), manifest: m, rules: []).isEmpty)
+        let real = try PreviewPlan.make(PreviewSpec(app: "webwatcher.email", data: notification()), manifest: m, stored: { _ in nil })
+        XCTAssertTrue(real.actions.isEmpty, "a real payload that names no action gets none, in a preview too")
+
+        // Unknown ids are skipped, repeated ids collapse, case does not matter.
+        let odd = BannerData.actions(for: notification { $0.actionIds = ["ARCHIVE", "nope", "archive"] }, manifest: m, rules: [])
+        XCTAssertEqual(odd.map(\.id), ["archive"])
+        XCTAssertTrue(BannerData.actions(for: notification { $0.actionIds = ["archive"] }, manifest: nil, rules: []).isEmpty)
+
+        // At delivery the ids become buttons, and an explicit `buttons` is left alone.
+        let made = ActionResolver.materializingActionIDs(notification { $0.actionIds = ["archive"] }, manifest: m)
+        XCTAssertEqual(made.buttons?.map(\.label), ["Archive"])
+        let kept = ActionResolver.materializingActionIDs(notification { $0.buttons = []; $0.actionIds = ["archive"] }, manifest: m)
+        XCTAssertEqual(kept.buttons, [], "an explicit empty array means no buttons")
+    }
+
     func testSnoozeFlagBecomesAnIssuerActionTheRulesCanHide() {
         let n = notification { $0.snooze = true; $0.buttons = [HeraldButton(label: "Open", url: "https://example.com")] }
         let plain = BannerData.actions(for: n, manifest: nil, rules: [])

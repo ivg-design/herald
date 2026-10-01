@@ -174,11 +174,29 @@ final class MCPTools: @unchecked Sendable {
             throw ToolFailure("No manifest is registered for app '\(app)'.",
                               details: ["registered": strings(known)])
         }
-        return .json(try JSONValue(encoding: m).abbreviated())
+        let whole = try JSONValue(encoding: m)
+        return .json(try args.bool("full") == true ? whole : whole.abbreviated())
     }
 
     private func putManifest(_ args: MCPArgs) async throws -> MCPToolResult {
-        let raw = JSONValue.object(try args.requiredObject("manifest"))
+        var raw = JSONValue.object(try args.requiredObject("manifest"))
+        // get_manifest shortens strings over 1200 characters (an embedded icon, a long sample). Sending one of
+        // those markers back would store the marker as the value, so each is swapped for the stored original, and
+        // a marker that cannot be matched is refused.
+        var restored = 0
+        let markerCount = raw.abbreviationMarkers.count
+        if markerCount > 0 {
+            let app = (try? args.object("manifest"))?["app"]?.stringValue ?? ""
+            var unresolved: [String] = []
+            var table: [String: [String]] = [:]
+            if !app.isEmpty, let stored = try await client.manifest(app: app) { table = try JSONValue(encoding: stored).abbreviationTable() }
+            raw = raw.restoringAbbreviated(table, unresolved: &unresolved)
+            guard unresolved.isEmpty else {
+                throw ToolFailure("Manifest not saved: it contains \(unresolved.count) abbreviated value(s) that do not match the stored manifest. get_manifest shortens strings over 1200 characters for display; a value such as \"<data:image/png;base64,... 5022 characters omitted>\" is a marker, not data. Call get_manifest with full: true to get the real values, or remove the field to keep what is stored.",
+                                  details: ["abbreviated": strings(unresolved.map { String($0.prefix(80)) })])
+            }
+            restored = markerCount
+        }
         let m: HeraldManifest
         do { m = try raw.decoded(HeraldManifest.self) }
         catch { throw DecodeReport.failure(error, what: "manifest", raw: raw) }
@@ -191,6 +209,7 @@ final class MCPTools: @unchecked Sendable {
             "saved": .bool(true), "app": .string(m.app), "fields": .number(Double(m.fields.count)),
             "actions": .number(Double(m.actions.count)), "assets": .number(Double(m.assets.count)),
             "defaultTemplate": m.defaultTemplate.map { .string($0) } ?? .null,
+            "restoredAbbreviatedValues": .number(Double(restored)),
         ]))
     }
 
@@ -319,7 +338,8 @@ final class MCPTools: @unchecked Sendable {
         guard t.usesGrid else { return nil }
         var fields = TemplateResolver.sampleFields(manifest: manifest)
         for (k, v) in t.extra where !v.isEmpty { fields["extra.\(k)"] = .text(v) }
-        let actions = ActionResolver.resolveDetailed(issuer: manifest?.actions ?? [], ids: manifest?.actionIDs, rules: t.actionRules)
+        let sample = ActionResolver.sampleSource(manifest: manifest)
+        let actions = ActionResolver.resolveDetailed(issuer: sample.buttons, ids: sample.ids, rules: t.actionRules)
         let empty = t.emptyCellIDs(fields: fields, actions: actions)
         let plan = t.plan(emptyCells: empty)
         return .object([
@@ -531,6 +551,15 @@ final class MCPTools: @unchecked Sendable {
             payload["fields"] = nil
             for (k, v) in fields where payload[k] == nil { payload[k] = v }
         }
+        // An agent can send as any app id, and a `command` button runs under that app's command permission (a lasting
+        // "Always Allow" the user may have given the real app). So it has to say it means it.
+        if try args.bool("allowCommandButtons") != true {
+            let labels = JSONValue.commandButtonLabels(in: payload["buttons"]) + JSONValue.commandButtonLabels(in: payload["actions"])
+            if !labels.isEmpty {
+                throw ToolFailure("Not sent: button(s) \(labels.map { "'\($0)'" }.joined(separator: ", ")) carry a shell `command`. A command button runs on the user's Mac under '\(app)' command permission, and anyone can send as any app id. Use a url or callback button, or pass allowCommandButtons: true if the user asked for it.")
+            }
+        }
+        payload["allowCommandButtons"] = nil
         let id = try await client.notify(payload: .object(payload))
         return .json(.object(["sent": .bool(true), "id": .string(id), "app": .string(app)]))
     }
@@ -559,15 +588,29 @@ final class MCPTools: @unchecked Sendable {
         if (payload["title"]?.stringValue ?? "").isEmpty { payload["title"] = .string("Test: \(templateName)") }
 
         var issuerActions: [String] = []
-        if try args.bool("includeIssuerActions") ?? true, let m = manifest, !m.actions.isEmpty, payload["buttons"] == nil {
-            payload["buttons"] = try JSONValue(encoding: m.actions)
-            issuerActions = m.actions.indices.map { m.actionID(at: $0) }
+        var leftOut: [String] = []
+        if try args.bool("includeIssuerActions") ?? true, let m = manifest, !m.actions.isEmpty,
+           payload["buttons"] == nil, payload["actions"] == nil, payload["actionIds"] == nil {
+            // The sample stands in for an issuer that names every declared action, resolved by the same function a
+            // banner and a preview use, and sent as full buttons so an older Herald shows them too. A command action
+            // is left out unless the agent opted in (see send_notification).
+            let allowCommands = try args.bool("allowCommandButtons") == true
+            var named = HeraldNotification(app: app, title: "")
+            named.actionIds = ActionResolver.sampleSource(manifest: m).ids
+            let source = ActionResolver.issuerSource(for: named, manifest: m)
+            var buttons: [HeraldButton] = []
+            for (b, id) in zip(source.buttons, source.ids) {
+                if b.command != nil && !allowCommands { leftOut.append(id); continue }
+                buttons.append(b); issuerActions.append(id)
+            }
+            if !buttons.isEmpty { payload["buttons"] = try JSONValue(encoding: buttons) }
         }
         let id = try await client.notify(payload: .object(payload))
         return .json(.object([
             "sent": .bool(true), "id": .string(id), "app": .string(app), "template": .string(templateName),
-            "fields": strings(payload.keys.filter { !["app", "template", "id", "buttons"].contains($0) }.sorted()),
+            "fields": strings(payload.keys.filter { !["app", "template", "id", "buttons", "actions", "actionIds"].contains($0) }.sorted()),
             "issuerActions": strings(issuerActions),
+            "leftOutCommandActions": strings(leftOut),
         ]))
     }
 
@@ -672,7 +715,8 @@ final class MCPTools: @unchecked Sendable {
         let issues = try validated(t, extra: extra, manifest: manifest, verb: "saved")
         try await client.putTemplate(t)
 
-        let resolved = ActionResolver.resolveDetailed(issuer: manifest?.actions ?? [], ids: manifest?.actionIDs, rules: t.actionRules)
+        let sample = ActionResolver.sampleSource(manifest: manifest)
+        let resolved = ActionResolver.resolveDetailed(issuer: sample.buttons, ids: sample.ids, rules: t.actionRules)
         var out: [String: JSONValue] = [
             "saved": .bool(true), "app": .string(app), "template": .string(name),
             "ruleIndex": .number(Double(index)), "replacedExistingRule": .bool(replaced),

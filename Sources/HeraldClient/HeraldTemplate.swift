@@ -452,6 +452,11 @@ public extension HeraldTemplate {
         for (k, _) in extra where k.isEmpty || !HeraldManifest.isToken(k) {
             warn("extra.\(k)", "extra key '\(k)' cannot be read as {extra.\(k)}: use letters, digits, '_', '.' or '-'")
         }
+        // The template's default buttons are the template author's code, not the issuer's: Herald confirms a
+        // command here once per template, and says so rather than letting it look like the issuer's button.
+        for (i, b) in buttons.enumerated() where !(b.command ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            warn("buttons[\(i)].command", "a default button that runs a shell command is the template's own code: the user is asked to confirm it once, and again when it changes. Prefer an actionRules 'add' so it is visible as an action.")
+        }
         let templateActionIDs = actionRules.compactMap { $0.add?.id }
         var knownTokens = Set(TemplateResolver.standardTokens)
         if let m = manifest { knownTokens.formUnion(m.fields.map(\.key)) }

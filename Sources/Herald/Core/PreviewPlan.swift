@@ -40,6 +40,8 @@ public struct PreviewPlan: Sendable {
             note = sampleNotification(app: r.app, samples: samples, manifest: manifest)
             fields = samples
         }
+        // As in a live delivery: `actionIds` become the manifest's buttons before the template's defaults apply.
+        note = ActionResolver.materializingActionIDs(note, manifest: manifest)
         note = TemplateResolver.resolve(note, with: template)
         note.template = nil
 
@@ -58,9 +60,10 @@ public struct PreviewPlan: Sendable {
             }
         }
 
-        let buttons = note.buttons ?? []
-        let ids = ActionResolver.issuerIDs(for: buttons, manifest: manifest)
-        let actions = ActionResolver.resolveDetailed(issuer: buttons, ids: ids, rules: template.actionRules)
+        // The same function a live banner uses. A sample names every declared action (`actionIds`), a real payload
+        // only what it sends, so a preview with `data` shows no manifest action the issuer did not name.
+        let source = ActionResolver.issuerSource(for: note, manifest: manifest)
+        let actions = ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: template.actionRules)
         return PreviewPlan(template: template, grid: grid, notification: note,
                            fields: fields, actions: actions, manifest: manifest, deliveredAt: now,
                            usedSamples: r.data == nil)
@@ -94,9 +97,9 @@ public struct PreviewPlan: Sendable {
         BuiltinTemplates.named(name, app: app) ?? stored(name)
     }
 
-    /// The sample fields as a notification: the standard keys at the top, everything else in `metadata`; the
-    /// manifest's actions become its buttons (a manifest-less preview gets one "Open" button so the action row
-    /// is visible).
+    /// The sample fields as a notification: the standard keys at the top, everything else in `metadata`. It
+    /// names every action the manifest declares (`actionIds`), the way an issuer that wants them all would
+    /// (a manifest-less preview gets one "Open" button so the action row is visible).
     static func sampleNotification(app: String, samples: [String: HeraldFieldValue],
                                    manifest: HeraldManifest?) -> HeraldNotification {
         func text(_ key: String) -> String? {
@@ -111,7 +114,7 @@ public struct PreviewPlan: Sendable {
                                    image: text("image"), url: text("url"),
                                    metadata: metadata.isEmpty ? nil : .object(metadata))
         if let m = manifest {
-            if !m.actions.isEmpty { n.buttons = m.actions }
+            if !m.actions.isEmpty { n.actionIds = ActionResolver.sampleSource(manifest: m).ids }
         } else {
             n.buttons = [HeraldButton(label: "Open", url: "https://example.com")]
         }

@@ -1274,10 +1274,11 @@ final class DesignerModel: ObservableObject {
     /// The issuer's own buttons for the preview, with their declared ids.
     private var issuerSource: (buttons: [HeraldButton], ids: [String]?) {
         if previewSource == .lastReal, let item = lastItem {
-            let b = item.notification.buttons ?? []
-            return (b, ActionResolver.issuerIDs(for: b, manifest: manifest))
+            let s = ActionResolver.issuerSource(for: item.notification, manifest: manifest)
+            return (s.buttons, s.ids)
         }
-        if let m = manifest { return (m.actions, (0..<m.actions.count).map { m.actionID(at: $0) }) }
+        // The sample stands in for an issuer that names every action its manifest declares.
+        if manifest != nil { let s = ActionResolver.sampleSource(manifest: manifest); return (s.buttons, s.ids) }
         return ([], nil)
     }
 

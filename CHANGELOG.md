@@ -20,6 +20,19 @@
 
 ## Unreleased - security and robustness fixes
 
+- Template scripts and Shortcuts are confirmed before they run, like template commands, and the approval is
+  bound to what was shown (the script file's SHA-256, the Shortcut's name and input). A template's default
+  `buttons` count as the template's own code, not the issuer's. The prompt names the issuer button an action
+  replaced (same id). `add_action_rule` is annotated destructive. The `send_notification` and `send_test` tools
+  refuse command buttons unless `allowCommandButtons` is set.
+- A grid with more than 12 rows or columns is refused while it is decoded (a 31-byte body could allocate
+  hundreds of megabytes), `PUT /v1/templates` validates what it stores, and the grid solver clamps track counts.
+- Payload `actions` (the documented name for `buttons`) and `actionIds` now work: they resolve through one
+  function (`ActionResolver.issuerSource`) for the banner, a press, the preview and the Designer. Manifest
+  actions are shown only when the payload names them; a sample preview assumes it names them all.
+- `get_manifest` takes `full: true`; `put_manifest` restores abbreviated markers from the stored manifest and
+  refuses ones that match nothing.
+
 - Banner, button and History links open only `http`, `https` and `mailto` URLs. Cached images are
   recognised by their bytes and stored with the matching extension (never one chosen by the sender);
   non-images are not stored, so a payload can no longer plant a file that a later click would launch.

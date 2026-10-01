@@ -45,6 +45,10 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
     public var timeout: Double?
     public var priority: String?
     public var buttons: [HeraldButton]?
+    /// Ids of actions the issuer's manifest declares (`HeraldManifest.actionID(at:)`). When the payload sends no
+    /// `buttons` (or its alias `actions`), each id here is looked up in the manifest, so the issuer need not
+    /// repeat the whole button. `ActionResolver.issuerSource` is the one place that resolves them.
+    public var actionIds: [String]?
     public var snooze: Bool?
     public var reminder: HeraldReminder?
     public var metadata: JSONValue?
@@ -76,11 +80,11 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
                 reminder: HeraldReminder? = nil, metadata: JSONValue? = nil,
                 template: String? = nil, layout: HeraldLayout? = nil, accentColor: String? = nil,
                 showSubtitle: Bool? = nil, showBody: Bool? = nil, showTimestamp: Bool? = nil,
-                maxBodyLines: Int? = nil) {
+                maxBodyLines: Int? = nil, actionIds: [String]? = nil) {
         self.app = app; self.id = id; self.title = title; self.subtitle = subtitle
         self.body = body; self.image = image; self.url = url; self.sound = sound
         self.persistent = persistent; self.timeout = timeout; self.priority = priority
-        self.buttons = buttons; self.snooze = snooze; self.reminder = reminder
+        self.buttons = buttons; self.actionIds = actionIds; self.snooze = snooze; self.reminder = reminder
         self.metadata = metadata
         self.template = template; self.layout = layout; self.accentColor = accentColor
         self.showSubtitle = showSubtitle; self.showBody = showBody

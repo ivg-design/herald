@@ -211,6 +211,47 @@ public enum ActionResolver {
         apply(rules, to: issuerActions.map { HeraldResolvedAction(action: $0, origin: .issuer) })
     }
 
+    /// For issuer actions that already carry their origin (a template's default buttons are `.template`).
+    public static func resolveDetailed(issuerResolved: [HeraldResolvedAction], rules: [HeraldActionRule]) -> [HeraldResolvedAction] {
+        apply(rules, to: issuerResolved)
+    }
+
+    /// The issuer's buttons for a notification, with their ids: the one place the ways of naming them are
+    /// resolved, so a live banner, a preview and the Designer cannot disagree.
+    ///
+    /// 1. `buttons` (the router folds the payload alias `actions` into it), as sent. An explicit empty array
+    ///    means "no buttons".
+    /// 2. Otherwise each of `actionIds`, looked up in the manifest by its declared id (unknown ids are skipped).
+    /// 3. Otherwise none: the manifest's actions are never shown just because the manifest declares them. A
+    ///    sample preview stands in for an issuer that names every declared action (`sampleSource`).
+    public static func issuerSource(for n: HeraldNotification, manifest: HeraldManifest?) -> (buttons: [HeraldButton], ids: [String]) {
+        if let b = n.buttons { return (b, issuerIDs(for: b, manifest: manifest)) }
+        guard let wanted = n.actionIds, let m = manifest else { return ([], []) }
+        var buttons: [HeraldButton] = [], ids: [String] = []
+        for want in wanted {
+            let w = want.trimmingCharacters(in: .whitespaces)
+            guard let i = m.actions.indices.first(where: { m.actionID(at: $0).caseInsensitiveCompare(w) == .orderedSame }),
+                  !ids.contains(m.actionID(at: i)) else { continue }
+            buttons.append(m.actions[i]); ids.append(m.actionID(at: i))
+        }
+        return (buttons, ids)
+    }
+
+    /// What a sample (the manifest's sample data, no real payload) offers: every action the manifest declares.
+    public static func sampleSource(manifest: HeraldManifest?) -> (buttons: [HeraldButton], ids: [String]) {
+        guard let m = manifest else { return ([], []) }
+        return (m.actions, m.actions.indices.map { m.actionID(at: $0) })
+    }
+
+    /// The notification with `actionIds` turned into `buttons` (when it sent no buttons of its own), so history
+    /// and every later press see what was offered at delivery even if the manifest changes afterwards.
+    public static func materializingActionIDs(_ n: HeraldNotification, manifest: HeraldManifest?) -> HeraldNotification {
+        guard n.buttons == nil, n.actionIds != nil else { return n }
+        var out = n
+        out.buttons = issuerSource(for: n, manifest: manifest).buttons
+        return out
+    }
+
     /// The declared ids for a notification's own `buttons`: a button whose label matches a manifest action
     /// takes that action's declared id (so a rule can say `"match":"markRead"`), others get nil here and a
     /// label slug in `resolve`.

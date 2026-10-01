@@ -271,7 +271,7 @@ struct ActionsSettingsView: View {
             }
             Section {
                 if rows.isEmpty {
-                    Text("No template carries a command of its own.").foregroundStyle(.secondary)
+                    Text("No template carries a command, script or Shortcut of its own.").foregroundStyle(.secondary)
                 }
                 ForEach(rows) { row in
                     VStack(alignment: .leading, spacing: 4) {
@@ -293,8 +293,8 @@ struct ActionsSettingsView: View {
                     }
                     .padding(.vertical, 2)
                 }
-            } header: { Text("Template commands") } footer: {
-                Text("A command a template carries itself asks for one confirmation per template the first time it runs. Changing a command asks again. Commands an app sends in its own buttons follow the per-app switch under Apps.")
+            } header: { Text("Template commands, scripts and Shortcuts") } footer: {
+                Text("A command, script or Shortcut a template carries itself asks for one confirmation per template the first time it runs. Changing the command, the script file or the Shortcut's name or input asks again. Commands an app sends in its own buttons follow the per-app switch under Apps.")
             }
         }
         .formStyle(.grouped)

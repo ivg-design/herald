@@ -115,7 +115,7 @@ final class BannerModel: ObservableObject {
 
         fields = BannerData.fields(for: n, stored: item.fields, override: fieldsOverride, manifest: manifest,
                                    extra: g.extra, deliveredAt: item.deliveredAt, hasPicture: image != nil)
-        actions = BannerData.actions(for: n, manifest: manifest, rules: g.actionRules)
+        actions = BannerData.actions(for: n, manifest: manifest, rules: g.actionRules, template: template)
     }
 
     /// `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA` (the leading `#` is optional). Garbage returns nil rather

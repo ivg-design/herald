@@ -380,9 +380,8 @@ public final class ActionRunner: Sendable {
     /// template's rules, then the template's inline component actions that the rules did not already produce.
     public static func resolvedActions(notification n: HeraldNotification, manifest: HeraldManifest?,
                                        template: HeraldTemplate?) -> [HeraldResolvedAction] {
-        let buttons = n.buttons ?? []
-        let ids = ActionResolver.issuerIDs(for: buttons, manifest: manifest)
-        var list = ActionResolver.resolveDetailed(issuer: buttons, ids: ids, rules: template?.actionRules ?? [],
+        let source = ActionResolver.issuerSource(for: n, manifest: manifest)
+        var list = ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: template?.actionRules ?? [],
                                                   issuerOrigin: buttonsCameFromTemplate(n, template) ? .template : .issuer)
         for cell in template?.cells ?? [] {
             for a in cell.component.inlineActions where !list.contains(where: { $0.action == a }) {
@@ -409,9 +408,8 @@ public final class ActionRunner: Sendable {
 
     /// The label the issuer sent for the issuer action `id`, before any template rule relabelled it.
     public static func issuerLabel(id: String, notification n: HeraldNotification, manifest: HeraldManifest?) -> String? {
-        let buttons = n.buttons ?? []
-        let ids = ActionResolver.issuerIDs(for: buttons, manifest: manifest)
-        return ActionResolver.resolveDetailed(issuer: buttons, ids: ids, rules: [])
+        let source = ActionResolver.issuerSource(for: n, manifest: manifest)
+        return ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: [])
             .first { $0.action.id == id }?.action.label
     }
 

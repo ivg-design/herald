@@ -265,7 +265,15 @@ public final class Router: @unchecked Sendable {
             patched["speak"] = nil
             changed = true
         }
-        let extras = obj.filter { !Self.notificationKeys.contains($0.key) }
+        // `actions` is the documented name for the issuer's buttons (DESIGN 7.3); `buttons` still works and wins
+        // when a payload sends both. Entries may use the manifest's wire form ({id, label, kind}). A list that is
+        // not made of objects is a manifest field that happens to be called `actions` and stays where it is.
+        if let list = obj["actions"] as? [[String: Any]] {
+            patched["actions"] = nil
+            if obj["buttons"] == nil { patched["buttons"] = list.map(Self.buttonObject) }
+            changed = true
+        }
+        let extras = patched.filter { !Self.notificationKeys.contains($0.key) }
         if !extras.isEmpty, obj["metadata"] == nil || obj["metadata"] is [String: Any] || obj["metadata"] is NSNull {
             var metadata = (obj["metadata"] as? [String: Any]) ?? [:]
             for (k, v) in extras { metadata[k] = v }
@@ -277,6 +285,16 @@ public final class Router: @unchecked Sendable {
             return try decode(HeraldNotification.self, body: data)
         }
         return try decode(HeraldNotification.self, req)
+    }
+
+    /// One entry of a payload's `actions` as a button object: the manifest's wire form `{id, label, kind: "callback"}`
+    /// has no `callback` to read, so a callback action gets an empty one ("call the issuer back").
+    private static func buttonObject(_ entry: [String: Any]) -> [String: Any] {
+        var o = entry
+        if (o["kind"] as? String) == "callback", o["callback"] == nil { o["callback"] = [String: Any]() }
+        o["kind"] = nil
+        o["id"] = nil
+        return o
     }
 
     // MARK: Preview

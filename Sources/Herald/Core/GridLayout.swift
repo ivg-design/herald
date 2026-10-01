@@ -249,14 +249,21 @@ public enum BannerData {
     /// built-in snooze menu when the notification asks for one, all through the template's rules, which can hide,
     /// relabel, restyle and reorder them and add actions of their own.
     public static func actions(for n: HeraldNotification, manifest: HeraldManifest?,
+                               rules: [HeraldActionRule], template: HeraldTemplate? = nil) -> [HeraldResolvedAction] {
+        let source = ActionResolver.issuerSource(for: n, manifest: manifest)
+        let origin: HeraldActionOrigin = ActionRunner.buttonsCameFromTemplate(n, template) ? .template : .issuer
+        let issuer = ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: [], issuerOrigin: origin)
+        return actions(issuer: issuer, snooze: n.snooze == true, rules: rules)
+    }
+
+    /// The same list for issuer buttons that are already chosen (a sample preview's, the Designer's).
+    public static func actions(issuer start: [HeraldResolvedAction], snooze: Bool,
                                rules: [HeraldActionRule]) -> [HeraldResolvedAction] {
-        let buttons = n.buttons ?? []
-        let ids = ActionResolver.issuerIDs(for: buttons, manifest: manifest)
-        var issuer = ActionResolver.resolveDetailed(issuer: buttons, ids: ids, rules: []).map(\.action)
-        if n.snooze == true, !issuer.contains(where: { $0.kind == .snooze }) {
-            issuer.append(HeraldAction(id: snoozeActionID, label: "Snooze", kind: .snooze))
+        var issuer = start
+        if snooze, !issuer.contains(where: { $0.action.kind == .snooze }) {
+            issuer.append(HeraldResolvedAction(action: HeraldAction(id: snoozeActionID, label: "Snooze", kind: .snooze), origin: .issuer))
         }
-        return ActionResolver.resolveDetailed(issuerActions: issuer, rules: rules)
+        return ActionResolver.resolveDetailed(issuerResolved: issuer, rules: rules)
     }
 }
 

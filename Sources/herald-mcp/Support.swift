@@ -85,6 +85,66 @@ extension JSONValue {
     }
 }
 
+extension JSONValue {
+    /// Does `s` look like what `abbreviated()` writes in place of a long string?
+    static func isAbbreviationMarker(_ s: String) -> Bool {
+        (s.hasPrefix("<data:") && s.hasSuffix(" characters omitted>")) || (s.hasSuffix(" characters in all>") && s.contains("... <"))
+    }
+
+    /// Every abbreviation marker anywhere in the value.
+    var abbreviationMarkers: [String] {
+        switch self {
+        case .string(let s): return Self.isAbbreviationMarker(s) ? [s] : []
+        case .array(let a): return a.flatMap(\.abbreviationMarkers)
+        case .object(let o): return o.values.flatMap(\.abbreviationMarkers)
+        default: return []
+        }
+    }
+
+    /// Marker -> the original strings it stands for, for every long string in the value.
+    func abbreviationTable(maxString: Int = 1200) -> [String: [String]] {
+        var table: [String: [String]] = [:]
+        func walk(_ v: JSONValue) {
+            switch v {
+            case .string(let s) where s.count > maxString:
+                if case .string(let marker) = v.abbreviated(maxString: maxString), !(table[marker]?.contains(s) ?? false) {
+                    table[marker, default: []].append(s)
+                }
+            case .array(let a): a.forEach(walk)
+            case .object(let o): o.values.forEach(walk)
+            default: break
+            }
+        }
+        walk(self)
+        return table
+    }
+
+    /// The value with each marker replaced by the stored string it was made from. A marker that matches no
+    /// stored string, or more than one, is left alone and reported in `unresolved`.
+    func restoringAbbreviated(_ table: [String: [String]], unresolved: inout [String]) -> JSONValue {
+        switch self {
+        case .string(let s) where Self.isAbbreviationMarker(s):
+            if let originals = table[s], originals.count == 1 { return .string(originals[0]) }
+            unresolved.append(s)
+            return self
+        case .array(let a): return .array(a.map { $0.restoringAbbreviated(table, unresolved: &unresolved) })
+        case .object(let o): return .object(o.mapValues { $0.restoringAbbreviated(table, unresolved: &unresolved) })
+        default: return self
+        }
+    }
+
+    /// Does any button in `list` (an array of objects) carry a shell `command`? Returns their labels.
+    static func commandButtonLabels(in list: JSONValue?) -> [String] {
+        guard case .array(let items)? = list else { return [] }
+        return items.compactMap { item in
+            guard case .object(let o) = item, let c = o["command"], !c.isNull else { return nil }
+            if case .string(let s) = c, s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+            if case .string(let label)? = o["label"] { return label }
+            return "(unlabelled)"
+        }
+    }
+}
+
 extension HeraldFieldValue {
     var json: JSONValue { ActionResolver.json(self) }
 }

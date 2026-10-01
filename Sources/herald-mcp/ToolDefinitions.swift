@@ -56,16 +56,21 @@ enum MCPToolCatalog {
             description: """
             The full manifest of one app: fields (key, type, required, sample value), issuer actions with their ids, assets \
             (Rive files) and defaultTemplate. Field keys are the {tokens} a template can bind; the samples are what \
-            render_preview and send_test show. Also readable as the resource herald://manifests/<app>.
+            render_preview and send_test show. Strings over 1200 characters (an embedded icon, a long sample) are \
+            abbreviated to a marker such as "<data:image/png;base64,... 5022 characters omitted>"; pass full: true for the real \
+            values. Also readable as the resource herald://manifests/<app> (always abbreviated).
             """,
-            inputSchema: Schema.input(["app": Schema.string("The app id, e.g. \"webwatcher.email\" (see list_manifests).")],
+            inputSchema: Schema.input(["app": Schema.string("The app id, e.g. \"webwatcher.email\" (see list_manifests)."),
+                                       "full": Schema.boolean("Return long strings in full instead of abbreviating them.")],
                                       required: ["app"]),
             readOnly: true, idempotent: true),
 
         MCPToolDefinition(
             name: "put_manifest", title: "Save manifest",
             description: """
-            Create or REPLACE an app's manifest (the whole document: get_manifest first, edit, send it back). Issuing apps \
+            Create or REPLACE an app's manifest (the whole document: get_manifest first, edit, send it back). An abbreviated \
+            marker that get_manifest wrote for a long string is swapped back for the stored value; one that matches nothing \
+            stored is refused (use get_manifest with full: true). Issuing apps \
             normally register their own; use this to describe an app that does not, to add sample values for the designer, or \
             to set defaultTemplate. Issuer actions are url, callback, command or dismiss; shortcut and script actions are \
             authored in templates (add_action_rule). Invalid manifests are rejected with the field path.
@@ -155,8 +160,9 @@ enum MCPToolCatalog {
             Render a template offscreen with Herald's real banner renderer and get the picture back (an image block) plus \
             the path of the saved PNG. Preview a saved template with `name` (or builtin.*), an unsaved draft with \
             `template` (validated first; errors name the cell), or, with neither, the app's default template. Data is the manifest's sample values by default, or the app's \
-            last real notification with source "last"; `data` overrides individual fields. Render light and dark to check \
-            both. Requires Herald running.
+            last real notification with source "last"; `data` overrides individual fields. Sample data stands in for an \
+            issuer that names every action its manifest declares, so the buttons are those; a real notification shows only \
+            the actions it sends. Render light and dark to check both. Requires Herald running.
             """,
             inputSchema: Schema.input([
                 "name": Schema.string("A saved template's name, or builtin.imageLeft|imageRight|hero|compact. Needs app."),
@@ -176,7 +182,10 @@ enum MCPToolCatalog {
             Deliver a real notification: a banner appears on the user's screen and it is recorded in history. Same payload as \
             POST /v1/notify: app and title, optional subtitle, body (Markdown links), image, url, sound, id (the same id \
             replaces the visible banner), template, buttons [{label, url|command|callback}], snooze, reminder, metadata. \
-            Manifest fields go in `fields` (or at the top level) and are what the template binds. Prefer send_test while \
+            Manifest fields go in `fields` (or at the top level) and are what the template binds. `actionIds` names actions \
+            the manifest declares (or send `buttons`/`actions` in full); the manifest's actions are not shown unless the \
+            payload names them. Buttons with a shell `command` are refused unless allowCommandButtons is true: you can send \
+            as any app id, so a command button would run under that app's command permission. Prefer send_test while \
             iterating on a template.
             """,
             inputSchema: Schema.input([
@@ -187,8 +196,11 @@ enum MCPToolCatalog {
                 "id": Schema.string("Notification id; sending the same id again replaces the banner in place."),
                 "template": Schema.string("Name of a saved template of this app."),
                 "fields": Schema.object("Manifest field values, e.g. {\"count\": 2, \"sender\": \"Acme Billing\"}; sent as top-level keys."),
-                "buttons": .object(["type": .string("array"), "description": .string("Issuer buttons: [{label, style?, url?|command?|callback?}]."),
+                "buttons": .object(["type": .string("array"), "description": .string("Issuer buttons: [{label, style?, url?|command?|callback?}]. `actions` is accepted as an alias."),
                                     "items": .object(["type": .string("object")])]),
+                "actionIds": .object(["type": .string("array"), "description": .string("Ids of actions the app's manifest declares, instead of repeating the buttons."),
+                                      "items": .object(["type": .string("string")])]),
+                "allowCommandButtons": Schema.boolean("Allow buttons that carry a shell `command` (refused by default)."),
                 "metadata": Schema.object("Free-form metadata; readable as {key} in templates too."),
                 "speak": .object(["description": .string("Say it aloud on the user's Mac (local voice): true speaks the title then the body, or {text?, voice?, speed?, lang?}.")]),
                 "audio": Schema.string("Play a voice message: a WAV/MP3/M4A path, https URL or data: URI (at most 20 MB)."),
@@ -200,8 +212,9 @@ enum MCPToolCatalog {
         MCPToolDefinition(
             name: "send_test", title: "Send test banner",
             description: """
-            Show a template for real: sends a test notification for the app with the manifest's sample values (and the \
-            manifest's actions as the issuer's buttons) so the banner, sound and buttons can be seen on screen. The template \
+            Show a template for real: sends a test notification for the app with the manifest's sample values (and, as \
+            `actionIds`, the manifest's actions as the issuer's buttons) so the banner, sound and buttons can be seen on \
+            screen. Manifest actions that run a shell command are left out unless allowCommandButtons is true. The template \
             must be saved (put_template). The id is "mcp-test-<template>", so repeating it replaces the banner instead of \
             stacking. Pressing an issuer callback button calls the issuing app, so tell the user before they click.
             """,
@@ -211,6 +224,7 @@ enum MCPToolCatalog {
                 "data": Schema.object("Field values that replace the manifest samples."),
                 "id": Schema.string("Notification id (default mcp-test-<template>)."),
                 "includeIssuerActions": Schema.boolean("Send the manifest's actions as the issuer's buttons (default true), so actionRules have something to act on."),
+                "allowCommandButtons": Schema.boolean("Also send manifest actions that run a shell command (left out by default)."),
             ], required: ["app"]),
             idempotent: true),
 

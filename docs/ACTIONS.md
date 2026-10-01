@@ -40,7 +40,12 @@ v1 buttons (`label` plus one of `url`, `command`, `callback`) are still accepted
 ## Merging: issuer plus template
 
 The resolved list is the issuer's actions (from the payload `buttons`/`actions`, or the manifest's
-`actions` for `actionIds`) followed by the template's additions, passed through `actionRules` in order:
+`actions` for `actionIds`) followed by the template's additions, passed through `actionRules` in order.
+The manifest's actions are not shown just because it declares them: a notification has to send `buttons` (or
+`actions`, the same list under its documented name) or name manifest actions with `actionIds: ["markRead"]`.
+A sample preview (the Designer, `render_preview` with sample data) stands in for an issuer that names every
+declared action, and says so; a preview of real data shows only what that data sends. One function
+(`ActionResolver.issuerSource`) resolves all of this for the banner, the press, the preview and the Designer.
 
 ```json
 "actionRules": [

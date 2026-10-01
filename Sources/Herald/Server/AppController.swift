@@ -127,6 +127,8 @@ final class AppController {
            templates.get(app: n.app, name: fallback) != nil {
             named.template = fallback
         }
+        // `actionIds` become the manifest's buttons now, so history and every later press see what was offered.
+        named = ActionResolver.materializingActionIDs(named, manifest: manifest)
         let template = templates.template(for: named)
         if template == nil, let name = named.template, !name.isEmpty { log("template \(name) not found for \(n.app)") }
         let n = TemplateResolver.resolve(named, with: template)
