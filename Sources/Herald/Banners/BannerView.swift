@@ -93,10 +93,19 @@ final class BannerModel: ObservableObject {
 
     private func refresh() {
         let n = item.notification
-        var g = BuiltinTemplates.gridTemplate(for: n)
+        // The built-in grids have an image column only when there is a picture for it (see BuiltinTemplates).
+        var hasImage = image != nil || !(n.image ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        if case .text(let s)? = fieldsOverride?["image"], !s.isEmpty { hasImage = true }
+        var g = BuiltinTemplates.gridTemplate(for: n, hasImage: hasImage)
         if let t = template {
             if t.usesGrid {
-                g = t
+                if let layout = BuiltinTemplates.layout(forName: t.name), t == BuiltinTemplates.named(t.name, app: t.app) {
+                    // An untouched `builtin.*` template named by the notification: the same grid, with or without
+                    // the image column as the data needs.
+                    g = BuiltinTemplates.template(layout: layout, app: t.app, hasImage: hasImage)
+                } else {
+                    g = t
+                }
             } else {
                 // A v1 template contributes its action rules and extra values to the built-in grid.
                 g.actionRules = t.actionRules; g.extra = t.extra; g.collapseEmpty = t.collapseEmpty
@@ -184,6 +193,14 @@ private struct BannerButtonBody: View {
     }
 }
 
+/// The hosting view of a banner panel. A banner panel is non-activating and not key until it is clicked, and a
+/// SwiftUI `onTapGesture` (the banner's own "open it" tap, which also has to leave link clicks alone) does not
+/// see the click that makes a window key: without this, the first click on a banner's text did nothing and only
+/// the second one opened it (issue #24). Buttons were never affected, which is why it went unnoticed.
+final class BannerHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 struct BannerHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
@@ -219,6 +236,9 @@ struct BannerView: View {
 
     @ObservedObject var model: BannerModel
     @Environment(\.colorScheme) private var scheme
+    /// Set by `LiveBannerProbe` when this card is in a live banner panel (History rows, the composer and the
+    /// designer draw the same view without the replay control).
+    @State private var inLivePanel = false
 
     /// A first guess for the panel height before SwiftUI has measured the real one, so the off-screen
     /// parked panel is already roughly the right size.
@@ -251,7 +271,7 @@ struct BannerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GridBannerView(model: model)
+            GridBannerView(model: model, showsReplay: inLivePanel)
             if let line = model.failureLine { FailureLine(text: line, inset: model.grid.grid?.padding ?? 14) }
         }
             .frame(width: model.bannerWidth, alignment: .topLeading)
@@ -260,6 +280,7 @@ struct BannerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
             .tint(model.accent(dark: scheme == .dark))
+            .background(LiveBannerProbe(isLive: $inLivePanel))
             .background(GeometryReader { g in Color.clear.preference(key: BannerHeightKey.self, value: g.size.height) })
             .onPreferenceChange(BannerHeightKey.self) { model.onHeight($0) }
     }

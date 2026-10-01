@@ -24,10 +24,35 @@ public struct CLIRequest {
     }
 }
 
+/// `herald template export --app ID --name NAME [--out FILE]`: writes a `.heraldtemplate` bundle.
+public struct CLITemplateExport: Equatable {
+    public var app: String
+    public var name: String
+    /// Where to write; nil means `<name>.heraldtemplate` in the current directory.
+    public var output: String?
+}
+
+/// What `template import` does when the app already has a template with the bundle's name.
+public enum CLITemplateConflict: String, Equatable {
+    case keepBoth = "keep-both", replace, fail
+}
+
+/// `herald template import FILE [--app ID] [--keep-both | --replace | --fail]`.
+public struct CLITemplateImport: Equatable {
+    public var file: String
+    /// Import for another issuer instead of the one the bundle names.
+    public var app: String?
+    public var conflict: CLITemplateConflict
+}
+
 public enum CLIAction {
     case help(String?)       // optional subcommand
     case version
     case request(CLIRequest)
+    /// Bundle work that happens on this Mac's files (the Rive files go into the assets folder) around two
+    /// requests to the running Herald; the driver in herald-cli does it with `HeraldTemplateBundle`.
+    case templateExport(CLITemplateExport)
+    case templateImport(CLITemplateImport)
 }
 
 public struct CLIInvocation {
@@ -52,6 +77,7 @@ public enum CLIArguments {
       dismiss       Dismiss one banner (--app, --id)
       dismiss-all   Dismiss all banners of an app (--app)
       history       Show an app's history (--app [--limit N] [--clear])
+      template      Share a template with its animations: template export | template import
       apps          List registered apps
       speak         Say text aloud (no banner)
       quiet         Quiet hours: --until HH:MM | --for MINUTES | off | status
@@ -94,6 +120,15 @@ public enum CLIArguments {
 
     snooze OPTIONS
       --app ID  --id ID  --minutes N      (N may be fractional, 0 < N <= 43200)
+
+    template OPTIONS
+      template export --app ID --name NAME [--out FILE]
+                            Write the template and the Rive files it plays to a .heraldtemplate
+                            bundle (default FILE: NAME.heraldtemplate)
+      template import FILE [--app ID] [--keep-both | --replace | --fail]
+                            Add a bundle's template and animations. --app imports it for another
+                            app. When the name is taken: --keep-both (default) saves it as
+                            "NAME 2", --replace overwrites, --fail stops.
 
     register OPTIONS
       --app ID  --name NAME  --icon PATH|data:  --bundle-id ID  --callback-url URL
@@ -171,6 +206,8 @@ public enum CLIArguments {
             let o = try Options(rest, values: [], bools: [])
             try o.finish()
             return inv(.request(CLIRequest(method: "POST", path: "/v1/compose", body: [:])))
+        case "template":
+            return inv(try parseTemplate(rest))
         case "snooze":
             let o = try Options(rest, values: ["--app", "--id", "--minutes"], bools: [])
             let app = try o.require("--app"); let id = try o.require("--id")
@@ -219,6 +256,38 @@ public enum CLIArguments {
             return inv(.request(CLIRequest(method: "GET", path: "/v1/health", needsAuth: false)))
         default:
             throw CLIParseError("unknown command '\(command)'")
+        }
+    }
+
+    // MARK: template
+
+    static func parseTemplate(_ rest: [String]) throws -> CLIAction {
+        guard let sub = rest.first else { throw CLIParseError("template needs export or import") }
+        var args = Array(rest.dropFirst())
+        switch sub {
+        case "export":
+            let o = try Options(args, values: ["--app", "--name", "--out", "-o"], bools: [])
+            let out = o.value("--out") ?? o.value("-o")
+            guard out?.isEmpty != true else { throw CLIParseError("--out needs a file name") }
+            return .templateExport(CLITemplateExport(app: try o.require("--app"), name: try o.require("--name"), output: out))
+        case "import":
+            // The bundle may be given first, without a flag.
+            var file: String?
+            if let first = args.first, !first.hasPrefix("-") { file = first; args.removeFirst() }
+            let o = try Options(args, values: ["--file", "--app"], bools: ["--keep-both", "--replace", "--fail"])
+            if let f = o.value("--file") {
+                guard file == nil else { throw CLIParseError("template import takes one bundle file") }
+                file = f
+            }
+            guard let file, !file.isEmpty else { throw CLIParseError("template import needs the bundle file") }
+            let chosen = ["--keep-both", "--replace", "--fail"].filter(o.flag)
+            guard chosen.count <= 1 else { throw CLIParseError("use only one of --keep-both, --replace and --fail") }
+            let conflict = CLITemplateConflict(rawValue: chosen.first.map { String($0.dropFirst(2)) } ?? "keep-both") ?? .keepBoth
+            let app = o.value("--app")
+            guard app?.isEmpty != true else { throw CLIParseError("--app needs an app id") }
+            return .templateImport(CLITemplateImport(file: file, app: app, conflict: conflict))
+        default:
+            throw CLIParseError("unknown template command '\(sub)' (use export or import)")
         }
     }
 

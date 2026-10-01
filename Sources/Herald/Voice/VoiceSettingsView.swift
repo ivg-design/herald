@@ -7,7 +7,7 @@ struct VoiceSettingsView: View {
     let controller: AppController
     @ObservedObject private var settings = VoiceSettings.shared
     @ObservedObject private var voice = VoiceCoordinator.shared
-    @StateObject private var installer = KokoroInstaller(layout: VoiceCoordinator.shared.layout)
+    @ObservedObject private var installer = VoiceCoordinator.shared.installer
     @StateObject private var ticker = ChangeTicker()
     @State private var testText = "Herald voice test one two three"
 
@@ -78,6 +78,7 @@ struct VoiceSettingsView: View {
                 Image(systemName: layout.isInstalled ? "checkmark.circle.fill" : "exclamationmark.circle")
                     .foregroundStyle(layout.isInstalled ? Color.green : Color.orange)
                 Text(layout.isInstalled ? "Kokoro is installed" : "Kokoro is not installed (missing: \(layout.missing.joined(separator: ", ")))")
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([layout.root]) }
                     .disabled(!FileManager.default.fileExists(atPath: layout.root.path))

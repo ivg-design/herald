@@ -459,3 +459,103 @@ final class VoiceCLITests: XCTestCase {
         XCTAssertThrowsError(try CLIArguments.parse(["speak", "--app", "a"]))
     }
 }
+
+// MARK: - Kokoro download and environment (issue #37)
+//
+// Runtime checklist, done by hand with the app's own installer code (KokoroInstaller) on an empty support folder:
+//  1. Download: voices-v1.0.bin then kokoro-v1.0.onnx from the kokoro-onnx release; each file's SHA-256 is shown
+//     (models verified byte-identical to the ~/.claude/tts copies).
+//  2. Interrupt at about a third of the model and press Download again: it continues from the `.part` file (a 206
+//     answer), finishes, and the SHA is the same. Cancel returns to idle, not to a red "cancelled" error.
+//  3. Environment: `uv venv --python 3.12` + `uv pip install kokoro-onnx soundfile` (python3 -m venv + pip when uv
+//     is absent, also checked), then `import kokoro_onnx, soundfile` must pass before the venv counts as installed.
+//  4. Synthesis from the fresh install through the real tts_worker.py (voices listed, WAV written, second call warm).
+//  5. A spoken notification shows the replay speaker beside the timestamp of its live banner; History rows do not.
+//  6. Quiet hours: a window with "speak summary" ends and the one-line summary is synthesized; menu items
+//     "Quiet for 1 Hour" / "Quiet until HH:MM" / "Resume Now" change what GET /v1/settings/quiet-hours reports.
+
+final class DownloadResumeTests: XCTestCase {
+    func testRangeHeaderOnlyWhenThereAreBytes() {
+        XCTAssertNil(DownloadResume.rangeHeader(have: 0))
+        XCTAssertEqual(DownloadResume.rangeHeader(have: 105_397_983), "bytes=105397983-")
+    }
+
+    func testTotalFromContentRange() {
+        XCTAssertEqual(DownloadResume.total(fromContentRange: "bytes 100-299/300"), 300)
+        XCTAssertEqual(DownloadResume.total(fromContentRange: "bytes */325532387"), 325_532_387)
+        XCTAssertNil(DownloadResume.total(fromContentRange: "bytes 0-9/*"))
+        XCTAssertNil(DownloadResume.total(fromContentRange: "bytes 0-9"))
+        XCTAssertNil(DownloadResume.total(fromContentRange: nil))
+    }
+
+    func testPartialContentContinuesFromTheOffset() {
+        XCTAssertEqual(DownloadResume.decide(status: 206, have: 100, contentLength: 200, contentRange: "bytes 100-299/300"), .resume(total: 300))
+        // No Content-Range: the total is what is on disk plus what is coming.
+        XCTAssertEqual(DownloadResume.decide(status: 206, have: 100, contentLength: 200, contentRange: nil), .resume(total: 300))
+        // Unknown length (-1): progress is not reported, the download still continues.
+        XCTAssertEqual(DownloadResume.decide(status: 206, have: 100, contentLength: -1, contentRange: nil), .resume(total: 0))
+    }
+
+    func testServerThatIgnoresTheRangeRestartsFromZero() {
+        XCTAssertEqual(DownloadResume.decide(status: 200, have: 100, contentLength: 300, contentRange: nil), .restart(total: 300))
+        XCTAssertEqual(DownloadResume.decide(status: 200, have: 0, contentLength: -1, contentRange: nil), .restart(total: 0))
+    }
+
+    func testUnsatisfiableRange() {
+        // The part file is the whole file: finish by moving it into place.
+        XCTAssertEqual(DownloadResume.decide(status: 416, have: 300, contentLength: 0, contentRange: "bytes */300"), .alreadyComplete)
+        // More bytes on disk than the file has: not a prefix, so it must be thrown away rather than shipped.
+        XCTAssertEqual(DownloadResume.decide(status: 416, have: 400, contentLength: 0, contentRange: "bytes */300"), .discardPart)
+        // Fewer cannot be a 416, but if a server says so the bytes are not trusted either.
+        XCTAssertEqual(DownloadResume.decide(status: 416, have: 100, contentLength: 0, contentRange: "bytes */300"), .discardPart)
+        // No total to compare with: the long-standing assumption (it is complete) stands.
+        XCTAssertEqual(DownloadResume.decide(status: 416, have: 300, contentLength: 0, contentRange: nil), .alreadyComplete)
+    }
+
+    func testOtherStatusesFail() {
+        for code in [301, 403, 404, 429, 500, 503] {
+            XCTAssertEqual(DownloadResume.decide(status: code, have: 0, contentLength: 0, contentRange: nil), .fail(code))
+        }
+    }
+}
+
+final class KokoroEnvironmentTests: XCTestCase {
+    private var base: URL!
+    override func setUpWithError() throws {
+        base = FileManager.default.temporaryDirectory.appendingPathComponent("herald-kenv-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+    }
+    override func tearDown() { try? FileManager.default.removeItem(at: base) }
+
+    private func makeVenv(in layout: KokoroLayout) throws {
+        try FileManager.default.createDirectory(at: layout.venv.appendingPathComponent("bin"), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: layout.python.path, contents: Data("#!/bin/sh\n".utf8),
+                                       attributes: [.posixPermissions: 0o755])
+    }
+
+    func testAVenvWithoutTheMarkerIsIncompleteUntilItIsWritten() throws {
+        let l = KokoroLayout(root: base.appendingPathComponent("tts"))
+        XCTAssertFalse(l.hasPython)
+        XCTAssertFalse(l.environmentIncomplete, "no venv at all is missing, not incomplete")
+        try makeVenv(in: l)
+        XCTAssertTrue(l.hasPython)
+        XCTAssertTrue(l.environmentIncomplete, "a venv Herald built but never finished (quit between uv venv and pip install)")
+        try Data().write(to: l.environmentMarker)
+        XCTAssertFalse(l.environmentIncomplete)
+    }
+
+    func testALinkedInstallationIsTheUsersOwnAndNeverRebuilt() throws {
+        let fm = FileManager.default
+        let src = KokoroLayout(root: base.appendingPathComponent("existing"))
+        try makeVenv(in: src)
+        try Data("m".utf8).write(to: src.model)
+        try Data("v".utf8).write(to: src.voices)
+        let mine = KokoroLayout(supportDirectory: base.appendingPathComponent("support"))
+        try mine.link(to: src)
+        XCTAssertTrue(mine.venvIsLinked)
+        XCTAssertTrue(mine.isInstalled)
+        XCTAssertFalse(fm.fileExists(atPath: mine.environmentMarker.path.replacingOccurrences(of: mine.venv.path, with: src.venv.path)),
+                       "the source venv has no marker and must not get one")
+        XCTAssertFalse(mine.environmentIncomplete)
+    }
+}

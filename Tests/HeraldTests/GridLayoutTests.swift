@@ -334,15 +334,16 @@ final class GridLayoutTests: XCTestCase {
         let t = BuiltinTemplates.template(layout: .imageLeft)
         let plan = t.plan(fields: fields(["title": "Hi"]), actions: [])
         XCTAssertEqual(plan.collapsedCols, [0], "the image column goes")
-        // The action row goes too. The subtitle and body rows stay: the app icon and the time sit on them in the
-        // meta column, exactly the column v1 stacked under the close button.
+        // The action row goes too. The subtitle and body rows stay, because the app icon spans them (it sits under
+        // the close button as in v1); the time is on the title row, beside the close button. The icon lends its
+        // height to the last row it spans, so the subtitle row is 0 and the body row takes the rest.
         XCTAssertEqual(plan.collapsedRows, [3])
         XCTAssertTrue(plan.collapsedCells.isSuperset(of: ["image", "subtitle", "body", "actions"]))
         let s = solve(t.grid!, t.cells, plan: plan, widths: ["icon": 22, "close": 18, "time": 30],
                       heights: ["title": 17, "icon": 22, "close": 18, "time": 12])
         XCTAssertEqual(s.width, 380)
-        XCTAssertEqual(s.rowHeights, [18, 22, 12, 0])
-        XCTAssertEqual(s.height, 88)
+        XCTAssertEqual(s.rowHeights, [18, 0, 18.5, 0])
+        XCTAssertEqual(s.height, 67.5)
     }
 
     // MARK: Action overflow

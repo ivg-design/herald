@@ -7,10 +7,42 @@ public struct AppRecord: Codable, Equatable, Sendable {
     /// The one non-loopback host the user agreed callbacks may be sent to (lower case, no port). Callbacks to
     /// a loopback address need no approval; to anything else they go only to this host.
     public var callbackHostApproved: String?
+    /// Where this app's banners appear (issue #28): a display id (`BannerDisplay`, the number macOS gives the
+    /// monitor as a string) or `"main"` for the primary display. nil is the primary display. A display that is
+    /// not connected falls back to the primary one. The user's own choice: an app cannot register it.
+    public var screen: String?
+    /// The user's screen corner for this app's banners. Wins over the corner the app registered
+    /// (`registration.defaults.corner`), which an app that registers again may overwrite; nil follows the app.
+    public var corner: HeraldCorner?
+    /// The user turned this app's banners off. Its notifications still arrive: History keeps them unread, and its
+    /// sound and speech follow their own settings.
+    public var mutedBanners: Bool = false
 
-    public init(registration: HeraldAppRegistration, commandsConfirmed: Bool = false, callbackHostApproved: String? = nil) {
+    public init(registration: HeraldAppRegistration, commandsConfirmed: Bool = false, callbackHostApproved: String? = nil,
+                screen: String? = nil, corner: HeraldCorner? = nil, mutedBanners: Bool = false) {
         self.registration = registration; self.commandsConfirmed = commandsConfirmed
         self.callbackHostApproved = callbackHostApproved
+        self.screen = screen; self.corner = corner; self.mutedBanners = mutedBanners
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case registration, commandsConfirmed, callbackHostApproved, screen, corner, mutedBanners
+    }
+
+    /// Records written before the display settings existed have none of them.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        registration = try c.decode(HeraldAppRegistration.self, forKey: .registration)
+        commandsConfirmed = try c.decodeIfPresent(Bool.self, forKey: .commandsConfirmed) ?? false
+        callbackHostApproved = try c.decodeIfPresent(String.self, forKey: .callbackHostApproved)
+        screen = try c.decodeIfPresent(String.self, forKey: .screen)
+        corner = try c.decodeIfPresent(HeraldCorner.self, forKey: .corner)
+        mutedBanners = try c.decodeIfPresent(Bool.self, forKey: .mutedBanners) ?? false
+    }
+
+    /// The stack this app's banners go to, given the connected displays (primary first).
+    public func slot(connectedDisplays: [String]) -> BannerSlot {
+        BannerSlot.resolve(screen: screen, corner: corner ?? registration.defaults?.corner, connected: connectedDisplays)
     }
 
     /// The host callbacks for this app would go to when no button names its own URL.
@@ -28,6 +60,10 @@ public struct EffectiveSettings: Equatable, Sendable {
     /// nil = no auto-dismiss
     public var timeout: Double?
     public var corner: HeraldCorner
+    /// The display the banner goes to: `"main"` or a display id (see `AppRecord.screen`).
+    public var screen: String = BannerDisplay.main
+    /// The app's banners are muted: the notification goes to History only.
+    public var mutedBanners: Bool = false
 
     public static let fallbackSound = "Glass"
     public static let defaultTransientTimeout = 8.0
@@ -43,7 +79,9 @@ public struct EffectiveSettings: Equatable, Sendable {
         let timeout: Double? = t > 0 ? t : (persistent ? nil : defaultTransientTimeout)
         return EffectiveSettings(sound: sound == "default" ? fallbackSound : sound,
                                  persistent: timeout == nil, timeout: timeout,
-                                 corner: d?.corner ?? .topRight)
+                                 corner: record?.corner ?? d?.corner ?? .topRight,
+                                 screen: record?.screen ?? BannerDisplay.main,
+                                 mutedBanners: record?.mutedBanners ?? false)
     }
 }
 
@@ -107,7 +145,13 @@ public final class AppRegistry: @unchecked Sendable {
             if let v = d.corner { cur.corner = v }
             m.defaults = cur
         }
+        let hostBefore = rec.registeredCallbackHost
         rec.registration = m
+        // Approval is per host: when the app now registers a different callback host, the old approval is stale
+        // and the user is asked again (an approval that already names the new host stays).
+        if rec.registeredCallbackHost != hostBefore, rec.callbackHostApproved != rec.registeredCallbackHost {
+            rec.callbackHostApproved = nil
+        }
         if m.allowCommands != true { rec.commandsConfirmed = false }
         records[reg.app] = rec
         persist()

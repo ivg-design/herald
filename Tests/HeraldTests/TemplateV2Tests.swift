@@ -606,8 +606,10 @@ final class TemplateV2Tests: XCTestCase {
         XCTAssertEqual(left.grid?.colSizes.first, .points(72))
         XCTAssertEqual(left.cell(withID: "image")?.col, 0); XCTAssertEqual(left.cell(withID: "image")?.rowSpan, 3)
         let right = BuiltinTemplates.template(layout: .imageRight)
-        XCTAssertEqual(right.cell(withID: "image")?.col, 2); XCTAssertEqual(right.cell(withID: "title")?.col, 0)
-        XCTAssertEqual(right.grid?.colSizes[2], .points(72))
+        // Right: text | image | time | close and icon (the time sits beside the close button, so it is not between
+        // the text and the image).
+        XCTAssertEqual(right.cell(withID: "image")?.col, 1); XCTAssertEqual(right.cell(withID: "title")?.col, 0)
+        XCTAssertEqual(right.grid?.colSizes[1], .points(72))
         let hero = BuiltinTemplates.template(layout: .hero)
         guard case .image(let hi)? = hero.cell(withID: "image")?.component else { return XCTFail() }
         XCTAssertEqual(hi.aspectRatio ?? 0, 16.0 / 9.0, accuracy: 0.0001)

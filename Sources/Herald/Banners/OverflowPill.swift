@@ -35,12 +35,12 @@ struct OverflowPill: View {
 @MainActor
 final class OverflowStub {
     let panel: BannerPanel
-    let host: NSHostingView<OverflowPill>
+    let host: BannerHostingView<OverflowPill>
     let model = OverflowPillModel()
     var width: CGFloat = 150
 
     init() {
-        host = NSHostingView(rootView: OverflowPill(model: model))
+        host = BannerHostingView(rootView: OverflowPill(model: model))
         panel = BannerPanel(contentRect: NSRect(x: 0, y: 0, width: 150, height: BannerCenter.stubHeight),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isFloatingPanel = true

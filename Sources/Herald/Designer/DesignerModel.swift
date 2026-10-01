@@ -68,6 +68,8 @@ enum DragPayload: Equatable {
     case action(String)
     /// A cell already on the canvas.
     case cell(String)
+    /// An animation file of the issuer from the Assets panel (its id: the file name without `.riv`).
+    case rive(String)
 
     static let prefix = "herald-designer:"
 
@@ -77,6 +79,7 @@ enum DragPayload: Equatable {
         case .field(let v): return Self.prefix + "field:" + v
         case .action(let v): return Self.prefix + "action:" + v
         case .cell(let v): return Self.prefix + "cell:" + v
+        case .rive(let v): return Self.prefix + "rive:" + v
         }
     }
 
@@ -91,6 +94,7 @@ enum DragPayload: Equatable {
         case "field": self = .field(value)
         case "action": self = .action(value)
         case "cell": self = .cell(value)
+        case "rive": self = .rive(value)
         default: return nil
         }
     }
@@ -395,6 +399,33 @@ enum GridEditing {
     }
 }
 
+// MARK: - Track sizes
+
+extension GridEditing {
+    /// Smallest fixed track the canvas handles produce.
+    static let minTrackPoints = 8.0
+
+    /// A dragged size made usable: whole points, at least `minTrackPoints`, and no wider than the banner (a
+    /// column) or 800 pt (a row).
+    static func clampedPoints(_ v: Double, columns: Bool, in g: HeraldGrid) -> Double {
+        guard v.isFinite else { return minTrackPoints }
+        let hi = columns ? max(g.width, minTrackPoints) : 800.0
+        return min(max(v.rounded(), minTrackPoints), hi)
+    }
+
+    /// Gives column or row `index` a size. A fixed size is clamped (`clampedPoints`). False when there is no such track.
+    @discardableResult
+    static func setTrack(columns: Bool, index: Int, size: HeraldSize, in t: inout HeraldTemplate) -> Bool {
+        guard var g = t.grid, index >= 0, index < (columns ? g.cols : g.rows) else { return false }
+        fixSizes(&g)
+        var s = size
+        if case .points(let p) = s { s = .points(clampedPoints(p, columns: columns, in: g)) }
+        if columns { g.colSizes[index] = s } else { g.rowSizes[index] = s }
+        t.grid = g
+        return true
+    }
+}
+
 // MARK: - Palette content
 
 struct PaletteComponent: Identifiable, Equatable {
@@ -679,6 +710,95 @@ struct DesignerBackend {
     var scriptsFolder: () -> URL? = { nil }
     /// Delivers a notification through the controller; returns its id.
     var sendTest: (_ n: HeraldNotification) async throws -> String = { $0.id ?? "" }
+
+    // Animations (issue #33)
+    /// Every `.riv` in the app's assets folder (copies of the issuer's assets and files added by hand).
+    var assetFiles: (_ app: String) -> [URL] = { _ in [] }
+    /// Copies a file into the app's assets folder as `<asset.id>.riv` (`AssetStore.install`); throws a readable error.
+    var installAsset: (_ app: String, _ asset: HeraldAsset) throws -> Void = { _, _ in }
+    /// Deletes one file from the app's assets folder.
+    var removeAssetFile: (_ app: String, _ file: URL) -> Bool = { _, _ in true }
+    /// The file a Rive component plays (the app's stored copy, the manifest's file, or its path); nil when unresolved.
+    var riveFile: (_ app: String, _ component: HeraldRiveComponent) -> URL? = { _, _ in nil }
+    /// What is inside a Rive file (artboards, state machines, inputs), read with the Rive runtime.
+    var riveInfo: (_ file: URL) -> RiveFileInfo? = { _ in nil }
+
+    // Template bundles (issue #30)
+    var exportBundle: (_ t: HeraldTemplate) throws -> HeraldTemplateBundle.ExportResult = { _ in
+        throw HeraldTemplateBundle.BundleError.cannotWrite("export is not available")
+    }
+    var previewBundle: (_ data: Data, _ intoApp: String?) throws -> TemplateBundleService.Preview = { _, _ in
+        throw HeraldTemplateBundle.BundleError.notABundle("import is not available")
+    }
+    var importBundle: (_ data: Data, _ intoApp: String?, _ conflict: TemplateBundleService.Conflict) throws -> TemplateBundleService.ImportResult = { _, _, _ in
+        throw HeraldTemplateBundle.BundleError.notABundle("import is not available")
+    }
+}
+
+// MARK: - Animations
+
+/// What is inside a Rive file, read once with the Rive runtime (`RiveFileInspector`) and handed to the model
+/// through `DesignerBackend.riveInfo`, so the model and its tests need no runtime.
+struct RiveFileInfo: Equatable {
+    struct Input: Equatable {
+        enum Kind: String { case number, bool, trigger }
+        var name: String
+        var kind: Kind
+    }
+    struct Machine: Equatable {
+        var name: String
+        var inputs: [Input]
+    }
+    struct Artboard: Equatable {
+        var name: String
+        var width: Double
+        var height: Double
+        /// The state machine the file marks as its default, if it marks one.
+        var defaultMachine: String?
+        var machines: [Machine]
+        /// Linear animations (played when the artboard has no state machine).
+        var animations: [String]
+
+        var aspectRatio: Double? { width > 0 && height > 0 ? width / height : nil }
+    }
+    var artboards: [Artboard]
+
+    /// The named artboard, else the file's first (what a component with no `artboard` plays).
+    func artboard(named name: String?) -> Artboard? {
+        if let name, !name.isEmpty, let a = artboards.first(where: { $0.name == name }) { return a }
+        return artboards.first
+    }
+
+    /// The state machine a component plays: the named one, else the artboard's default, else its first.
+    func machine(_ name: String?, artboard artboardName: String?) -> Machine? {
+        guard let a = artboard(named: artboardName) else { return nil }
+        if let name, !name.isEmpty { return a.machines.first { $0.name == name } }
+        return a.machines.first { $0.name == a.defaultMachine } ?? a.machines.first
+    }
+}
+
+/// One Rive file in the app's assets folder, as the Assets panel lists it.
+struct DesignerAsset: Identifiable, Equatable {
+    /// The file's name without `.riv`: what a component's `asset` is when the issuer declares it.
+    var id: String
+    var url: URL
+    var bytes: Int
+    /// The issuer's manifest declares an asset with this id (so a component names it by id, not by file).
+    var declared: Bool
+    /// Names of the saved templates, and the draft, whose Rive components play this file.
+    var usedBy: [String]
+
+    var file: String { url.lastPathComponent }
+}
+
+/// What a drag would do if it were dropped now: shown on the canvas while the pointer is over a slot.
+struct DropPreview: Equatable {
+    /// The area the drop lands on: the occupying cell's whole area, or the single empty slot.
+    var rect: SlotRect
+    /// A short description of the effect ("Bind {sender}", "Swap with image").
+    var verb: String
+    /// False when the drop would be refused; the canvas then outlines the area in red.
+    var allowed: Bool
 }
 
 /// Which action form is open.
@@ -707,6 +827,15 @@ enum DesignerPreviewSource: String, CaseIterable, Identifiable {
 enum DesignerAppearance: String, CaseIterable, Identifiable {
     case light, dark
     var id: String { rawValue }
+}
+
+/// What the Designer window is doing: laying out a template, or sending a one-off notification (the old
+/// Compose window, issue #31).
+enum DesignerMode: String, CaseIterable, Identifiable {
+    case design, quickSend
+    var id: String { rawValue }
+    var title: String { self == .design ? "Design" : "Quick send" }
+    var windowTitle: String { self == .design ? "Design Template" : "Quick Send" }
 }
 
 enum DesignerTab: String, CaseIterable, Identifiable {
@@ -762,6 +891,24 @@ final class DesignerModel: ObservableObject {
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
 
+    /// Design a template, or send a one-off notification (issue #31). The quick-send form lives on after a
+    /// switch, so a half-written message survives a look at the designer.
+    @Published var mode: DesignerMode = .design
+    let quickSend: ComposerModel
+
+    /// What a drag in progress carries (set when a drag starts, in this process) and what dropping it on the slot
+    /// under the pointer would do (issue #38).
+    var dragging: DragPayload?
+    @Published private(set) var dropTarget: DropPreview?
+    private var hoverSlot: GridSlot?
+
+    /// The Rive files in the issuer's assets folder (issue #33).
+    @Published private(set) var assets: [DesignerAsset] = []
+    private var infoCache: [String: (stamp: Date?, info: RiveFileInfo?)] = [:]
+
+    /// Asked when an imported template's name is taken: nil cancels the import.
+    var chooseConflict: (TemplateBundleService.Preview) -> TemplateBundleService.Conflict? = { _ in .keepBoth }
+
     /// Asked before unsaved edits are thrown away; the window installs an alert. True lets it go ahead.
     var confirmDiscard: () -> Bool = { true }
 
@@ -773,6 +920,7 @@ final class DesignerModel: ObservableObject {
     init(backend: DesignerBackend, app: String? = nil, template: String? = nil) {
         self.backend = backend
         self.draft = HeraldTemplate.blank(name: "", app: "")
+        self.quickSend = ComposerModel()
         reloadIssuers()
         let start = app.flatMap { a in issuers.contains { $0.id == a } ? a : nil } ?? issuers.first?.id ?? ""
         switchIssuer(start, template: template, force: true)
@@ -812,6 +960,7 @@ final class DesignerModel: ObservableObject {
         lastItem = backend.lastItem(id)
         absentTokens = []
         reloadTemplates()
+        reloadAssets()
         let pick = templates.first { $0.name == template }
             ?? manifest?.defaultTemplate.flatMap { d in templates.first { $0.name == d } }
             ?? templates.first
@@ -936,6 +1085,7 @@ final class DesignerModel: ObservableObject {
         lastItem = backend.lastItem(app)
         if lastItem == nil, previewSource == .lastReal { previewSource = .sample }
         reloadTemplates()
+        reloadAssets()
         issues = draft.validate(manifest: manifest)
         guard let name = savedName, let onDisk = templates.first(where: { $0.name == name }), onDisk != baseline else { return }
         if isDirty { diskChanged = true } else { load(onDisk); tab = .cell; info("Reloaded \u{201C}\(name)\u{201D}: it changed on disk.") }
@@ -948,6 +1098,252 @@ final class DesignerModel: ObservableObject {
 
     private func fail(_ s: String) { status = DesignerStatus(kind: .error, text: s) }
     private func info(_ s: String) { status = DesignerStatus(kind: .info, text: s) }
+
+    // MARK: Mode (issue #31)
+
+    /// Switches to quick send. The form starts on `app` (the issuer being designed, by default) the first time.
+    func showQuickSend(app forApp: String? = nil) {
+        mode = .quickSend
+        if let forApp, !forApp.isEmpty { quickSend.app = forApp }
+        else if quickSend.app.trimmingCharacters(in: .whitespaces).isEmpty { quickSend.app = app }
+    }
+
+    /// Switches back to the designer, optionally to another issuer or template.
+    func showDesign(app target: String? = nil, template: String? = nil) {
+        mode = .design
+        guard let target, !target.isEmpty else { return }
+        if target != app { switchIssuer(target, template: template) }
+        else if let template { select(template: template) }
+    }
+
+    // MARK: Drag and drop (issue #38)
+
+    /// What dropping `payload` on `slot` would do, worked out on a copy of the draft with the same functions
+    /// `handle` uses, so the canvas never promises something the drop does not do. nil outside the grid.
+    func dropPreview(for payload: DragPayload, at slot: GridSlot) -> DropPreview? {
+        guard let g = draft.grid, GridEditing.inBounds(SlotRect(slot), in: g) else { return nil }
+        let occupant = GridEditing.cell(at: slot, in: draft)
+        let target = occupant.flatMap { GridEditing.rect(of: $0, in: g) } ?? SlotRect(slot)
+        func kind(_ c: HeraldComponent) -> String { DesignerPalette.title(for: c.typeName).lowercased() }
+        func result(_ verb: String, allowed: Bool = true, rect: SlotRect? = nil) -> DropPreview {
+            DropPreview(rect: rect ?? target, verb: verb, allowed: allowed)
+        }
+        switch payload {
+        case .component(let type):
+            let title = DesignerPalette.title(for: type).lowercased()
+            guard let o = occupant else { return result("Add \(title)") }
+            return result("Replace \(kind(o.component)) with \(title)")
+        case .field(let key):
+            guard let o = occupant else { return result("Add {\(key)}") }
+            if DesignerPalette.bind(token: key, into: o.component) == nil {
+                return result("A \(kind(o.component)) cannot bind {\(key)}", allowed: false)
+            }
+            return result("Bind {\(key)}")
+        case .action(let id):
+            let label = actionRows.first { $0.id == id }?.action.label ?? id
+            return result(occupant == nil ? "Add \u{201C}\(label)\u{201D} button" : "Replace with \u{201C}\(label)\u{201D} button")
+        case .rive(let id):
+            guard assets.contains(where: { $0.id == id }) else { return result("That animation is gone", allowed: false) }
+            return result(occupant == nil ? "Add animation" : "Replace \(occupant.map { kind($0.component) } ?? "") with animation")
+        case .cell(let id):
+            guard draft.cell(withID: id) != nil else { return nil }
+            if occupant?.id == id { return result("Already here", allowed: false) }
+            var t = draft
+            guard GridEditing.move(cell: id, to: slot, in: &t) else { return result("Cannot move here", allowed: false) }
+            if let o = occupant { return result("Swap with \(kind(o.component))") }
+            return result("Move here", rect: GridEditing.rect(ofCell: id, in: t) ?? SlotRect(slot))
+        }
+    }
+
+    /// The pointer is over `slot` with a drag: remember what a drop would do (nil clears it).
+    func hoverDrop(at slot: GridSlot?) {
+        hoverSlot = slot
+        guard let slot else { if dropTarget != nil { dropTarget = nil }; return }
+        let next = dragging.flatMap { dropPreview(for: $0, at: slot) }
+            ?? GridEditing.cell(at: slot, in: draft).flatMap { GridEditing.rect(of: $0, in: grid) }.map { DropPreview(rect: $0, verb: "Drop here", allowed: true) }
+            ?? DropPreview(rect: SlotRect(slot), verb: "Drop here", allowed: true)
+        if next != dropTarget { dropTarget = next }
+    }
+
+    /// The pointer left `slot`. Ignored when it already entered another one (the order SwiftUI reports the two in
+    /// is not fixed), so the highlight never flickers off between neighbours.
+    func leaveDrop(at slot: GridSlot) {
+        guard hoverSlot == slot else { return }
+        hoverDrop(at: nil)
+    }
+
+    func endDrag() { dragging = nil; hoverSlot = nil; dropTarget = nil }
+
+    // MARK: Track sizes (issue #38)
+
+    /// Live size of column or row `index` while its canvas handle is dragged (call `beginGesture` first).
+    func resizeTrackLive(columns: Bool, index: Int, points: Double) {
+        liveEdit { _ = GridEditing.setTrack(columns: columns, index: index, size: .points(points), in: &$0) }
+    }
+
+    /// Back to the default size: a column fills, a row fits its content.
+    func resetTrack(columns: Bool, index: Int) {
+        perform { _ = GridEditing.setTrack(columns: columns, index: index, size: columns ? .fill : .auto, in: &$0) }
+    }
+
+    // MARK: Animations (issue #33)
+
+    /// Lists the Rive files of the current issuer and who plays them.
+    func reloadAssets() {
+        guard !app.isEmpty else { assets = []; return }
+        let declaredFiles = Set((manifest?.assets ?? []).filter { $0.type.lowercased() == "rive" }
+            .map { HeraldTemplateBundle.safeFile(stem: $0.id).lowercased() })
+        var users: [HeraldTemplate] = templates.filter { $0.name != savedName }
+        users.append(draft)
+        let next = backend.assetFiles(app).sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            .map { url -> DesignerAsset in
+                let file = url.lastPathComponent
+                let used = users.filter { t in
+                    HeraldTemplateBundle.riveRefs(in: t).contains { HeraldTemplateBundle.fileName(for: $0).lowercased() == file.lowercased() }
+                }
+                var seen = Set<String>()
+                let names = used.map(\.name).filter { !$0.isEmpty && seen.insert($0).inserted }
+                let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+                return DesignerAsset(id: String(file.dropLast(4)), url: url, bytes: size,
+                                     declared: declaredFiles.contains(file.lowercased()), usedBy: names)
+            }
+        if next != assets { assets = next }
+    }
+
+    /// Copies a `.riv` into the issuer's assets folder under a free name.
+    func addAsset(from url: URL) {
+        guard !app.isEmpty else { fail("Choose an issuer first."); return }
+        let base = String(HeraldTemplateBundle.safeFile(stem: url.lastPathComponent).dropLast(4))
+        let id = HeraldTemplateBundle.uniqueName(base, taken: Set(assets.map(\.id))).replacingOccurrences(of: " ", with: "-")
+        do {
+            try backend.installAsset(app, HeraldAsset(id: id, type: "rive", path: url.path))
+            reloadAssets()
+            info("Added \u{201C}\(id).riv\u{201D}.")
+        } catch {
+            fail(error.localizedDescription)
+        }
+    }
+
+    /// Deletes an animation file. Templates that play it show a placeholder until it is added again.
+    func removeAsset(_ asset: DesignerAsset) {
+        guard backend.removeAssetFile(app, asset.url) else { fail("Could not remove \u{201C}\(asset.file)\u{201D}."); return }
+        infoCache[asset.url.path] = nil
+        reloadAssets()
+        info("Removed \u{201C}\(asset.file)\u{201D}.")
+    }
+
+    /// The component that plays `asset`: by id when the issuer declares it (the manifest knows its state machine
+    /// and inputs), else by file name inside the app's assets folder.
+    func riveComponent(for asset: DesignerAsset) -> HeraldRiveComponent {
+        let declared = manifest?.assets.first { $0.id == asset.id }
+        let inf = riveFileInfo(at: asset.url)
+        let machine = declared?.stateMachine ?? inf?.machine(nil, artboard: nil)?.name
+        var c = asset.declared ? HeraldRiveComponent(asset: declared?.id ?? asset.id, stateMachine: machine)
+                               : HeraldRiveComponent(path: asset.file, stateMachine: machine)
+        c.aspectRatio = inf?.artboard(named: nil)?.aspectRatio ?? 1
+        return c
+    }
+
+    func addRive(assetID: String, at slot: GridSlot) {
+        guard let asset = assets.first(where: { $0.id == assetID }) else { fail("That animation is no longer in the assets folder."); return }
+        let c = HeraldComponent.rive(riveComponent(for: asset))
+        var placed: String?
+        perform { placed = GridEditing.place(c, at: slot, in: &$0) }
+        if let placed { select(cell: placed); reloadAssets() }
+    }
+
+    /// Click on an asset in the panel: an animation in the selected slot (or the first free one).
+    func insertAsset(id: String) {
+        guard let slot = targetSlot else { fail("The grid is full: merge or remove a cell first."); return }
+        addRive(assetID: id, at: slot)
+    }
+
+    /// What is inside a Rive file; cached until the file changes.
+    func riveFileInfo(at url: URL) -> RiveFileInfo? {
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
+        if let hit = infoCache[url.path], hit.stamp == stamp { return hit.info }
+        let info = backend.riveInfo(url)
+        infoCache[url.path] = (stamp, info)
+        return info
+    }
+
+    /// Whether the file a component plays exists (the inspector tells "missing" from "unreadable").
+    func riveFileFound(for component: HeraldRiveComponent) -> Bool { backend.riveFile(app, component) != nil }
+
+    /// What is inside the file a component plays; nil while the file cannot be found or read.
+    func riveFileInfo(for component: HeraldRiveComponent) -> RiveFileInfo? {
+        backend.riveFile(app, component).flatMap(riveFileInfo(at:))
+    }
+
+    // MARK: Template bundles (issue #30)
+
+    /// The file name an export of the draft starts with.
+    var suggestedBundleName: String {
+        HeraldTemplateBundle.sanitizedTemplateName(draft.name) + "." + HeraldTemplateBundle.fileExtension
+    }
+
+    /// Writes the template being edited, with its animations, to `url`.
+    func exportDraft(to url: URL) {
+        var t = draft
+        t.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        t.app = app
+        t.layoutVersion = HeraldTemplate.currentLayoutVersion
+        do {
+            let r = try backend.exportBundle(t)
+            try r.data.write(to: url, options: .atomic)
+            let n = r.assetFiles.count
+            var text = "Exported \u{201C}\(t.name)\u{201D} with \(n) animation file\(n == 1 ? "" : "s")."
+            if !r.warnings.isEmpty { text += " " + r.warnings.joined(separator: " ") }
+            status = DesignerStatus(kind: r.warnings.isEmpty ? .info : .error, text: text)
+        } catch {
+            fail("Export failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// What the bundle at `url` holds, for the confirmation. Nil (and a status message) when it is not a bundle.
+    func previewBundle(at url: URL) -> (data: Data, preview: TemplateBundleService.Preview)? {
+        do {
+            let data = try Data(contentsOf: url)
+            return (data, try backend.previewBundle(data, nil))
+        } catch {
+            fail("Import failed: \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// Imports a bundle, for `intoApp` or the app the bundle names, and opens the result. A name that is taken
+    /// goes to `chooseConflict`.
+    func importBundle(_ data: Data, intoApp: String? = nil) {
+        do {
+            var conflict = TemplateBundleService.Conflict.keepBoth
+            let preview = try backend.previewBundle(data, intoApp)
+            if preview.nameTaken {
+                guard let chosen = chooseConflict(preview) else { return }
+                conflict = chosen
+            }
+            suppressRefresh = true
+            let r = try backend.importBundle(data, intoApp, conflict)
+            suppressRefresh = false
+            reloadIssuers()
+            var note = "Imported \u{201C}\(r.template.name)\u{201D}"
+            if let from = r.renamedFrom { note += " (\u{201C}\(from)\u{201D} was taken)" }
+            if r.replaced { note += ", replacing the old one" }
+            let n = r.assets.installed.count
+            note += n > 0 ? "; \(n) animation file\(n == 1 ? "" : "s") added." : "."
+            let warn = r.warnings.isEmpty ? "" : " " + r.warnings.joined(separator: " ")
+            if r.template.app != app {
+                switchIssuer(r.template.app, template: r.template.name, force: false)
+                if app != r.template.app { reloadTemplates(); fail(note + " It is under \(r.template.app)." + warn); return }
+            } else {
+                reloadTemplates(); reloadAssets()
+                if !isDirty || confirmDiscard() { load(r.template) } else { note += " It is in the template list." }
+            }
+            status = DesignerStatus(kind: r.warnings.isEmpty ? .info : .error, text: note + warn)
+        } catch {
+            suppressRefresh = false
+            fail("Import failed: \(error.localizedDescription)")
+        }
+    }
 
     // MARK: Undo
 
@@ -1106,7 +1502,9 @@ final class DesignerModel: ObservableObject {
         case .field(let key): addField(key: key, type: tokenType(key), at: slot)
         case .action(let id): addActionButton(actionID: id, at: slot)
         case .cell(let id): moveCell(id, to: slot)
+        case .rive(let id): addRive(assetID: id, at: slot)
         }
+        endDrag()
     }
 
     func mergeSelection() {

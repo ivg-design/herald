@@ -98,15 +98,14 @@ struct TemplateEditorView: View {
 
     // MARK: Form
 
-    // TODO: reuse ComposerView's form components (buttons editor, sound picker) once they are
-    // shared; until then these are minimal local sections.
+    // The buttons editor, sound picker and colour row are the shared ones from FormSections.swift.
     private var form: some View {
         VStack(spacing: 0) {
             Form {
                 Section("Template") {
                     TextField("Name", text: $draft.name)
                     Picker("Layout", selection: $draft.layout) {
-                        ForEach(HeraldLayout.allCases, id: \.self) { Text(Self.layoutTitle($0)).tag($0) }
+                        ForEach(HeraldLayout.allCases, id: \.self) { Text($0.formTitle).tag($0) }
                     }
                     ComposerColorRow(hex: $draft.accentColor)
                     Toggle("Show subtitle", isOn: $draft.showSubtitle)
@@ -124,17 +123,10 @@ struct TemplateEditorView: View {
                     Text("Use {name} for values from the notification's metadata, e.g. {amount}.")
                 }
                 Section("Buttons") {
-                    ButtonsEditorSection(buttons: $draft.buttons)
+                    HeraldButtonsEditor(buttons: $draft.buttons)
                 }
                 Section("Behavior") {
-                    Picker("Sound", selection: Binding(get: { draft.sound ?? "" }, set: { draft.sound = $0.isEmpty ? nil : $0 })) {
-                        Text("App default").tag("")
-                        Text("none").tag("none")
-                        ForEach(SoundPlayer.systemSoundNames, id: \.self) { Text($0).tag($0) }
-                        if let s = draft.sound, s != "none", !SoundPlayer.systemSoundNames.contains(s) {
-                            Text((s as NSString).lastPathComponent).tag(s)
-                        }
-                    }
+                    SoundField(sound: $draft.sound)
                     TriStatePicker(title: "Stay until dismissed", value: $draft.persistent)
                     HStack {
                         Text("Auto-dismiss after (s)")
@@ -174,15 +166,6 @@ struct TemplateEditorView: View {
                 .disabled(!isDirty || draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(10)
-    }
-
-    static func layoutTitle(_ l: HeraldLayout) -> String {
-        switch l {
-        case .imageLeft: return "Image left"
-        case .imageRight: return "Image right"
-        case .hero: return "Hero (image on top)"
-        case .compact: return "Compact (one line)"
-        }
     }
 
     // MARK: Preview
@@ -352,64 +335,5 @@ private struct TriStatePicker: View {
             Text("On").tag(1)
             Text("Off").tag(0)
         }
-    }
-}
-
-
-/// Minimal buttons editor: label, action kind (url / command / callback), value, style.
-private struct ButtonsEditorSection: View {
-    @Binding var buttons: [HeraldButton]
-
-    private enum Kind: String, CaseIterable { case url, command, callback }
-
-    private func kind(_ b: HeraldButton) -> Kind {
-        if b.command != nil { return .command }
-        if b.callback != nil { return .callback }
-        return .url
-    }
-
-    private func value(_ b: HeraldButton) -> String {
-        switch kind(b) {
-        case .url: return b.url ?? ""
-        case .command: return b.command ?? ""
-        case .callback:
-            guard let p = b.callback?.payload, let d = try? HeraldJSON.encoder().encode(p) else { return "" }
-            return String(data: d, encoding: .utf8) ?? ""
-        }
-    }
-
-    /// Rebuilds the button so exactly one action field is set, as the API requires.
-    private func rebuilt(_ b: HeraldButton, kind k: Kind, value v: String) -> HeraldButton {
-        var n = HeraldButton(label: b.label, style: b.style)
-        switch k {
-        case .url: n.url = v
-        case .command: n.command = v
-        case .callback:
-            let payload = v.isEmpty ? nil : (try? HeraldJSON.decoder().decode(JSONValue.self, from: Data(v.utf8)))
-            n.callback = HeraldCallback(payload: payload)
-        }
-        return n
-    }
-
-    var body: some View {
-        ForEach(buttons.indices, id: \.self) { i in
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    TextField("Label", text: Binding(get: { buttons[i].label }, set: { buttons[i].label = $0 }), prompt: Text("Button label"))
-                        .labelsHidden()
-                    Picker("", selection: Binding(get: { kind(buttons[i]) }, set: { buttons[i] = rebuilt(buttons[i], kind: $0, value: value(buttons[i])) })) {
-                        ForEach(Kind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                    }.labelsHidden().frame(width: 100)
-                    Picker("", selection: Binding(get: { buttons[i].style ?? "default" }, set: { buttons[i].style = $0 == "default" ? nil : $0 })) {
-                        Text("default").tag("default"); Text("destructive").tag("destructive"); Text("cancel").tag("cancel")
-                    }.labelsHidden().frame(width: 110)
-                    Button { buttons.remove(at: i) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
-                }
-                TextField(kind(buttons[i]) == .callback ? "Callback payload (JSON)" : (kind(buttons[i]) == .url ? "URL" : "Shell command"),
-                          text: Binding(get: { value(buttons[i]) }, set: { buttons[i] = rebuilt(buttons[i], kind: kind(buttons[i]), value: $0) }))
-                    .font(.system(size: 12, design: .monospaced))
-            }
-        }
-        Button { buttons.append(HeraldButton(label: "Button", url: "")) } label: { Label("Add button", systemImage: "plus") }
     }
 }

@@ -13,7 +13,6 @@ struct HeraldApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var historyWindow: NSWindow?
-    private var composerWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private let controller = AppController.shared
 
@@ -104,9 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func dismissAll() { controller.dismissAll(app: nil) }
     @objc private func quit() { NSApp.terminate(nil) }
 
+    /// "Compose..." (and `herald compose`): the Designer in quick-send mode (issue #31).
     @objc func openComposer() {
-        composerWindow = present(composerWindow, title: "Compose Notification", size: NSSize(width: 900, height: 620),
-                                 content: ComposerView(controller: controller))
+        DesignerWindow.show(controller: controller, quickSend: true)
     }
 
     @objc func openDesigner() {

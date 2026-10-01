@@ -196,6 +196,52 @@ final class SnoozeScheduleTests: XCTestCase {
         XCTAssertEqual(reopened.undismissed().map(\.id), ["n"], "a snoozed item stays in the undismissed set")
     }
 
+    // MARK: Clock changes and relaunch (issue #23)
+    //
+    // Runtime checklist, done by hand against a Debug instance (HERALD_PORT=48712 HERALD_SUPPORT_DIR=/tmp/...):
+    //  1. POST /v1/snooze minutes=2: the banner hides, History shows "Snoozed until", and the banner is back at
+    //     the due time (the timer fires within a fraction of a second of `until`).
+    //  2. Deliver NSSystemClockDidChange and NSWorkspaceDidWake to the running app (lldb: `expr -l objc --
+    //     [[NSNotificationCenter defaultCenter] postNotificationName:@"NSSystemClockDidChangeNotification"
+    //     object:nil]`, and the same on `[[NSWorkspace sharedWorkspace] notificationCenter]` with
+    //     NSWorkspaceDidWakeNotification): `rearmSnoozes` runs, the pending snooze still fires on time.
+    //  3. Quit during a snooze and relaunch before it is due: still hidden, fires at the due time. Relaunch after it
+    //     was due: the banner is shown at launch. SIGKILL right after POST /v1/snooze: `snoozedUntil` is in the store.
+    // What a unit test can pin down is the decision those paths make: due or still pending, whatever the clock did.
+
+    func testRearmDecisionAcrossClockChanges() {
+        let set = at("2026-10-01T12:00:00-04:00")
+        let until = set.addingTimeInterval(120)   // "+2 min"
+        // Nothing happened: still pending.
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: true, now: set.addingTimeInterval(30)), .schedule(until))
+        // The clock was set forward past the due time, or the Mac slept through it: due, fire now.
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: true, now: set.addingTimeInterval(3600)), .fireNow)
+        // Exactly due is due (the timer may land a hair late, never early).
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: true, now: until), .fireNow)
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: true, now: until.addingTimeInterval(-0.001)), .schedule(until))
+        // The clock was set back an hour: the snooze is neither shortened nor dropped, it waits for the new "until".
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: true, now: set.addingTimeInterval(-3600)), .schedule(until))
+        // A transient banner behaves the same: snoozing it must not turn it into an expiry.
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: until, persistent: false, now: set.addingTimeInterval(3600)), .fireNow)
+    }
+
+    func testSnoozeStoredBeforeACrashIsRestoredAsPendingThenDue() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("herald-snooze-crash-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let set = at("2026-10-01T12:00:00-04:00")
+        let until = Snooze.fireDate(afterMinutes: 2, from: set)
+        let store = HistoryStore(directory: dir)
+        store.upsert(HeraldHistoryItem(id: "n", app: "a", notification: HeraldNotification(app: "a", id: "n", title: "t", persistent: true),
+                                       deliveredAt: set))
+        store.update(app: "a", id: "n") { $0.snoozedUntil = until }
+        // No orderly shutdown: a second store on the same folder is what the relaunched app sees.
+        let relaunched = HistoryStore(directory: dir)
+        let item = try XCTUnwrap(relaunched.undismissed().first)
+        XCTAssertTrue(item.isSnoozed)
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: item.snoozedUntil, persistent: true, now: set.addingTimeInterval(60)), .schedule(until))
+        XCTAssertEqual(Snooze.restoreAction(snoozedUntil: item.snoozedUntil, persistent: true, now: set.addingTimeInterval(180)), .fireNow)
+    }
+
     // History marker
 
     func testSnoozeMarker() {

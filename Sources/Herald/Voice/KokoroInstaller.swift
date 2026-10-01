@@ -20,6 +20,10 @@ final class KokoroInstaller: ObservableObject {
     let layout: KokoroLayout
     private var task: Task<Void, Never>?
     private var downloader: ResumableDownloader?
+    private var currentProcess: Process?
+    /// Bumped by `install()` and `cancel()`. A run that is no longer the current one (it was cancelled while a
+    /// download or a tool was unwinding) must not touch the published state any more.
+    private var generation = 0
 
     init(layout: KokoroLayout) { self.layout = layout }
 
@@ -45,54 +49,90 @@ final class KokoroInstaller: ObservableObject {
 
     func install() {
         guard !isBusy else { return }
-        task = Task { [weak self] in await self?.run() }
+        generation += 1
+        let gen = generation
+        phase = .settingUp("Starting")   // busy at once, so a second press before the task starts is ignored
+        task = Task { [weak self] in await self?.run(generation: gen) }
     }
 
+    /// Stops the download or the running tool. A partial download stays on disk as `<file>.part`, and the next
+    /// `install()` continues from it.
     func cancel() {
+        guard isBusy else { return }
+        generation += 1
         downloader?.cancel()
+        if let p = currentProcess, p.isRunning { p.terminate() }
         task?.cancel()
+        log.append("Cancelled")
         phase = .idle
     }
 
-    private func run() async {
+    private func setPhase(_ p: Phase, _ gen: Int) { if gen == generation { phase = p } }
+
+    private func run(generation gen: Int) async {
+        func current() throws { if gen != generation { throw CancellationError() } }
         do {
             try FileManager.default.createDirectory(at: layout.root, withIntermediateDirectories: true)
             for name in [KokoroLayout.voicesFile, KokoroLayout.modelFile] {
                 let dest = layout.root.appendingPathComponent(name)
                 if !FileManager.default.fileExists(atPath: dest.path) {
-                    phase = .downloading(file: name, fraction: 0)
+                    setPhase(.downloading(file: name, fraction: 0), gen)
                     let d = ResumableDownloader()
                     downloader = d
                     try await d.download(URL(string: KokoroLayout.releaseBase + name)!, to: dest) { [weak self] f in
-                        Task { @MainActor in self?.phase = .downloading(file: name, fraction: f) }
+                        Task { @MainActor in self?.setPhase(.downloading(file: name, fraction: f), gen) }
                     }
+                    try current()
                 }
-                phase = .settingUp("Checksum \(name)")
+                setPhase(.settingUp("Checksum \(name)"), gen)
                 let sum = try await Task.detached { try KokoroLayout.sha256(of: dest) }.value
+                try current()
                 checksums[name] = sum
                 log.append("\(name) sha256 \(sum)")
             }
-            if !layout.hasPython { try await buildEnvironment() }
-            phase = layout.isInstalled ? .done : .failed("Installation incomplete: \(layout.missing.joined(separator: ", "))")
+            if !layout.hasPython || layout.environmentIncomplete { try await prepareEnvironment(gen) }
+            try current()
+            setPhase(layout.isInstalled ? .done : .failed("Installation incomplete: \(layout.missing.joined(separator: ", "))"), gen)
             installationChanged()
-        } catch is CancellationError {
-            phase = .idle
         } catch {
-            phase = .failed(error.localizedDescription)
+            guard gen == generation else { return }   // cancelled: `cancel()` already reset the state
+            phase = error is CancellationError ? .idle : .failed(error.localizedDescription)
         }
     }
 
-    private func buildEnvironment() async throws {
+    /// Builds the venv unless a venv Herald left behind earlier already imports cleanly, then marks it ready.
+    private func prepareEnvironment(_ gen: Int) async throws {
+        if layout.hasPython, (try? await runTool(layout.python.path, ["-c", Self.importCheck])) != nil {
+            try? Data().write(to: layout.environmentMarker)
+            return
+        }
+        // A half-built venv (a failed or interrupted pip install) would otherwise count as installed.
+        try? FileManager.default.removeItem(at: layout.venv)
+        do {
+            try await buildEnvironment(gen)
+            setPhase(.settingUp("Checking the environment"), gen)
+            try await runTool(layout.python.path, ["-c", Self.importCheck])
+            try Data().write(to: layout.environmentMarker)
+        } catch {
+            // Only while this run is still the current one: after a cancel a newer run may already be building.
+            if gen == generation { try? FileManager.default.removeItem(at: layout.venv) }
+            throw error
+        }
+    }
+
+    private static let importCheck = "import kokoro_onnx, soundfile"
+
+    private func buildEnvironment(_ gen: Int) async throws {
         let venv = layout.venv.path
         if let uv = Self.find("uv") {
-            phase = .settingUp("Creating Python 3.12 environment (uv)")
+            setPhase(.settingUp("Creating Python 3.12 environment (uv)"), gen)
             try await runTool(uv, ["venv", "--python", "3.12", venv])
-            phase = .settingUp("Installing kokoro-onnx and soundfile")
+            setPhase(.settingUp("Installing kokoro-onnx and soundfile"), gen)
             try await runTool(uv, ["pip", "install", "--python", layout.python.path, "kokoro-onnx", "soundfile"])
         } else if let py = Self.find("python3") {
-            phase = .settingUp("Creating Python environment")
+            setPhase(.settingUp("Creating Python environment"), gen)
             try await runTool(py, ["-m", "venv", venv])
-            phase = .settingUp("Installing kokoro-onnx and soundfile (pip)")
+            setPhase(.settingUp("Installing kokoro-onnx and soundfile (pip)"), gen)
             try await runTool(layout.venv.appendingPathComponent("bin/pip").path, ["install", "kokoro-onnx", "soundfile"])
         } else {
             throw TTSWorkerError.notInstalled("neither uv nor python3 was found; install one (brew install uv) and try again")
@@ -109,10 +149,13 @@ final class KokoroInstaller: ObservableObject {
         return nil
     }
 
-    private func runTool(_ exe: String, _ args: [String]) async throws {
+    @discardableResult
+    private func runTool(_ exe: String, _ args: [String]) async throws -> String {
         log.append("$ \((exe as NSString).lastPathComponent) \(args.joined(separator: " "))")
+        let p = Process()
+        currentProcess = p
+        defer { currentProcess = nil }
         let output: (Int32, String) = try await withCheckedThrowingContinuation { cont in
-            let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
             p.arguments = args
             var env = ProcessInfo.processInfo.environment
@@ -128,6 +171,7 @@ final class KokoroInstaller: ObservableObject {
         }
         if let last = output.1.split(separator: "\n").last { log.append(String(last)) }
         if output.0 != 0 { throw TTSWorkerError.failed("\((exe as NSString).lastPathComponent) exited \(output.0): \(output.1.suffix(300))") }
+        return output.1
     }
 
     private func installationChanged() {
@@ -137,8 +181,12 @@ final class KokoroInstaller: ObservableObject {
 }
 
 /// A resumable download: data goes to `<dest>.part` and a restart continues from the bytes already there
-/// (`Range: bytes=N-`). The finished file is moved into place.
+/// (`Range: bytes=N-`). The finished file is moved into place. How the server's answer is read is
+/// `DownloadResume.decide`.
 final class ResumableDownloader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    /// The `.part` file turned out not to be a prefix of the file on the server.
+    private enum PartError: Error { case notAPrefix }
+
     private var session: URLSession?
     private var handle: FileHandle?
     private var partURL: URL?
@@ -149,11 +197,19 @@ final class ResumableDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     private var dest: URL?
 
     func download(_ url: URL, to dest: URL, progress: @escaping (Double) -> Void) async throws {
+        do { try await attempt(url, to: dest, progress: progress) }
+        catch PartError.notAPrefix {
+            try? FileManager.default.removeItem(at: dest.appendingPathExtension("part"))
+            try await attempt(url, to: dest, progress: progress)
+        }
+    }
+
+    private func attempt(_ url: URL, to dest: URL, progress: @escaping (Double) -> Void) async throws {
         let part = dest.appendingPathExtension("part")
         let have = ((try? FileManager.default.attributesOfItem(atPath: part.path))?[.size] as? NSNumber)?.int64Value ?? 0
         var req = URLRequest(url: url)
         req.timeoutInterval = 60
-        if have > 0 { req.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
+        if let range = DownloadResume.rangeHeader(have: have) { req.setValue(range, forHTTPHeaderField: "Range") }
         self.dest = dest; self.partURL = part; self.progress = progress; self.received = have
         if !FileManager.default.fileExists(atPath: part.path) { FileManager.default.createFile(atPath: part.path, contents: nil) }
         handle = try FileHandle(forWritingTo: part)
@@ -173,23 +229,26 @@ final class ResumableDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
         guard let http = response as? HTTPURLResponse else { completionHandler(.cancel); return }
-        switch http.statusCode {
-        case 206:
-            expected = received + http.expectedContentLength
-        case 200:
-            // The server ignored the range (or there was nothing to resume): start over.
+        switch DownloadResume.decide(status: http.statusCode, have: received, contentLength: http.expectedContentLength,
+                                     contentRange: http.value(forHTTPHeaderField: "Content-Range")) {
+        case .resume(let total):
+            expected = total
+        case .restart(let total):
             try? handle?.truncate(atOffset: 0)
             try? handle?.seek(toOffset: 0)
             received = 0
-            expected = http.expectedContentLength
-        case 416:
-            // The part file is already complete.
+            expected = total
+        case .alreadyComplete:
             completionHandler(.cancel)
             finish(nil)
             return
-        default:
+        case .discardPart:
             completionHandler(.cancel)
-            finish(TTSWorkerError.failed("download failed (HTTP \(http.statusCode))"))
+            finish(PartError.notAPrefix)
+            return
+        case .fail(let code):
+            completionHandler(.cancel)
+            finish(TTSWorkerError.failed("download failed (HTTP \(code))"))
             return
         }
         completionHandler(.allow)
@@ -202,7 +261,7 @@ final class ResumableDownloader: NSObject, URLSessionDataDelegate, @unchecked Se
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        // The 416 path cancels the task on purpose; it was already finished above.
+        // The 416 paths cancel the task on purpose; they were already finished above.
         guard continuation != nil else { return }
         finish(error)
     }

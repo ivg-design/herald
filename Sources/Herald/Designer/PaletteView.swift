@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 // The Designer's left column: the issuer and its templates on top (New / Duplicate / Delete / Set as
 // default), then the palette: components to drag onto the canvas, the issuer's fields as tokens with their
@@ -15,6 +16,7 @@ struct PaletteView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     ComponentsPalette(model: model)
+                    AssetsPalette(model: model)
                     FieldsPalette(model: model)
                     ActionsPalette(model: model)
                 }
@@ -72,7 +74,7 @@ struct IssuerTemplatesView: View {
                     Button("Blank 3 \u{00D7} 4 grid") { model.startNew(from: nil) }
                     Divider()
                     ForEach(HeraldLayout.allCases, id: \.self) { l in
-                        Button("From \u{201C}\(TemplateEditorView.layoutTitle(l))\u{201D}") { model.startNew(from: l) }
+                        Button("From \u{201C}\(l.formTitle)\u{201D}") { model.startNew(from: l) }
                     }
                 } label: { Label("New", systemImage: "plus") }
                     .menuStyle(.borderlessButton).fixedSize()
@@ -122,6 +124,7 @@ struct IssuerTemplatesView: View {
 // MARK: - Components
 
 private struct PaletteChip: View {
+    @ObservedObject var model: DesignerModel
     let symbol: String
     let title: String
     let payload: DragPayload
@@ -138,7 +141,10 @@ private struct PaletteChip: View {
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.secondary.opacity(0.10)))
         .contentShape(Rectangle())
         .onTapGesture(perform: tap)
-        .draggable(payload.string) {
+        .onDrag {
+            model.dragging = payload
+            return DesignerDrag.provider(payload)
+        } preview: {
             Label(title, systemImage: symbol).padding(6).background(Capsule().fill(Color.accentColor.opacity(0.9))).foregroundStyle(.white)
         }
         .help(help)
@@ -153,7 +159,7 @@ struct ComponentsPalette: View {
             PaletteHeader(title: "Components", hint: "Drag onto the canvas, or click to add to the selected slot.")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                 ForEach(DesignerPalette.components) { c in
-                    PaletteChip(symbol: c.symbol, title: c.title, payload: .component(c.type),
+                    PaletteChip(model: model, symbol: c.symbol, title: c.title, payload: .component(c.type),
                                 help: "Drag onto the canvas, or click to add") { model.addComponent(type: c.type) }
                 }
             }
@@ -226,7 +232,10 @@ private struct FieldChip: View {
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.secondary.opacity(0.10)))
         .contentShape(Rectangle())
         .onTapGesture { model.insertField(key: token.key) }
-        .draggable(DragPayload.field(token.key).string) {
+        .onDrag {
+            model.dragging = .field(token.key)
+            return DesignerDrag.provider(.field(token.key))
+        } preview: {
             Text(token.token).font(.system(size: 11, design: .monospaced)).padding(6)
                 .background(Capsule().fill(Color.accentColor.opacity(0.9))).foregroundStyle(.white)
         }
@@ -253,7 +262,7 @@ struct ActionsPalette: View {
         VStack(alignment: .leading, spacing: 6) {
             PaletteHeader(title: "Actions", hint: "Drag an action onto the canvas for a button of its own. An action row component lists them all.")
             ForEach(rows) { row in
-                PaletteChip(symbol: row.action.kind.designerSymbol, title: row.action.label,
+                PaletteChip(model: model, symbol: row.action.kind.designerSymbol, title: row.action.label,
                             payload: .action(row.id), help: "\(row.action.kind.designerTitle) \u{00B7} \(row.origin == .issuer ? "from the issuer" : "added by you")") {
                     model.insertAction(id: row.id)
                 }
@@ -276,5 +285,103 @@ struct ActionsPalette: View {
                 .menuStyle(.borderlessButton).fixedSize()
                 .controlSize(.small)
         }
+    }
+}
+
+
+// MARK: - Assets (issue #33)
+
+/// The issuer's Rive files: each with a live preview, drag onto the canvas (or click) to play it in a cell,
+/// Add... copies a `.riv` into the app's assets folder, Remove deletes a file.
+struct AssetsPalette: View {
+    @ObservedObject var model: DesignerModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                PaletteHeader(title: "Assets", hint: "Rive animations of this issuer. Drag one onto the canvas, or click to add it to the selected slot.")
+                Spacer(minLength: 0)
+            }
+            if model.assets.isEmpty {
+                Text("No animation files for \(model.issuerName) yet.").font(.caption2).foregroundStyle(.secondary)
+            }
+            ForEach(model.assets) { asset in AssetRow(model: model, asset: asset) }
+            Button { addFiles() } label: { Label("Add\u{2026}", systemImage: "plus.circle") }
+                .buttonStyle(.borderless).controlSize(.small).disabled(model.app.isEmpty)
+                .help("Copy a .riv file into this issuer's assets folder")
+        }
+    }
+
+    private func addFiles() {
+        let p = NSOpenPanel()
+        p.title = "Add Animation"
+        p.message = "Choose Rive (.riv) files to add to \(model.issuerName)."
+        p.allowedContentTypes = [UTType(filenameExtension: "riv") ?? .data]
+        p.allowsMultipleSelection = true
+        p.canChooseDirectories = false
+        guard p.runModal() == .OK else { return }
+        for url in p.urls { model.addAsset(from: url) }
+    }
+}
+
+private struct AssetRow: View {
+    @ObservedObject var model: DesignerModel
+    let asset: DesignerAsset
+
+    private var detail: String {
+        var parts = [Self.size(asset.bytes)]
+        parts.append(asset.declared ? "from the issuer" : "added by you")
+        if !asset.usedBy.isEmpty { parts.append("used by \(asset.usedBy.count)") }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // A live preview straight from the file (an absolute path resolves through the asset store).
+            RiveComponentView(component: HeraldRiveComponent(path: asset.url.path, height: 40), app: model.app)
+                .frame(width: 52, height: 40)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color.secondary.opacity(0.10)))
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .allowsHitTesting(false)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(asset.file).font(.system(size: 11.5, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                Text(detail).font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Button { remove() } label: { Image(systemName: "trash") }
+                .buttonStyle(.borderless).controlSize(.small).help("Remove this file")
+        }
+        .padding(5)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.secondary.opacity(0.07)))
+        .contentShape(Rectangle())
+        .onTapGesture { model.insertAsset(id: asset.id) }
+        .onDrag {
+            model.dragging = .rive(asset.id)
+            return DesignerDrag.provider(.rive(asset.id))
+        } preview: {
+            Label(asset.file, systemImage: "play.rectangle").padding(6).background(Capsule().fill(Color.accentColor.opacity(0.9))).foregroundStyle(.white)
+        }
+        .contextMenu {
+            Button("Add to Selected Slot") { model.insertAsset(id: asset.id) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([asset.url]) }
+            Divider()
+            Button("Remove\u{2026}", role: .destructive) { remove() }
+        }
+        .help("\(asset.url.path)\nDrag onto the canvas, or click to add it to the selected slot.")
+    }
+
+    private func remove() {
+        var message = "\u{201C}\(asset.file)\u{201D} is deleted from this issuer's assets folder."
+        if !asset.usedBy.isEmpty {
+            message += " Templates that play it (\(asset.usedBy.prefix(4).joined(separator: ", "))\(asset.usedBy.count > 4 ? ", ..." : "")) show a placeholder until it is added again."
+        }
+        if asset.declared { message += " The issuer declares this animation, so Herald copies it back the next time it loads the issuer's manifest." }
+        if DesignerAlerts.confirm(title: "Remove \u{201C}\(asset.file)\u{201D}?", message: message, confirm: "Remove", destructive: true) {
+            model.removeAsset(asset)
+        }
+    }
+
+    static func size(_ bytes: Int) -> String {
+        bytes >= 1_048_576 ? String(format: "%.1f MB", Double(bytes) / 1_048_576) : String(format: "%.0f KB", max(Double(bytes) / 1024, 1))
     }
 }

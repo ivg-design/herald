@@ -17,6 +17,13 @@ final class VoiceCoordinator: ObservableObject {
     @Published private(set) var availableVoices: [VoiceInfo] = kokoroDefaultVoices
     @Published private(set) var lastError: String?
     @Published private(set) var isSpeaking = false
+    /// Bumped whenever a history entry's `speech` changes, so a live banner redraws its replay control.
+    @Published private(set) var speechRevision = 0
+
+    /// The one Kokoro installer. It lives here, not in the Settings view, so a download keeps running (and keeps
+    /// showing its progress) when the Settings window or tab is closed and reopened; a second installer would
+    /// write to the same `.part` file.
+    lazy var installer = KokoroInstaller(layout: layout)
 
     private lazy var queue = SpeechQueue(player: player, isMuted: { AppSettings.shared.muted })
     private let player = AVSpeechPlayer()
@@ -245,8 +252,12 @@ final class VoiceCoordinator: ObservableObject {
         Task { await refreshVoices() }
     }
 
+    /// The speech stored for a notification, nil when it has none (the banner then has no replay control).
+    func speech(app: String, id: String) -> HeraldSpeech? { history?.item(app: app, id: id)?.speech }
+
     private func record(_ item: HeraldHistoryItem, _ speech: HeraldSpeech) {
         history?.update(app: item.app, id: item.id) { $0.speech = speech }
+        speechRevision &+= 1
         NotificationCenter.default.post(name: .heraldChanged, object: nil)
     }
 

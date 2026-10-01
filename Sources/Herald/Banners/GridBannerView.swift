@@ -107,20 +107,34 @@ struct GridRenderState {
 
 struct GridBannerView: View {
     @ObservedObject var model: BannerModel
+    /// True inside a live banner panel: a notification that has speech then carries a replay control, beside the
+    /// timestamp (the meta column) or, when the template draws none, in a thin row under the grid.
+    var showsReplay = false
+    @ObservedObject private var voice = VoiceCoordinator.shared
     @Environment(\.colorScheme) private var scheme
     /// Set by the link action so the banner's tap gesture (open url + dismiss) can tell it was a link click.
     @State private var linkClickedAt: Date = .distantPast
 
     var body: some View {
         let state = GridRenderState(model: model, scheme: scheme)
-        GridCanvasLayout(grid: state.grid, cells: state.cells, plan: state.plan, width: model.bannerWidth) {
-            ForEach(state.liveIndices, id: \.self) { i in
-                let cell = state.cells[i]
-                component(of: cell, state.ctx)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cell.align.alignment)
-                    .clipped()
-                    .modifier(SwallowTaps(active: Self.isInteractive(cell.component)))
-                    .layoutValue(key: GridCellIndexKey.self, value: i)
+        let speech = showsReplay ? voice.speech(app: model.item.app, id: model.item.id) : nil
+        let replayCell = speech == nil ? nil : state.liveIndices.first { i in
+            if case .timestamp = state.cells[i].component { return true }
+            return false
+        }
+        VStack(spacing: 0) {
+            GridCanvasLayout(grid: state.grid, cells: state.cells, plan: state.plan, width: model.bannerWidth) {
+                ForEach(state.liveIndices, id: \.self) { i in
+                    let cell = state.cells[i]
+                    component(of: cell, state.ctx, replay: i == replayCell ? speech : nil)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cell.align.alignment)
+                        .clipped()
+                        .modifier(SwallowTaps(active: Self.isInteractive(cell.component)))
+                        .layoutValue(key: GridCellIndexKey.self, value: i)
+                }
+            }
+            if let speech, replayCell == nil {
+                BannerReplayStrip(app: model.item.app, id: model.item.id, speech: speech, inset: state.grid.padding)
             }
         }
         .contentShape(Rectangle())
@@ -128,12 +142,20 @@ struct GridBannerView: View {
         .environment(\.openURL, linkAction)
     }
 
-    @ViewBuilder private func component(of cell: HeraldCell, _ ctx: GridContext) -> some View {
+    @ViewBuilder private func component(of cell: HeraldCell, _ ctx: GridContext, replay: HeraldSpeech? = nil) -> some View {
         switch cell.component {
         case .text(let c): TextComponentView(component: c, ctx: ctx, align: cell.align)
         case .image(let c): ImageComponentView(component: c, ctx: ctx)
         case .issuerIcon(let c): IssuerIconComponentView(component: c, ctx: ctx)
-        case .timestamp(let c): TimestampComponentView(component: c, ctx: ctx)
+        case .timestamp(let c):
+            if let replay {
+                HStack(spacing: 3) {
+                    BannerReplayButton(app: model.item.app, id: model.item.id, speech: replay)
+                    TimestampComponentView(component: c, ctx: ctx)
+                }
+            } else {
+                TimestampComponentView(component: c, ctx: ctx)
+            }
         case .button(let c): ButtonComponentView(component: c, ctx: ctx)
         case .actions(let c): ActionsComponentView(component: c, ctx: ctx)
         case .iconButton(let c): IconButtonComponentView(component: c, ctx: ctx)

@@ -32,7 +32,7 @@ final class DesignerModelTests: XCTestCase {
     // MARK: Payloads and rects
 
     func testDragPayloadRoundTrip() {
-        for p in [DragPayload.component("text"), .field("extra.queue"), .action("mark-read"), .cell("c3")] {
+        for p in [DragPayload.component("text"), .field("extra.queue"), .action("mark-read"), .cell("c3"), .rive("bell-2")] {
             XCTAssertEqual(DragPayload(string: p.string), p)
         }
         XCTAssertNil(DragPayload(string: "hello"))
@@ -670,5 +670,379 @@ final class DesignerModelStateTests: XCTestCase {
         m.insertRow(at: 2)
         XCTAssertEqual(m.grid.rows, 3)
         XCTAssertEqual(m.draft.grid?.rowSizes.count, 3)
+    }
+}
+
+
+// MARK: - Track sizes, drop previews, modes, animations, bundles (Herald 1.2 designer work)
+
+final class DesignerTrackTests: XCTestCase {
+    func testClampedPointsAreWholeAndBounded() {
+        let g = HeraldGrid.standard   // 400 wide
+        XCTAssertEqual(GridEditing.clampedPoints(96.4, columns: true, in: g), 96)
+        XCTAssertEqual(GridEditing.clampedPoints(-20, columns: true, in: g), GridEditing.minTrackPoints)
+        XCTAssertEqual(GridEditing.clampedPoints(2000, columns: true, in: g), 400)
+        XCTAssertEqual(GridEditing.clampedPoints(2000, columns: false, in: g), 800)
+        XCTAssertEqual(GridEditing.clampedPoints(.nan, columns: false, in: g), GridEditing.minTrackPoints)
+    }
+
+    func testSetTrackWritesOneTrackAndKeepsTheRest() {
+        var t = HeraldTemplate.blank(name: "t", app: "demo")
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 1, size: .points(120.6), in: &t))
+        XCTAssertEqual(t.grid?.colSizes, [.points(72), .points(121), .fill, .points(56)])
+        XCTAssertTrue(GridEditing.setTrack(columns: false, index: 2, size: .points(3), in: &t))
+        XCTAssertEqual(t.grid?.rowSizes, [.auto, .auto, .points(GridEditing.minTrackPoints)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 1, size: .fill, in: &t))
+        XCTAssertEqual(t.grid?.colSizes[1], .fill)
+        XCTAssertFalse(GridEditing.setTrack(columns: true, index: 4, size: .fill, in: &t))
+        XCTAssertFalse(GridEditing.setTrack(columns: false, index: -1, size: .auto, in: &t))
+        XCTAssertTrue(t.validate().filter(\.isError).isEmpty)
+    }
+
+    func testSetTrackRepairsShortSizeLists() {
+        var t = HeraldTemplate.blank(name: "t", app: "demo")
+        t.grid?.colSizes = [.fill]       // a hand-written template with fewer sizes than columns
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 3, size: .points(40), in: &t))
+        XCTAssertEqual(t.grid?.colSizes.count, 4)
+        XCTAssertEqual(t.grid?.colSizes[3], .points(40))
+    }
+}
+
+@MainActor
+final class DesignerWorkflowTests: XCTestCase {
+    var root: URL!
+    /// The "assets folder": file names to bytes, shared with the backend closures.
+    var folder: [String: Data] = [:]
+    var saved: [HeraldTemplate] = []
+    var manifest = HeraldManifest(app: "demo", appName: "Demo",
+                                  fields: [HeraldField(key: "title", type: .text, sample: .text("Hello")),
+                                           HeraldField(key: "count", type: .number, sample: .number(3))],
+                                  assets: [HeraldAsset(id: "bell", type: "rive", path: "/nowhere/bell.riv", stateMachine: "Main", inputs: ["count"])])
+    var infoLoads = 0
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("herald-designer-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        folder = ["bell.riv": Data(repeating: 1, count: 40), "hero.riv": Data(repeating: 2, count: 90)]
+    }
+
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
+
+    private func fileURL(_ name: String) -> URL {
+        let u = root.appendingPathComponent("assets").appendingPathComponent(name)
+        try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: u.path) { try? folder[name]?.write(to: u) }
+        return u
+    }
+
+    private func make() -> DesignerModel {
+        var b = DesignerBackend()
+        b.issuers = { [DesignerIssuer(id: "demo", name: "Demo", hasManifest: true), DesignerIssuer(id: "other", name: "Other", hasManifest: false)] }
+        b.manifest = { [unowned self] app in app == "demo" ? self.manifest : nil }
+        b.templates = { [unowned self] app in self.saved.filter { $0.app == app } }
+        b.saveTemplate = { [unowned self] t in self.saved.removeAll { $0.name == t.name && $0.app == t.app }; self.saved.append(t); return true }
+        b.assetFiles = { [unowned self] _ in self.folder.keys.sorted().map { self.fileURL($0) } }
+        b.installAsset = { [unowned self] _, a in
+            guard let d = try? Data(contentsOf: URL(fileURLWithPath: a.path)) else { throw AssetError.missing(a.path) }
+            self.folder[a.id + ".riv"] = d
+        }
+        b.removeAssetFile = { [unowned self] _, url in self.folder[url.lastPathComponent] = nil; return true }
+        b.riveFile = { [unowned self] _, c in
+            let name = c.asset.map { $0 + ".riv" } ?? c.path
+            return name.flatMap { self.folder[$0] != nil ? self.fileURL($0) : nil }
+        }
+        b.riveInfo = { [unowned self] _ in
+            self.infoLoads += 1
+            return RiveFileInfo(artboards: [.init(name: "Main", width: 200, height: 100, defaultMachine: "Main",
+                machines: [.init(name: "Main", inputs: [.init(name: "count", kind: .number), .init(name: "hover", kind: .bool)]),
+                           .init(name: "Alt", inputs: [.init(name: "go", kind: .trigger)])], animations: ["Idle"])])
+        }
+        return DesignerModel(backend: b, app: "demo")
+    }
+
+    // MARK: Drop previews
+
+    func testDropPreviewDescribesEachPayloadKind() {
+        let m = make()
+        m.addComponent(type: "text", at: GridSlot(0, 1))
+        m.addComponent(type: "image", at: GridSlot(0, 2))
+        // An empty slot.
+        XCTAssertEqual(m.dropPreview(for: .component("badge"), at: GridSlot(2, 2)),
+                       DropPreview(rect: SlotRect(row: 2, col: 2), verb: "Add badge", allowed: true))
+        // An occupied one: the whole cell lights up.
+        XCTAssertEqual(m.dropPreview(for: .component("badge"), at: GridSlot(0, 1))?.verb, "Replace text with badge")
+        XCTAssertEqual(m.dropPreview(for: .field("count"), at: GridSlot(0, 1)), DropPreview(rect: SlotRect(row: 0, col: 1), verb: "Bind {count}", allowed: true))
+        XCTAssertEqual(m.dropPreview(for: .field("count"), at: GridSlot(1, 1))?.verb, "Add {count}")
+        // A button cannot bind a field.
+        m.addComponent(type: "iconButton", at: GridSlot(1, 3))
+        let refused = m.dropPreview(for: .field("count"), at: GridSlot(1, 3))
+        XCTAssertEqual(refused?.allowed, false)
+        XCTAssertEqual(refused?.verb, "A icon btn cannot bind {count}")
+        // Moving: onto itself, onto another cell (swap), onto free space.
+        XCTAssertEqual(m.dropPreview(for: .cell("c1"), at: GridSlot(0, 1))?.allowed, false)
+        XCTAssertEqual(m.dropPreview(for: .cell("c1"), at: GridSlot(0, 2))?.verb, "Swap with image")
+        XCTAssertEqual(m.dropPreview(for: .cell("c1"), at: GridSlot(2, 0)), DropPreview(rect: SlotRect(row: 2, col: 0), verb: "Move here", allowed: true))
+        XCTAssertNil(m.dropPreview(for: .cell("gone"), at: GridSlot(2, 0)))
+        XCTAssertNil(m.dropPreview(for: .component("text"), at: GridSlot(3, 0)), "outside the grid")
+    }
+
+    func testDropPreviewForAMovedSpanShowsWhereItWouldLand() {
+        let m = make()
+        m.addComponent(type: "text", at: GridSlot(0, 0))
+        m.setSpan(cell: "c1", rowSpan: 1, colSpan: 3)
+        // Moving a 3-wide cell to column 2 is cut to what fits: only 2 columns remain.
+        XCTAssertEqual(m.dropPreview(for: .cell("c1"), at: GridSlot(1, 2))?.rect, SlotRect(row: 1, col: 2, rowSpan: 1, colSpan: 2))
+    }
+
+    func testHoverDropTracksTheSlotAndClearsOnHandle() {
+        let m = make()
+        m.addComponent(type: "text", at: GridSlot(0, 1))
+        m.dragging = .field("count")
+        m.hoverDrop(at: GridSlot(0, 1))
+        XCTAssertEqual(m.dropTarget?.verb, "Bind {count}")
+        m.hoverDrop(at: GridSlot(2, 2))
+        XCTAssertEqual(m.dropTarget?.verb, "Add {count}")
+        m.hoverDrop(at: nil)
+        XCTAssertNil(m.dropTarget)
+        // A drag from elsewhere (nothing known about it) still shows the target.
+        m.dragging = nil
+        m.hoverDrop(at: GridSlot(0, 1))
+        XCTAssertEqual(m.dropTarget, DropPreview(rect: SlotRect(row: 0, col: 1), verb: "Drop here", allowed: true))
+        m.dragging = .component("badge")
+        m.hoverDrop(at: GridSlot(2, 2))
+        m.handle(.component("badge"), at: GridSlot(2, 2))
+        XCTAssertNil(m.dropTarget)
+        XCTAssertNil(m.dragging)
+        XCTAssertNotNil(GridEditing.cell(at: GridSlot(2, 2), in: m.draft))
+    }
+
+    func testTrackResizeIsOneUndoStep() {
+        let m = make()
+        let before = m.draft
+        m.beginGesture()
+        for v in [90.0, 100, 110.4] { m.resizeTrackLive(columns: true, index: 0, points: v) }
+        XCTAssertEqual(m.draft.grid?.colSizes[0], .points(110))
+        m.undo()
+        XCTAssertEqual(m.draft, before)
+        m.resizeTrackLive(columns: false, index: 1, points: 60)
+        XCTAssertEqual(m.draft.grid?.rowSizes[1], .points(60))
+        m.resetTrack(columns: false, index: 1)
+        XCTAssertEqual(m.draft.grid?.rowSizes[1], .auto)
+        m.resetTrack(columns: true, index: 0)
+        XCTAssertEqual(m.draft.grid?.colSizes[0], .fill)
+    }
+
+    // MARK: Modes (issue 31)
+
+    func testQuickSendSeedsItsAppFromTheIssuerOnce() {
+        let m = make()
+        XCTAssertEqual(m.mode, .design)
+        XCTAssertEqual(m.quickSend.app, "")
+        m.showQuickSend()
+        XCTAssertEqual(m.mode, .quickSend)
+        XCTAssertEqual(m.quickSend.app, "demo")
+        m.quickSend.title = "Half-written"
+        m.quickSend.app = "other"
+        m.showDesign()
+        m.showQuickSend()
+        XCTAssertEqual(m.quickSend.app, "other", "an app the user chose is kept")
+        XCTAssertEqual(m.quickSend.title, "Half-written", "the form survives a look at the designer")
+        m.showQuickSend(app: "demo")
+        XCTAssertEqual(m.quickSend.app, "demo")
+    }
+
+    func testShowDesignCanSwitchIssuerAndTemplate() {
+        let m = make()
+        var t = HeraldTemplate.blank(name: "mine", app: "other")
+        t.title = "x"
+        saved.append(t)
+        m.showQuickSend()
+        m.showDesign(app: "other", template: "mine")
+        XCTAssertEqual(m.mode, .design)
+        XCTAssertEqual(m.app, "other")
+        XCTAssertEqual(m.savedName, "mine")
+        XCTAssertEqual(DesignerMode.quickSend.windowTitle, "Quick Send")
+    }
+
+    // MARK: Animations (issue 33)
+
+    func testAssetsListFilesWithDeclaredFlagAndUsage() {
+        let m = make()
+        XCTAssertEqual(m.assets.map(\.id), ["bell", "hero"])
+        XCTAssertEqual(m.assets.map(\.declared), [true, false])
+        XCTAssertEqual(m.assets.map(\.bytes), [40, 90])
+        XCTAssertTrue(m.assets.allSatisfy { $0.usedBy.isEmpty })
+
+        m.addComponent(type: "rive", at: GridSlot(0, 0))   // the manifest's bell
+        var other = HeraldTemplate.blank(name: "other-template", app: "demo")
+        other.cells = [HeraldCell(id: "r", row: 0, col: 0, component: .rive(HeraldRiveComponent(path: "hero.riv")))]
+        saved.append(other)
+        m.reloadAssets()
+        m.refreshFromDisk()
+        XCTAssertEqual(m.assets.first { $0.id == "bell" }?.usedBy, [m.draft.name])
+        XCTAssertEqual(m.assets.first { $0.id == "hero" }?.usedBy, ["other-template"])
+    }
+
+    func testAddAndRemoveAnAsset() throws {
+        let m = make()
+        let src = root.appendingPathComponent("My Hero.riv")
+        try Data(repeating: 9, count: 20).write(to: src)
+        m.addAsset(from: src)
+        XCTAssertEqual(m.status?.kind, .info)
+        XCTAssertEqual(m.assets.count, 3)
+        let added = try XCTUnwrap(m.assets.first { $0.id.hasPrefix("My_Hero") })
+        XCTAssertFalse(added.declared)
+        // The same file again takes a free id instead of replacing the first.
+        m.addAsset(from: src)
+        XCTAssertEqual(m.assets.count, 4)
+        XCTAssertEqual(Set(m.assets.map(\.id)).count, 4)
+
+        m.removeAsset(added)
+        XCTAssertEqual(m.assets.count, 3)
+        XCTAssertFalse(m.assets.contains(added))
+
+        m.addAsset(from: root.appendingPathComponent("missing.riv"))
+        XCTAssertEqual(m.status?.kind, .error)
+    }
+
+    func testRiveComponentForAnAssetUsesTheIdWhenDeclaredAndTheFileOtherwise() throws {
+        let m = make()
+        let bell = try XCTUnwrap(m.assets.first { $0.id == "bell" }), hero = try XCTUnwrap(m.assets.first { $0.id == "hero" })
+        let a = m.riveComponent(for: bell)
+        XCTAssertEqual(a.asset, "bell"); XCTAssertNil(a.path)
+        XCTAssertEqual(a.stateMachine, "Main", "the manifest's state machine wins")
+        XCTAssertEqual(a.aspectRatio, 2, "from the artboard's size")
+        let b = m.riveComponent(for: hero)
+        XCTAssertNil(b.asset); XCTAssertEqual(b.path, "hero.riv")
+        XCTAssertEqual(b.stateMachine, "Main", "the file's default machine")
+    }
+
+    func testDroppingAnAssetPlacesARiveCell() {
+        let m = make()
+        m.dragging = .rive("hero")
+        XCTAssertEqual(m.dropPreview(for: .rive("hero"), at: GridSlot(1, 1))?.verb, "Add animation")
+        XCTAssertEqual(m.dropPreview(for: .rive("nope"), at: GridSlot(1, 1))?.allowed, false)
+        m.handle(.rive("hero"), at: GridSlot(1, 1))
+        guard case .rive(let r)? = GridEditing.cell(at: GridSlot(1, 1), in: m.draft)?.component else { return XCTFail("no rive cell") }
+        XCTAssertEqual(r.path, "hero.riv")
+        XCTAssertEqual(m.assets.first { $0.id == "hero" }?.usedBy, [m.draft.name])
+        // Clicking an asset puts it in the first free slot.
+        m.clearSelection()
+        m.insertAsset(id: "bell")
+        XCTAssertTrue(m.draft.cells.contains { if case .rive(let r) = $0.component { return r.asset == "bell" }; return false })
+        m.insertAsset(id: "missing")
+        XCTAssertEqual(m.status?.kind, .error)
+    }
+
+    func testFileInfoIsReadOncePerFileVersion() throws {
+        let m = make()
+        let c = HeraldRiveComponent(path: "bell.riv")
+        let a = m.riveFileInfo(for: c)
+        _ = m.riveFileInfo(for: c)
+        _ = m.riveFileInfo(for: c)
+        XCTAssertEqual(infoLoads, 1)
+        XCTAssertEqual(a?.machine(nil, artboard: nil)?.name, "Main")
+        XCTAssertEqual(a?.machine("Alt", artboard: nil)?.inputs, [.init(name: "go", kind: .trigger)])
+        XCTAssertNil(a?.machine("Nope", artboard: nil))
+        XCTAssertEqual(a?.artboard(named: "missing")?.name, "Main", "an unknown artboard falls back like the player does")
+        XCTAssertNil(m.riveFileInfo(for: HeraldRiveComponent(path: "absent.riv")))
+        // A changed file is read again.
+        try Data(repeating: 5, count: 41).write(to: fileURL("bell.riv"))
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: fileURL("bell.riv").path)
+        _ = m.riveFileInfo(for: c)
+        XCTAssertEqual(infoLoads, 2)
+    }
+
+    // MARK: Bundles (issue 30)
+
+    private func service() -> TemplateBundleService {
+        let templates = TemplateStore(directory: root.appendingPathComponent("templates"))
+        let assets = AssetStore(directory: root.appendingPathComponent("store"))
+        return TemplateBundleService(templates: templates, assets: assets) { [unowned self] a in a == "demo" ? self.manifest : nil }
+    }
+
+    func testExportDraftWritesABundleAndReportsWarnings() throws {
+        var b = DesignerBackend()
+        let svc = service()
+        b.exportBundle = { try svc.export($0) }
+        let m = DesignerModel(backend: { var x = b; x.issuers = { [DesignerIssuer(id: "demo", name: "Demo", hasManifest: false)] }; return x }(), app: "demo")
+        m.draft.cells = [HeraldCell(id: "r", row: 0, col: 0, component: .rive(HeraldRiveComponent(path: "gone.riv")))]   // nobody can find it
+        m.edit { $0.name = "Exported one" }
+        XCTAssertEqual(m.suggestedBundleName, "Exported one.heraldtemplate")
+        let url = root.appendingPathComponent("out.heraldtemplate")
+        m.exportDraft(to: url)
+        let c = try HeraldTemplateBundle.unpack(Data(contentsOf: url))
+        XCTAssertEqual(c.template.name, "Exported one")
+        XCTAssertEqual(c.template.app, "demo")
+        XCTAssertEqual(m.status?.kind, .error, "a missing animation is worth a second look")
+        XCTAssertTrue(m.status?.text.contains("Exported") == true)
+
+        // A draft the API would refuse is not exported (a bundle that cannot be read back is no use).
+        m.draft.cells = [HeraldCell(id: "r", row: 0, col: 0, component: .rive(HeraldRiveComponent()))]
+        let bad = root.appendingPathComponent("bad.heraldtemplate")
+        m.exportDraft(to: bad)
+        XCTAssertEqual(m.status?.kind, .error)
+        XCTAssertTrue(m.status?.text.contains("rive component needs") == true, m.status?.text ?? "")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bad.path))
+    }
+
+    func testImportBundleLoadsTheTemplateAndHandlesNameConflicts() throws {
+        let svc = service()
+        var t = HeraldTemplate.blank(name: "Shared", app: "demo")
+        t.cells = [HeraldCell(id: "c1", row: 0, col: 1, component: .text(HeraldTextComponent(binding: "{title}")))]
+        let data = try HeraldTemplateBundle.export(t) { _ in nil }.data
+
+        var b = DesignerBackend()
+        b.issuers = { [DesignerIssuer(id: "demo", name: "Demo", hasManifest: true)] }
+        b.templates = { app in svc.templates.list(app: app) }
+        b.previewBundle = { try svc.preview($0, intoApp: $1) }
+        b.importBundle = { d, app, c in try svc.importBundle(d, intoApp: app, onConflict: c) }
+        let m = DesignerModel(backend: b, app: "demo")
+
+        m.importBundle(data)
+        XCTAssertEqual(m.savedName, "Shared")
+        XCTAssertEqual(m.draft.cells.count, 1)
+        XCTAssertEqual(m.status?.kind, .info)
+
+        // Again: the name is taken, the chooser decides.
+        var asked = 0
+        m.chooseConflict = { preview in asked += 1; XCTAssertTrue(preview.nameTaken); return .keepBoth }
+        m.importBundle(data)
+        XCTAssertEqual(asked, 1)
+        XCTAssertEqual(m.savedName, "Shared 2")
+        XCTAssertEqual(m.templates.count, 2)
+
+        m.chooseConflict = { _ in nil }
+        m.importBundle(data)
+        XCTAssertEqual(m.savedName, "Shared 2", "cancelled: nothing changes")
+        XCTAssertEqual(svc.templates.list(app: "demo").count, 2)
+
+        m.chooseConflict = { _ in .replace }
+        m.importBundle(data)
+        XCTAssertEqual(m.savedName, "Shared")
+        XCTAssertEqual(svc.templates.list(app: "demo").count, 2)
+
+        m.importBundle(Data("not a bundle".utf8))
+        XCTAssertEqual(m.status?.kind, .error)
+    }
+
+    func testImportForAnotherIssuerSwitchesToIt() throws {
+        let svc = service()
+        let t = HeraldTemplate.blank(name: "Elsewhere", app: "other")
+        let data = try HeraldTemplateBundle.export(t) { _ in nil }.data
+        var b = DesignerBackend()
+        b.issuers = { [DesignerIssuer(id: "demo", name: "Demo", hasManifest: true), DesignerIssuer(id: "other", name: "Other", hasManifest: false)] }
+        b.templates = { app in svc.templates.list(app: app) }
+        b.previewBundle = { try svc.preview($0, intoApp: $1) }
+        b.importBundle = { d, app, c in try svc.importBundle(d, intoApp: app, onConflict: c) }
+        let m = DesignerModel(backend: b, app: "demo")
+        m.importBundle(data)
+        XCTAssertEqual(m.app, "other")
+        XCTAssertEqual(m.savedName, "Elsewhere")
+        // Importing it for the current issuer instead retargets it.
+        m.switchIssuer("demo", force: true)
+        m.importBundle(data, intoApp: "demo")
+        XCTAssertEqual(m.app, "demo")
+        XCTAssertEqual(svc.templates.get(app: "demo", name: "Elsewhere")?.app, "demo")
     }
 }

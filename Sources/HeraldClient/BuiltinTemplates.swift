@@ -9,8 +9,23 @@ import Foundation
 /// text line (title, subtitle, body) plus the action row, so the v1 styling of each line is kept; for that
 /// reason the grids are 4 rows (hero 5, compact 2) by 4 columns rather than 3 x 4.
 ///
+/// Spacing: the v1 meta column (close, app icon, time stacked beside the text) used to sit on the title,
+/// subtitle and body rows, so each row was stretched to the height of its meta cell (+7 pt on the subtitle row
+/// alone) and the card came out 6 to 13 pt taller than v1. Now the time sits beside the close button on the
+/// title row, and the app icon spans the subtitle and body rows (a cell that spans rows only ever lends its
+/// excess to the last of them, so it adds nothing to a banner whose text is taller than the icon). The grid
+/// gap is 3.5 pt: v1 spaced its lines 2 to 3 pt apart and its action row 10 pt away, a single gap cannot be
+/// both, so the action row carries the difference as an inset. That keeps the card within 2 pt of v1's
+/// height for a banner with or without buttons, with or without an image (measured live, see BannerStackTests).
+///
 /// Differences from the v1 look: hero's image is inset by the card padding with rounded corners instead of
-/// bleeding to the card edge, and its close button sits in the title row instead of floating over the image.
+/// bleeding to the card edge, its close button sits in the title row instead of floating over the image, and a
+/// title-only banner is no longer held open by the meta column (v1 left a 64 pt tall strip under a one-line title).
+///
+/// The image column exists only when there is an image to put in it (`hasImage`): the action row spans every
+/// column, so a column kept alive by a collapsed image cell would push the whole text block right by the
+/// image width. `named(...)` and `all(...)` are the static templates (always with the column); the
+/// notification-driven `gridTemplate(for:)` that live banners use asks for the right one.
 public enum BuiltinTemplates {
     public static let prefix = "builtin."
 
@@ -41,9 +56,10 @@ public enum BuiltinTemplates {
     /// has no cell, `maxBodyLines` limits the body, and `accentColor` colours the title as v1 did.
     public static func template(layout: HeraldLayout, app: String = "", accentColor: String? = nil,
                                 showSubtitle: Bool = true, showBody: Bool = true, showTimestamp: Bool = true,
-                                maxBodyLines: Int = HeraldTemplate.defaultMaxBodyLines) -> HeraldTemplate {
+                                maxBodyLines: Int = HeraldTemplate.defaultMaxBodyLines,
+                                hasImage: Bool = true) -> HeraldTemplate {
         let (grid, cells) = build(layout, accent: accentColor, showSubtitle: showSubtitle, showBody: showBody,
-                                  showTimestamp: showTimestamp, maxBodyLines: maxBodyLines)
+                                  showTimestamp: showTimestamp, maxBodyLines: maxBodyLines, hasImage: hasImage)
         var t = HeraldTemplate(name: name(for: layout), app: app, grid: grid, cells: cells)
         t.layout = layout
         t.accentColor = accentColor
@@ -65,20 +81,27 @@ public enum BuiltinTemplates {
     }
 
     /// The grid for a notification that names no (grid) template: its own resolved v1 presentation fields
-    /// (`layout`, `accentColor`, `showSubtitle`, ...) pick and tune the built-in.
-    public static func gridTemplate(for n: HeraldNotification) -> HeraldTemplate {
+    /// (`layout`, `accentColor`, `showSubtitle`, ...) pick and tune the built-in. `hasImage` says whether the
+    /// banner has a picture to show (a composer preview holds one the notification does not name); nil asks
+    /// the notification, which has one when it names an image.
+    public static func gridTemplate(for n: HeraldNotification, hasImage: Bool? = nil) -> HeraldTemplate {
         template(layout: n.layout ?? .imageLeft, app: n.app, accentColor: n.accentColor,
                  showSubtitle: n.showSubtitle ?? true, showBody: n.showBody ?? true,
                  showTimestamp: n.showTimestamp ?? true,
-                 maxBodyLines: max(1, min(n.maxBodyLines ?? HeraldTemplate.defaultMaxBodyLines, 30)))
+                 maxBodyLines: max(1, min(n.maxBodyLines ?? HeraldTemplate.defaultMaxBodyLines, 30)),
+                 hasImage: hasImage ?? !(n.image ?? "").trimmingCharacters(in: .whitespaces).isEmpty)
     }
 
     // MARK: Building
 
     private static let width = 380.0
+    /// v1 put its action row 10 pt under the text and its text lines 2 to 3 pt apart; the grid has one gap for
+    /// both, so the action row carries the difference as an inset (1.5 pt on each side, which also keeps the
+    /// card as tall as v1 when there is no action row).
+    private static let actionsInset = 2.0
 
     private static func build(_ layout: HeraldLayout, accent: String?, showSubtitle: Bool, showBody: Bool,
-                              showTimestamp: Bool, maxBodyLines: Int) -> (HeraldGrid, [HeraldCell]) {
+                              showTimestamp: Bool, maxBodyLines: Int, hasImage: Bool = true) -> (HeraldGrid, [HeraldCell]) {
         let lines = max(1, min(maxBodyLines, 30))
 
         func title(size: Double? = nil, maxLines: Int = 2) -> HeraldComponent {
@@ -91,56 +114,71 @@ public enum BuiltinTemplates {
         let icon = HeraldComponent.issuerIcon(HeraldIssuerIconComponent(size: 22, cornerRadius: 5, shape: .rounded))
         let smallIcon = HeraldComponent.issuerIcon(HeraldIssuerIconComponent(size: 18, cornerRadius: 4, shape: .rounded))
         let time = HeraldComponent.timestamp(HeraldTimestampComponent(style: .caption, fontSize: 10))
+        // 16 pt, not v1's 18: it sits on the title row, which is 16 pt (one line of 13 pt semibold), so a larger
+        // button would stretch the row.
         let close = HeraldComponent.iconButton(HeraldIconButtonComponent(
+            symbol: "xmark", action: HeraldAction(id: "dismiss", label: "Dismiss", kind: .dismiss, style: "cancel"),
+            size: 16, tooltip: "Dismiss"))
+        let compactClose = HeraldComponent.iconButton(HeraldIconButtonComponent(
             symbol: "xmark", action: HeraldAction(id: "dismiss", label: "Dismiss", kind: .dismiss, style: "cancel"),
             size: 18, tooltip: "Dismiss"))
         let actions = HeraldComponent.actions(HeraldActionsComponent(source: .merged, layout: .wrap))
 
         func cell(_ id: String, _ row: Int, _ col: Int, rows: Int = 1, cols: Int = 1,
-                  align: HeraldAlign = .topLeading, _ component: HeraldComponent) -> HeraldCell {
-            HeraldCell(id: id, row: row, col: col, rowSpan: rows, colSpan: cols, align: align, component: component)
+                  align: HeraldAlign = .topLeading, padding: Double = 0, _ component: HeraldComponent) -> HeraldCell {
+            HeraldCell(id: id, row: row, col: col, rowSpan: rows, colSpan: cols, align: align, padding: padding, component: component)
         }
 
         switch layout {
         case .imageLeft, .imageRight:
-            // Columns: image 72 | text | text | meta (close, icon, time). Rows: title, subtitle, body, actions.
+            // Columns (image on the left): image 72 | text | time | meta (close, icon). Rows: title (+ time and
+            // close), subtitle, body, actions. The icon spans the subtitle and body rows, top right, under the
+            // close button as in v1. The subtitle and body also run under the time column.
+            // Without an image the first column is not there at all (see the header).
             let left = layout == .imageLeft
-            let textCol = left ? 1 : 0
+            let t = hasImage ? (left ? 1 : 0) : 0            // text column
+            let timeCol = t + 1 + (hasImage && !left ? 1 : 0) // right of the image on the right-hand layout
+            let metaCol = timeCol + 1
+            let cols = metaCol + 1
             var cells = [
-                cell("image", 0, left ? 0 : 2, rows: 3, align: .topLeading, image),
-                cell("title", 0, textCol, cols: 2, title()),
-                cell("close", 0, 3, align: .topTrailing, close),
-                cell("icon", 1, 3, align: .topTrailing, icon),
-                cell("actions", 3, 0, cols: 4, actions),
+                cell("title", 0, t, title()),
+                cell("close", 0, metaCol, align: .topTrailing, close),
+                cell("icon", 1, metaCol, rows: 2, align: .topTrailing, icon),
+                cell("actions", 3, 0, cols: cols, padding: actionsInset, actions),
             ]
-            if showSubtitle { cells.append(cell("subtitle", 1, textCol, cols: 2, subtitle)) }
-            if showBody { cells.append(cell("body", 2, textCol, cols: 2, body)) }
-            if showTimestamp { cells.append(cell("time", 2, 3, align: .topTrailing, time)) }
-            let cols: [HeraldSize] = left ? [.points(72), .fill, .fill, .auto] : [.fill, .fill, .points(72), .auto]
-            return (HeraldGrid(rows: 4, cols: 4, rowSizes: Array(repeating: .auto, count: 4), colSizes: cols,
-                               gap: 6, padding: 12, width: width), ordered(cells))
+            if hasImage { cells.append(cell("image", 0, left ? 0 : t + 1, rows: 3, align: .topLeading, image)) }
+            // The text spans up to, not into, the image on the right-hand layout.
+            let textSpan = (hasImage && !left) ? 1 : 2
+            if showSubtitle { cells.append(cell("subtitle", 1, t, cols: textSpan, subtitle)) }
+            if showBody { cells.append(cell("body", 2, t, cols: textSpan, body)) }
+            if showTimestamp { cells.append(cell("time", 0, timeCol, align: .trailing, time)) }
+            var sizes = [HeraldSize](repeating: .auto, count: cols)
+            sizes[t] = .fill
+            if hasImage { sizes[left ? 0 : t + 1] = .points(72) }
+            return (HeraldGrid(rows: 4, cols: cols, rowSizes: Array(repeating: .auto, count: 4), colSizes: sizes,
+                               gap: 3.5, padding: 12, width: width), ordered(cells))
 
         case .hero:
-            // Rows: image, title (+ time, close), subtitle (+ icon), body, actions.
+            // Rows: image, title (+ time, close), subtitle, body, actions. The icon spans the subtitle and body rows.
             var cells = [
                 cell("image", 0, 0, cols: 4, heroImage),
                 cell("title", 1, 0, cols: 2, title(size: 14)),
                 cell("close", 1, 3, align: .topTrailing, close),
-                cell("icon", 2, 3, align: .topTrailing, icon),
-                cell("actions", 4, 0, cols: 4, actions),
+                cell("icon", 2, 3, rows: 2, align: .topTrailing, icon),
+                cell("actions", 4, 0, cols: 4, padding: actionsInset, actions),
             ]
             if showSubtitle { cells.append(cell("subtitle", 2, 0, cols: 3, subtitle)) }
-            if showBody { cells.append(cell("body", 3, 0, cols: 4, body)) }
-            if showTimestamp { cells.append(cell("time", 1, 2, align: .topTrailing, time)) }
+            if showBody { cells.append(cell("body", 3, 0, cols: 3, body)) }
+            if showTimestamp { cells.append(cell("time", 1, 2, align: .trailing, time)) }
             return (HeraldGrid(rows: 5, cols: 4, rowSizes: Array(repeating: .auto, count: 5),
-                               colSizes: [.fill, .fill, .auto, .auto], gap: 6, padding: 12, width: width), ordered(cells))
+                               colSizes: [.fill, .fill, .auto, .auto], gap: 3.5, padding: 12, width: width), ordered(cells))
 
         case .compact:
             // One line: icon | title | time | close, then the actions. No image, subtitle or body, as in v1.
             var cells = [
                 cell("icon", 0, 0, align: .center, smallIcon),
                 cell("title", 0, 1, align: .leading, title(maxLines: 1)),
-                cell("close", 0, 3, align: .center, close),
+                cell("close", 0, 3, align: .center, compactClose),
                 cell("actions", 1, 0, cols: 4, actions),
             ]
             if showTimestamp { cells.append(cell("time", 0, 2, align: .center, time)) }

@@ -632,43 +632,135 @@ private struct RiveEditor: View {
     @ObservedObject var model: DesignerModel
     let id: String
 
+    private var component: HeraldRiveComponent {
+        if case .rive(let p)? = model.draft.cell(withID: id)?.component { return p }
+        return HeraldRiveComponent()
+    }
+
     var body: some View {
         let b = PayloadBinder<HeraldRiveComponent>.of(model, id)
         let assets = (model.manifest?.assets ?? []).filter { $0.type.lowercased() == "rive" }
         let asset = assets.first { $0.id == b.binding(\.asset, nil).wrappedValue }
+        let comp = component
+        // What the file holds (read with the Rive runtime): artboards, state machines, inputs.
+        let info = model.riveFileInfo(for: comp)
+        let board = info?.artboard(named: comp.artboard)
+        let machine = info?.machine(comp.stateMachine, artboard: comp.artboard)
         FieldRow("Asset") {
             Picker("", selection: Binding<String?>(get: { b.binding(\.asset, nil).wrappedValue }, set: { id in
                 b.binding(\.asset, nil).wrappedValue = id
                 if let a = assets.first(where: { $0.id == id }), b.binding(\.stateMachine, nil).wrappedValue == nil { b.binding(\.stateMachine, nil).wrappedValue = a.stateMachine }
             })) {
-                Text("A file path\u{2026}").tag(Optional<String>.none)
+                Text("A file\u{2026}").tag(Optional<String>.none)
                 ForEach(assets, id: \.id) { Text($0.id).tag(Optional($0.id)) }
             }.labelsHidden().fixedSize()
         }
         if b.binding(\.asset, nil).wrappedValue == nil {
             FieldRow("File") {
-                TextField("/path/to/animation.riv", text: Binding(get: { b.binding(\.path, nil).wrappedValue ?? "" },
+                TextField("animation.riv or /path/to/animation.riv", text: Binding(get: { b.binding(\.path, nil).wrappedValue ?? "" },
                                                                    set: { b.binding(\.path, nil).wrappedValue = $0.isEmpty ? nil : $0 }))
                     .textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced))
+                let stored = model.assets.filter { !$0.declared }
+                if !stored.isEmpty {
+                    Menu {
+                        ForEach(stored) { a in Button(a.file) { b.binding(\.path, nil).wrappedValue = a.file } }
+                    } label: { Image(systemName: "folder") }.menuStyle(.borderlessButton).fixedSize()
+                        .help("Animation files in this issuer's assets folder")
+                }
             }
         } else if assets.isEmpty {
             Text("The manifest declares no Rive assets.").font(.caption2).foregroundStyle(.secondary)
         }
-        FieldRow("State machine") {
-            TextField("Main", text: Binding(get: { b.binding(\.stateMachine, nil).wrappedValue ?? "" },
-                                            set: { b.binding(\.stateMachine, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
-        }
+        RiveFileSummary(info: info, found: model.riveFileFound(for: comp), component: comp)
         FieldRow("Artboard") {
-            TextField("default", text: Binding(get: { b.binding(\.artboard, nil).wrappedValue ?? "" },
-                                               set: { b.binding(\.artboard, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
+            if let info, info.artboards.count > 1 {
+                Picker("", selection: Binding<String?>(get: { b.binding(\.artboard, nil).wrappedValue }, set: { b.binding(\.artboard, nil).wrappedValue = $0 })) {
+                    Text("Default (\(info.artboards.first?.name ?? ""))").tag(Optional<String>.none)
+                    ForEach(info.artboards, id: \.name) { Text($0.name).tag(Optional($0.name)) }
+                    if let cur = comp.artboard, !info.artboards.contains(where: { $0.name == cur }) { Text("\(cur) (not in the file)").tag(Optional(cur)) }
+                }.labelsHidden().fixedSize()
+            } else {
+                TextField(board?.name ?? "default", text: Binding(get: { b.binding(\.artboard, nil).wrappedValue ?? "" },
+                                                                    set: { b.binding(\.artboard, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
+            }
         }
-        RiveInputsEditor(model: model, id: id, suggestions: asset?.inputs ?? [])
+        FieldRow("State machine") {
+            if let board, !board.machines.isEmpty {
+                Picker("", selection: Binding<String?>(get: { b.binding(\.stateMachine, nil).wrappedValue }, set: { b.binding(\.stateMachine, nil).wrappedValue = $0 })) {
+                    Text("Default (\(board.machines.first { $0.name == board.defaultMachine }?.name ?? board.machines.first?.name ?? ""))").tag(Optional<String>.none)
+                    ForEach(board.machines, id: \.name) { Text($0.name).tag(Optional($0.name)) }
+                    if let cur = comp.stateMachine, !cur.isEmpty, !board.machines.contains(where: { $0.name == cur }) { Text("\(cur) (not in the file)").tag(Optional(cur)) }
+                }.labelsHidden().fixedSize()
+            } else {
+                TextField("Main", text: Binding(get: { b.binding(\.stateMachine, nil).wrappedValue ?? "" },
+                                                set: { b.binding(\.stateMachine, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
+            }
+        }
+        if let board, board.machines.isEmpty, let first = board.animations.first {
+            Text("No state machine: plays the animation \u{201C}\(first)\u{201D}.").font(.caption2).foregroundStyle(.secondary)
+        }
+        RiveInputsEditor(model: model, id: id, suggestions: Self.suggestions(machine: machine, declared: asset?.inputs ?? []))
         FieldRow("Loop") {
             OptionalPicker(selection: b.binding(\.loop, nil), options: [(true, "Loop"), (false, "Once")], noneLabel: "Animation\u{2019}s own")
         }
-        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: "w / h") }
+        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: board?.aspectRatio.map { String(format: "%.2f", $0) } ?? "w / h") }
         FieldRow("Height") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "auto") }
         ActionSlotEditor(model: model, id: id, allowNone: true)
+    }
+
+    /// The inputs the state machine in the file has, then those the manifest names that the file does not show.
+    static func suggestions(machine: RiveFileInfo.Machine?, declared: [String]) -> [RiveInputSuggestion] {
+        var out = (machine?.inputs ?? []).map { RiveInputSuggestion(name: $0.name, kind: $0.kind.rawValue) }
+        for d in declared where !out.contains(where: { $0.name == d }) { out.append(RiveInputSuggestion(name: d, kind: nil)) }
+        return out
+    }
+}
+
+struct RiveInputSuggestion: Equatable {
+    var name: String
+    /// number, bool or trigger; nil when only the manifest knows the input.
+    var kind: String?
+    var label: String { kind.map { "\(name) \u{00B7} \($0)" } ?? name }
+}
+
+/// What the Rive runtime found in the file: artboard, and each state machine with its inputs.
+private struct RiveFileSummary: View {
+    let info: RiveFileInfo?
+    let found: Bool
+    let component: HeraldRiveComponent
+    @State private var open = false
+
+    var body: some View {
+        if let info {
+            DisclosureGroup(isExpanded: $open) {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(info.artboards, id: \.name) { a in
+                        Text("\(a.name) \u{00B7} \(Int(a.width)) \u{00D7} \(Int(a.height))").font(.caption.weight(.medium))
+                        ForEach(a.machines, id: \.name) { m in
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("\(m.name)\(m.name == a.defaultMachine ? " (default)" : "")").font(.system(size: 11, design: .monospaced))
+                                Text(m.inputs.isEmpty ? "no inputs" : m.inputs.map { "\($0.name) \($0.kind.rawValue)" }.joined(separator: ", "))
+                                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }.padding(.leading, 8)
+                        }
+                        if a.machines.isEmpty && !a.animations.isEmpty {
+                            Text("animations: " + a.animations.joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).padding(.leading, 8)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 2)
+            } label: {
+                let machines = info.artboards.reduce(0) { $0 + $1.machines.count }
+                let inputs = info.artboards.reduce(0) { $0 + $1.machines.reduce(0) { $0 + $1.inputs.count } }
+                Text("In the file: \(info.artboards.count) artboard\(info.artboards.count == 1 ? "" : "s"), \(machines) state machine\(machines == 1 ? "" : "s"), \(inputs) input\(inputs == 1 ? "" : "s")")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        } else if found {
+            Text("The Rive runtime could not read this file.").font(.caption2).foregroundStyle(.orange)
+        } else if component.asset != nil || component.path != nil {
+            Text("File not found: add it in Assets, or check the name.").font(.caption2).foregroundStyle(.orange)
+        }
     }
 }
 
@@ -676,7 +768,7 @@ private struct RiveEditor: View {
 private struct RiveInputsEditor: View {
     @ObservedObject var model: DesignerModel
     let id: String
-    let suggestions: [String]
+    let suggestions: [RiveInputSuggestion]
     private struct Row: Identifiable, Equatable { var id = UUID(); var name: String; var value: String }
     @State private var rows: [Row] = []
 
@@ -697,6 +789,7 @@ private struct RiveInputsEditor: View {
             ForEach($rows) { $row in
                 HStack(spacing: 4) {
                     TextField("input", text: $row.name).font(.system(size: 11, design: .monospaced)).frame(width: 74)
+                        .help(suggestions.first { $0.name == row.name }?.kind.map { "\(row.name): a \($0) input" } ?? "The name of a state machine input")
                     TextField("{count}", text: $row.value).font(.system(size: 11, design: .monospaced))
                     Menu {
                         ForEach(HeraldRiveComponent.pointerKeywords, id: \.self) { k in Button(k) { row.value = k } }
@@ -710,11 +803,12 @@ private struct RiveInputsEditor: View {
             HStack {
                 Button { rows.append(Row(name: "", value: "")) } label: { Label("Add input", systemImage: "plus") }
                 if !suggestions.isEmpty {
-                    Menu("From asset") {
-                        ForEach(suggestions.filter { s in !rows.contains { $0.name == s } }, id: \.self) { s in
-                            Button(s) { rows.append(Row(name: s, value: HeraldRiveComponent.pointerKeywords.contains(s) ? s : "{\(s)}")) }
+                    Menu("From file") {
+                        ForEach(suggestions.filter { s in !rows.contains { $0.name == s.name } }, id: \.name) { s in
+                            Button(s.label) { rows.append(Row(name: s.name, value: HeraldRiveComponent.pointerKeywords.contains(s.name) ? s.name : "{\(s.name)}")) }
                         }
                     }.menuStyle(.borderlessButton).fixedSize()
+                    .help("Inputs of the state machine, as the Rive file declares them")
                 }
             }
             .buttonStyle(.borderless).controlSize(.small)
