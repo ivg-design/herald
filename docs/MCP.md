@@ -14,6 +14,24 @@ loopback API, so Herald.app must be running.
 
 ## Install
 
+### One click: Settings > MCP
+
+Herald.app bundles the server and the CLI in `Herald.app/Contents/Helpers/` (`herald-mcp`, `herald`), signed
+with the app. Open Settings > MCP: "One-click install for Claude Code, Codex and Claude Desktop. Any other MCP
+client can use the generic config." Each client row shows Installed, Not installed or Client not found, with
+an Install or Reinstall button, and reports the exact file or command it touched:
+
+- **Claude Code** runs `claude mcp add --scope user herald -- <path>` (Reinstall runs `claude mcp remove herald` first).
+- **Codex** adds or replaces `[mcp_servers.herald]` in `~/.codex/config.toml` (backup: `config.toml.bak`).
+- **Claude Desktop** merges `mcpServers.herald` into `~/Library/Application Support/Claude/claude_desktop_config.json`, keeping other servers (backup: `.bak`).
+- **Copy generic config** puts the JSON entry and the stdio command line on the pasteboard.
+
+"Install `herald` command line tool" copies the bundled `herald` to `/usr/local/bin` (asks for an administrator
+password only if that folder is not writable). **Test connection** runs the bundled server with `initialize` and
+`tools/list` and shows the tool count. Restart the client after installing.
+
+### From source
+
 `make install-cli` builds and installs `herald` and `herald-mcp` to `/usr/local/bin` (or `~/bin` when
 `/usr/local/bin` is not writable). `make install` does that and installs Herald.app.
 

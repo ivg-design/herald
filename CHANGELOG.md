@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1 - 2026-10-01
+
+- **One-click MCP install**: Settings > MCP installs the bundled `herald-mcp` into Claude Code, Codex and
+  Claude Desktop (with status detection, Reinstall, config backups), copies a generic config, installs the
+  `herald` command line tool to `/usr/local/bin`, and has a Test connection button.
+- `herald-mcp` and `herald` are now built into `Herald.app/Contents/Helpers/`, signed with the app.
+
 ## 1.1.0 (Build 2) - 2026-10-01
 
 - **Manifests**: `PUT/GET /v1/manifest`, `GET /v1/manifests`. Issuers declare fields (with samples),

@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.1.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.1.1"
+    CURRENT_PROJECT_VERSION: "3"
 packages:
   # Rive Apple runtime (a binary xcframework, macOS 13.1+). Only the Herald app target links it;
   # HeraldClient stays dependency-free. Pinned: Rive's Swift API still moves between minor releases.
@@ -29,6 +29,19 @@ targets:
     dependencies:
       - package: Rive
         product: RiveRuntime
+      # The MCP server and CLI ship inside the app (Contents/Helpers), signed with it.
+      - target: herald-mcp
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+      - target: herald-cli
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     settings:
       base:
         PRODUCT_NAME: Herald
@@ -41,8 +54,8 @@ targets:
         INFOPLIST_KEY_NSRemindersUsageDescription: "Herald adds a reminder when you press Add to Reminders on a notification."
         CODE_SIGN_ENTITLEMENTS: Resources/Herald.entitlements
         ENABLE_APP_SANDBOX: NO
-        MARKETING_VERSION: "1.1.0"
-        CURRENT_PROJECT_VERSION: "2"
+        MARKETING_VERSION: "1.1.1"
+        CURRENT_PROJECT_VERSION: "3"
         # Signing / notarization (see ~/github/NOTARIZATION.md)
         DEVELOPMENT_TEAM: 7S422NVLUK
         CODE_SIGN_IDENTITY: "Developer ID Application"
@@ -50,3 +63,50 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
         OTHER_CODE_SIGN_FLAGS: "--timestamp"
+
+  herald-mcp:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/herald-mcp
+    dependencies:
+      - target: HeraldClient
+    settings:
+      base: &toolsettings
+        PRODUCT_NAME: herald-mcp
+        PRODUCT_BUNDLE_IDENTIFIER: com.ivg.herald.mcp
+        MARKETING_VERSION: "1.1.1"
+        CURRENT_PROJECT_VERSION: "3"
+        DEVELOPMENT_TEAM: 7S422NVLUK
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+        OTHER_CODE_SIGN_FLAGS: "--timestamp"
+        SKIP_INSTALL: YES
+  # Target is named herald-cli (not herald): "herald.build" would collide with "Herald.build" on a
+  # case-insensitive file system. The product is still named `herald`.
+  herald-cli:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/herald-cli
+    dependencies:
+      - target: HeraldClient
+    settings:
+      base:
+        <<: *toolsettings
+        PRODUCT_NAME: herald
+        PRODUCT_BUNDLE_IDENTIFIER: com.ivg.herald.cli
+  # The dependency-free client library the two tools import (the app compiles the same sources directly).
+  HeraldClient:
+    type: library.static
+    platform: macOS
+    sources:
+      - path: Sources/HeraldClient
+    settings:
+      base:
+        PRODUCT_NAME: HeraldClient
+        PRODUCT_MODULE_NAME: HeraldClient
+        SKIP_INSTALL: YES
+        DEFINES_MODULE: YES
