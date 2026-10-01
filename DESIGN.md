@@ -147,3 +147,6 @@ Settings → Voice → **Quiet hours**: a list of windows `{days: [Mon…Sun], s
 - **History** records each member individually with `group`; the History window groups by `group` with a disclosure.
 - **Templates**: `{stack.count}` token and a `stackBadge` component (defaults to the top-right of the card) so a template can place the counter; `{stack.count}` is empty when the count is 1.
 - **API**: `POST /v1/dismissAll {app, group}`; `GET /v1/stacks?app=` lists live stacks; MCP exposes `list_stacks`.
+
+## 10. Testing policy (2026-10-01, user requirement)
+Automated and delegated verification must never take focus from the user: no window activation, no Accessibility presses on live UI, no screenshots that need a window in front, no UI scripting. Verify through the HTTP/MCP API (`/v1/preview` returns rendered PNGs; `/v1/history`, `/v1/stacks`, `/v1/apps`), unit and snapshot tests (offscreen ImageRenderer), and headless Debug instances that only answer API calls. Where a UI path has no API, add a test hook or an endpoint rather than driving the UI.
