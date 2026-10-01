@@ -1,5 +1,7 @@
 # Herald
 
+
+**Project board:** https://github.com/users/ivg-design/projects/14 · **Agent quick start:** [docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md)
 A Growl-style notification service for macOS. Apps and scripts send notifications to Herald over
 a local HTTP API; Herald draws its own always-on-top banners, keeps a per-app history, and offers
 image previews, buttons, snooze, Add to Reminders and links.
