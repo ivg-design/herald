@@ -135,7 +135,12 @@ Settings → Voice → **Quiet hours**: a list of windows `{days: [Mon…Sun], s
 - Regression check in the integrator protocol: with another app frontmost, post a banner, press a callback button and a template-command button via AX, and verify the frontmost app never changes.
 
 ## 9. Stacking: same-sender notifications collapse into one banner with a counter (2026-10-01)
-- **Grouping key**: payload `group` (string) when present, else the issuer app id. Issuers may set `group` to a sender address / thread / bid id. Per-app setting `stacking`: `byGroup` (default), `byApp` (ignore `group`), `never`.
+- **Grouping levels** (setting `stacking`, global default `bySender` with a per-issuer override, and a quick switch in the bell menu):
+  - `byApp` — one stack per product family: the manifest's `family` (e.g. `"webwatcher"`), falling back to the issuer id's prefix before the first dot, so `webwatcher.web` and `webwatcher.email` share a stack ("all WebWatcher notifications").
+  - `byIssuer` — one stack per manifest/issuer id ("all Gmail notifications", "all web-watcher notifications").
+  - `bySender` — one stack per payload `group` key (an email sender, a watched site such as Rive, a bid id); issuers set `group`; when absent it falls back to the issuer id.
+  - `never`.
+  Per-issuer overrides let, for example, Gmail stack by sender while web watchers stack by issuer.
 - **Behaviour**: when a banner arrives for a group that already has a live banner, the new one becomes the top card of that group's stack: one panel showing the newest notification plus a count badge ("3") and a stacked-cards visual (two offset edges behind the card). Replacing by `id` still updates in place and does not increase the count. The stack's sound/speech follow the newest notification.
 - **Expand**: clicking the count badge (or the card body when the template has no click url) expands the stack in place: the panel grows into a scrollable list of the group's banners (each rendered with its own template, newest first, ≤ 6 visible then scroll), with "Collapse" and "Dismiss all" at the bottom. Clicking a member's body opens its url; its actions work individually. Esc or a click on the collapse control returns to the stacked card. Expansion never activates Herald (focus invariant §8).
 - **Dismiss / snooze**: the card's ✕ dismisses the whole group (members go to History as dismissed); a member dismissed from the expanded list leaves the stack; snooze applies to the group and restores it as a stack.
