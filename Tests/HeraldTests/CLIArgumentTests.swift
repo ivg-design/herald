@@ -64,7 +64,7 @@ final class CLIArgumentTests: XCTestCase {
         XCTAssertThrowsError(try request(["notify", "--app", "a", "--title", "t", "--bogus"]))
         XCTAssertThrowsError(try request(["notify", "--app", "a", "--title", "t", "--timeout", "soon"]))
         XCTAssertThrowsError(try request(["notify", "--app", "a", "--title"]))
-        XCTAssertThrowsError(try request(["notify", "--app", "a", "--title", "t", "--priority", "urgent"]))
+        XCTAssertThrowsError(try request(["notify", "--app", "a", "--title", "t", "--priority", "bogus"]))
     }
 
     func testRegister() throws {

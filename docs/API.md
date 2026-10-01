@@ -15,7 +15,7 @@ AUTH="Authorization: Bearer $(cat "$D/token")"
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/v1/health` | `{"ok":true,"version":"1.0.0","pid":123}`. No auth. Use it to detect that Herald is running. |
+| GET | `/v1/health` | `{"ok":true,"version":"1.1.0","pid":123}`. No auth. Use it to detect that Herald is running. |
 | POST | `/v1/register` | Register or update an app. |
 | POST | `/v1/notify` | Show a notification. Resolves `template` first. |
 | POST | `/v1/dismiss` | `{"app","id"}` dismiss one banner. |
@@ -29,6 +29,12 @@ AUTH="Authorization: Bearer $(cat "$D/token")"
 | GET | `/v1/templates?app=` | `{"items":[...]}` templates of the app (all apps if omitted). |
 | PUT | `/v1/templates` | Create or replace a template (body is the template). `{"ok":true}` |
 | DELETE | `/v1/templates?app=&name=` | Delete a template. `{"ok":true}` |
+| GET | `/v1/manifests` | `{"items":[...]}` every registered manifest (1.1). |
+| GET | `/v1/manifest?app=` | One manifest (1.1). |
+| PUT | `/v1/manifest` | Create or replace an issuer manifest (1.1). |
+| POST | `/v1/preview` | Render a template offscreen to PNG bytes (1.1). |
+| GET | `/v1/shortcuts` | `{"items":["Create follow-up",...]}` installed Apple Shortcuts (1.1). |
+| GET | `/v1/components` | Schema of the grid component types, for agents (1.1). |
 
 Errors: `401 {"error":"unauthorized"}`, `400 {"error":"..."}`, `404`, `405`.
 
@@ -130,3 +136,49 @@ every other field is optional, so partial JSON is accepted. See [AUTHORING.md](A
 
 Each record holds the full notification payload plus `deliveredAt`, `dismissedAt` (null while the banner
 is still showing), the label of the button used, and `snoozedUntil`. History is capped at 1000 items per app.
+
+## Herald 1.1 additions
+
+### Manifests
+
+A manifest tells Herald what an issuer can send. It is optional, and `PUT /v1/manifest` replaces the
+previous one for the same `app`. Stored at `~/Library/Application Support/Herald/manifests/<app>.json`.
+
+```json
+{"app":"webwatcher.email","appName":"WebWatcher - Email","icon":"/path/icon.png","version":1,
+ "fields":[{"key":"title","type":"text","required":true,"sample":"2 new from Acme Billing"},
+           {"key":"subject","type":"text","sample":"Invoice #4021"},
+           {"key":"count","type":"number","sample":2},
+           {"key":"image","type":"image","sample":"/path/sample.png"},
+           {"key":"receivedAt","type":"date","sample":"2026-10-01T14:14:00Z"},
+           {"key":"url","type":"url"}],
+ "actions":[{"id":"markRead","label":"Mark as Read","kind":"callback"},
+            {"id":"archive","label":"Archive","kind":"callback","style":"destructive"}],
+ "assets":[{"id":"bell","type":"rive","path":"/path/bell.riv","stateMachine":"Main","inputs":["count","hover"]}],
+ "defaultTemplate":"email-accumulated"}
+```
+
+Field types: `text`, `number`, `date`, `url`, `image`, `bool`, `list`. `sample` drives the Designer preview.
+A notification refers to the manifest through `app`; bindings read top-level keys first, then `metadata`.
+Notifications may carry the issuer's actions in `actions` (or as `buttons`, which still works) and choose a
+template with `template`; otherwise the manifest's `defaultTemplate` applies.
+
+### POST /v1/preview
+
+```json
+{"template":"email-accumulated","app":"webwatcher.email","data":"sample","appearance":"dark","scale":2}
+```
+
+`template` is a name or a full v2 template object, `data` a JSON object or `"sample"`, `appearance`
+`light` or `dark`, `scale` the pixel scale. The response is `image/png`. `400` carries validation errors
+with cell ids.
+
+### GET /v1/shortcuts and /v1/components
+
+`/v1/shortcuts` returns the output of `shortcuts list`. `/v1/components` returns every component type with
+its properties, enums and defaults. See [TEMPLATES.md](TEMPLATES.md) and [ACTIONS.md](ACTIONS.md).
+
+### Grid templates
+
+`PUT /v1/templates` also accepts `layoutVersion: 2` templates (`grid`, `cells`, `collapseEmpty`,
+`actionRules`, `extra`). v1 templates keep working.

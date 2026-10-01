@@ -6,10 +6,24 @@ image previews, buttons, snooze, Add to Reminders and links.
 
 Requires macOS 13 or later.
 
+## What's new in 1.1
+
+- **Manifests.** An app declares the fields it can send (with samples), its actions and assets.
+- **Grid templates and the Designer.** Lay a banner out on a grid of cells, bind issuer fields to
+  components (text, image, icon, timestamp, badge, progress, buttons, Rive animations), and preview in light and dark.
+  You choose per template (or per component) whether empty fields **collapse** or **keep their place**.
+- **Two-way actions.** Buttons can come from the issuer (callback, URL, command) or from you
+  (shell command, script, **Apple Shortcut**). Rules let you hide, relabel or reorder the issuer's
+  buttons, and you can add data to what every action receives.
+- **MCP server.** `herald-mcp` lets an agent author templates, preview them as images, add actions
+  and Shortcuts, and send tests.
+
+Docs: [TEMPLATES](docs/TEMPLATES.md), [ACTIONS](docs/ACTIONS.md), [MCP](docs/MCP.md), [AUTHORING](docs/AUTHORING.md), [API](docs/API.md).
+
 ## Install
 
 1. Download the notarized `Herald.dmg` and drag Herald to /Applications, or build from source and
-   run `make install` (app to /Applications, `herald` CLI to /usr/local/bin).
+   run `make install` (app to /Applications, `herald` and `herald-mcp` to /usr/local/bin).
 2. Launch it. A bell appears in the menu bar. On first launch from /Applications it asks whether to
    start at login (also in Settings > General).
    **Launch at login** is a toggle in Settings > General (uses `SMAppService`).
@@ -34,7 +48,7 @@ Every request except `/v1/health` needs `Authorization: Bearer <token>`. Bodies 
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/v1/health` | `{"ok":true,"version":"1.0.0","pid":123}` (no auth) |
+| GET | `/v1/health` | `{"ok":true,"version":"1.1.0","pid":123}` (no auth) |
 | POST | `/v1/register` | Register or update an app (name, icon, bundle id, callback URL, defaults) |
 | POST | `/v1/notify` | Show a notification; returns `{"ok":true,"id":"..."}` |
 | POST | `/v1/dismiss` | `{"app","id"}` dismiss one banner |
@@ -48,6 +62,9 @@ Every request except `/v1/health` needs `Authorization: Bearer <token>`. Bodies 
 | GET | `/v1/templates?app=` | `{"items":[...]}` templates |
 | PUT | `/v1/templates` | Create or replace a template (body = template) |
 | DELETE | `/v1/templates?app=&name=` | Delete a template |
+| GET/PUT | `/v1/manifest(s)` | Issuer manifests: declared fields, actions, assets (1.1) |
+| POST | `/v1/preview` | Render a template to PNG (1.1) |
+| GET | `/v1/shortcuts`, `/v1/components` | Installed Apple Shortcuts; component schema (1.1) |
 
 Full reference: [docs/API.md](docs/API.md). Client helpers: [clients/README.md](clients/README.md).
 

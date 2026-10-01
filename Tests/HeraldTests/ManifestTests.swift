@@ -580,6 +580,25 @@ final class ManifestTests: XCTestCase {
         XCTAssertNil(meta["metadata"])
     }
 
+    /// The whole path a manifest field takes: top-level key in the payload, through the router, into the
+    /// resolved fields a grid template binds to, typed by the manifest.
+    func testManifestFieldsSentAtTheTopLevelResolveToTemplateFields() async throws {
+        let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
+        _ = await router.handle(req("PUT", "/v1/manifest", body: Self.designSample))
+        let body = "{\"app\":\"webwatcher.email\",\"title\":\"2 new from Acme\",\"subject\":\"Invoice #4021\",\"count\":\"2\",\"tags\":[\"a\",\"b\"]}"
+        let r = await router.handle(req("POST", "/v1/notify", body: body))
+        XCTAssertEqual(r.status, 200, text(r))
+        let n = try XCTUnwrap(backend.notified.first)
+        let manifest = try XCTUnwrap(backend.store.get(app: "webwatcher.email"))
+        let fields = TemplateResolver.fields(for: n, manifest: manifest)
+        XCTAssertEqual(fields["title"], .text("2 new from Acme"))
+        XCTAssertEqual(fields["subject"], .text("Invoice #4021"))
+        XCTAssertEqual(fields["count"], .number(2), "the manifest declares count as a number")
+        XCTAssertEqual(fields["tags"], .list(["a", "b"]))
+        XCTAssertNil(fields["sender"], "samples are for the designer, never for a real notification")
+        XCTAssertNil(fields["url"])
+    }
+
     func testPayloadWithOnlyKnownKeysIsLeftAsSent() async throws {
         let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
         var r = await router.handle(req("POST", "/v1/notify", body: "{\"app\":\"a\",\"id\":\"i\",\"title\":\"T\",\"body\":\"B\",\"buttons\":[{\"label\":\"Go\",\"url\":\"https://x.test\"}]}"))
@@ -725,6 +744,15 @@ final class ManifestTests: XCTestCase {
         do { _ = try await catalog.names(); XCTFail("expected a timeout") }
         catch { XCTAssertEqual(error as? ShortcutsError, .timedOut(0.4)) }
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+    }
+
+    /// Against the real Shortcuts tool. Off by default (it needs a logged-in session and the user's own
+    /// shortcuts); run with HERALD_LIVE_SHORTCUTS=1.
+    func testLiveShortcutsList() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["HERALD_LIVE_SHORTCUTS"] == "1", "set HERALD_LIVE_SHORTCUTS=1")
+        let names = try await ShortcutsCatalog().names()
+        print("live shortcuts: \(names)")
+        XCTAssertEqual(names, ShortcutsCatalog.parse(names.joined(separator: "\n")), "already clean and sorted")
     }
 
     func testRealProcessFailureAndMissingExecutable() async {

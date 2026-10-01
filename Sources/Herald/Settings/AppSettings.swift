@@ -20,11 +20,36 @@ final class AppSettings: ObservableObject {
         }
     }
 
-    var effectivePort: Int { portOverride > 0 ? portOverride : HeraldPaths.defaultPort }
+    /// Quiet hours (DESIGN section 7.9.1): the schedule, an ad-hoc silence and "Resume now". Stored as JSON; a
+    /// development instance (HERALD_SUPPORT_DIR) keeps it in its own suite, away from the installed Herald's.
+    @Published var quiet: HeraldQuietHours {
+        didSet {
+            guard quiet != oldValue else { return }
+            if let data = try? HeraldJSON.encoder().encode(quiet) { Self.quietDefaults.set(data, forKey: "quietHours") }
+            NotificationCenter.default.post(name: .heraldChanged, object: nil)
+        }
+    }
+    var quietHours: [QuietWindow] {
+        get { quiet.windows }
+        set { quiet.windows = newValue }
+    }
+    private static var quietDefaults: UserDefaults {
+        if ProcessInfo.processInfo.environment["HERALD_SUPPORT_DIR"]?.isEmpty == false,
+           let suite = UserDefaults(suiteName: "com.ivg.herald.voice-dev") { return suite }
+        return .standard
+    }
+
+    /// HERALD_PORT (a development build running beside the installed Herald) beats the stored override.
+    var effectivePort: Int {
+        if let p = ProcessInfo.processInfo.environment["HERALD_PORT"].flatMap(Int.init), (1024...65535).contains(p) { return p }
+        return portOverride > 0 ? portOverride : HeraldPaths.defaultPort
+    }
 
     private init() {
         portOverride = UserDefaults.standard.integer(forKey: "portOverride")
         muted = UserDefaults.standard.bool(forKey: "muted")
+        quiet = Self.quietDefaults.data(forKey: "quietHours")
+            .flatMap { try? HeraldJSON.decoder().decode(HeraldQuietHours.self, from: $0) } ?? HeraldQuietHours()
     }
 
     var launchAtLogin: Bool {

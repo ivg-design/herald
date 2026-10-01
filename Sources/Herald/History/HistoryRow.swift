@@ -29,6 +29,7 @@ struct HistoryRow: View {
                 HistoryStatusLine(item: item, appName: appName)
             }
             .padding(.leading, 4)
+            SpeechReplayButton(item: item).padding(.leading, 4)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -50,16 +51,23 @@ struct HistoryRowPreview: View {
     }
 
     var body: some View {
-        BannerView(model: resolvedModel())
-            .frame(width: BannerView.width, alignment: .leading)
+        let model = resolvedModel()
+        BannerView(model: model)
+            .frame(width: model.bannerWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func resolvedModel() -> BannerModel {
         if let m = holder.model, holder.built == item { return m }
         let img = item.imagePath.flatMap { NSImage(contentsOfFile: $0) }
+        // The template the notification named (saved for its app, else a built-in) and the issuer's manifest, so
+        // History draws a v2 notification the way its banner looked.
+        let controller = AppController.shared
+        let template = controller.templates.template(for: item.notification)
+            ?? item.notification.template.flatMap { BuiltinTemplates.named($0, app: item.app) }
         let m = BannerPreviewFactory.model(for: item.notification, appName: appName, icon: icon,
-                                           image: img, deliveredAt: item.deliveredAt)
+                                           image: img, deliveredAt: item.deliveredAt, template: template,
+                                           fields: item.fields, manifest: controller.manifests.get(app: item.app))
         holder.model = m; holder.built = item
         return m
     }

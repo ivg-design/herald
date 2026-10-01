@@ -119,7 +119,12 @@ public final class TemplateStore: @unchecked Sendable {
         jsonFiles(in: dir).compactMap { read($0) }
     }
 
+    /// A template file larger than this is ignored on read: a real template is a few kilobytes, and one is
+    /// decoded for every notification of its app.
+    public static let maxFileBytes = 2 * 1024 * 1024
+
     private func read(_ url: URL) -> HeraldTemplate? {
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > Self.maxFileBytes { return nil }
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? HeraldJSON.decoder().decode(HeraldTemplate.self, from: data)
     }

@@ -355,6 +355,19 @@ final class TemplateTests: XCTestCase {
         }
     }
 
+    func testScratchTemplatesAreNotListed() async throws {
+        let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
+        for name in ["_designer-test", "bid-won"] {
+            let put = await router.handle(req("PUT", "/v1/templates", body: "{\"name\":\"\(name)\",\"app\":\"bidbot\"}"))
+            XCTAssertEqual(put.status, 200)
+        }
+        let r = await router.handle(req("GET", "/v1/templates"))
+        let items = try HeraldJSON.decoder().decode([String: [HeraldTemplate]].self, from: r.body)["items"] ?? []
+        XCTAssertEqual(items.map(\.name), ["bid-won"])
+        XCTAssertNotNil(backend.store.template(for: HeraldNotification(app: "bidbot", title: "t", template: "_designer-test")),
+                        "a scratch template still resolves by name")
+    }
+
     func testTemplateCRUDOverHTTP() async throws {
         let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
         var r = await router.handle(req("GET", "/v1/templates"))
@@ -378,6 +391,40 @@ final class TemplateTests: XCTestCase {
         XCTAssertNil(backend.store.get(app: "bidbot", name: "bid-won"))
         r = await router.handle(req("DELETE", "/v1/templates", query: ["app": "bidbot", "name": "bid-won"]))
         XCTAssertEqual(r.status, 404)
+    }
+
+    func testOversizedGridIsRefusedBeforeItAllocatesAnything() async throws {
+        // Decoding stops at the track count, before one size per track is allocated.
+        for json in [#"{"rows":40000000,"cols":3}"#, #"{"rows":3,"cols":13}"#, #"{"rows":0,"cols":3}"#, #"{"rows":-5,"cols":3}"#,
+                     #"{"rows":2,"cols":2,"rowSizes":["auto","auto","auto","auto","auto","auto","auto","auto","auto","auto","auto","auto","auto"]}"#] {
+            XCTAssertThrowsError(try HeraldJSON.decoder().decode(HeraldGrid.self, from: Data(json.utf8)), json)
+        }
+        let ok = try HeraldJSON.decoder().decode(HeraldGrid.self, from: Data(#"{"rows":12,"cols":12}"#.utf8))
+        XCTAssertEqual(ok.rowSizes.count, 12)
+
+        // PUT /v1/templates says why, and nothing is stored.
+        let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
+        var r = await router.handle(req("PUT", "/v1/templates", body: #"{"name":"x","app":"bidbot","grid":{"rows":40000000,"cols":3}}"#))
+        XCTAssertEqual(r.status, 400)
+        XCTAssertTrue(text(r).contains("grid.rows"), text(r))
+        // A grid that decodes but fails validation (a 5000 pt track) is refused too, where it used to be saved.
+        r = await router.handle(req("PUT", "/v1/templates", body: #"{"name":"x","app":"bidbot","layoutVersion":2,"grid":{"rows":1,"cols":1,"rowSizes":[5000],"colSizes":["fill"]}}"#))
+        XCTAssertEqual(r.status, 400)
+        XCTAssertTrue(text(r).contains("invalid template"), text(r))
+        XCTAssertNil(backend.store.get(app: "bidbot", name: "x"))
+    }
+
+    func testOversizedTemplateFileIsIgnoredOnRead() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("herald-big-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = TemplateStore(directory: dir)
+        XCTAssertTrue(store.put(HeraldTemplate(name: "small", app: "bidbot")))
+        XCTAssertNotNil(store.get(app: "bidbot", name: "small"))
+        let file = dir.appendingPathComponent("bidbot/small.json")
+        let pad = String(repeating: " ", count: TemplateStore.maxFileBytes + 1)
+        let json = try String(contentsOf: file, encoding: .utf8) + pad
+        try json.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertNil(store.get(app: "bidbot", name: "small"))
     }
 
     func testTemplateRouteValidationAndMethods() async {

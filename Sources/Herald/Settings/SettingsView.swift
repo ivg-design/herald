@@ -7,6 +7,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsView(controller: controller).tabItem { Label("General", systemImage: "gearshape") }
             AppsSettingsView(controller: controller).tabItem { Label("Apps", systemImage: "square.grid.2x2") }
+            ActionsSettingsView(controller: controller).tabItem { Label("Actions", systemImage: "bolt") }
+            VoiceSettingsView(controller: controller).tabItem { Label("Voice", systemImage: "waveform") }
         }
         .padding(16)
         .frame(minWidth: 600, minHeight: 420)
@@ -195,5 +197,131 @@ struct AppDetail: View {
         a.addButton(withTitle: "Allow")
         a.addButton(withTitle: "Cancel")
         if a.runModal() == .alertFirstButtonReturn { edit { $0.commandsConfirmed = true } }
+    }
+}
+
+/// Scripts and template commands: the two places where a banner button runs code on this Mac.
+struct ActionsSettingsView: View {
+    let controller: AppController
+    @StateObject private var ticker = ChangeTicker()
+    @State private var scripts: [ActionRunner.ScriptEntry] = []
+
+    private struct CommandRow: Identifiable {
+        enum Status { case confirmed, changed, notConfirmed, templateRemoved }
+        var id: String
+        var app: String
+        var appName: String
+        var template: String
+        var commands: [String]
+        var status: Status
+        var hasApproval: Bool
+    }
+
+    /// Every template that carries commands of its own, with whether the user confirmed them, plus approvals
+    /// whose template has gone (so they can still be revoked).
+    private var rows: [CommandRow] {
+        _ = ticker.tick
+        let approvals = controller.commandApprovals.all()
+        var out: [CommandRow] = []
+        var seen = Set<String>()
+        for t in controller.templates.list() {
+            let commands = controller.actionRunner.templateApprovalKeys(of: t)
+            guard !commands.isEmpty else { continue }
+            seen.insert(t.id)
+            let approval = approvals.first { $0.id == t.id }
+            let status: CommandRow.Status = approval == nil ? .notConfirmed
+                : (commands.allSatisfy { approval!.commands.contains($0) } ? .confirmed : .changed)
+            out.append(CommandRow(id: t.id, app: t.app, appName: controller.registry.record(for: t.app)?.displayName ?? t.app,
+                                  template: t.name, commands: commands, status: status, hasApproval: approval != nil))
+        }
+        for a in approvals where !seen.contains(a.id) {
+            out.append(CommandRow(id: a.id, app: a.app, appName: controller.registry.record(for: a.app)?.displayName ?? a.app,
+                                  template: a.template, commands: a.commands, status: .templateRemoved, hasApproval: true))
+        }
+        return out.sorted { ($0.appName, $0.template) < ($1.appName, $1.template) }
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                if scripts.isEmpty {
+                    Text("No scripts yet. Put a file in this folder, then add an action of kind \"script\" to a template.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(scripts) { sc in
+                        HStack {
+                            Text(sc.name).font(.system(.body, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                            Spacer()
+                            Text(Self.runsWith(sc)).font(.caption)
+                                .foregroundStyle(sc.runnable ? Color.secondary : Color.orange)
+                        }
+                    }
+                }
+                HStack {
+                    Button("Reveal in Finder") {
+                        controller.actionRunner.ensureScriptsDirectory()
+                        NSWorkspace.shared.open(controller.actionRunner.scriptsDirectory)
+                    }
+                    Button("Refresh") { scripts = controller.actionRunner.listScripts() }
+                    Spacer()
+                    Button("Show Log") { revealLog() }
+                }
+            } header: { Text("Scripts") } footer: {
+                Text("A script action runs the file with the notification as JSON on standard input and HERALD_APP, HERALD_ACTION, HERALD_FIELD_<NAME> and HERALD_EXTRA_<KEY> in the environment. It has 30 seconds. Output goes to ~/Library/Logs/Herald/actions.log.")
+            }
+            Section {
+                if rows.isEmpty {
+                    Text("No template carries a command of its own.").foregroundStyle(.secondary)
+                }
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(row.appName) / \(row.template)").font(.headline)
+                            Spacer()
+                            statusLabel(row.status)
+                            if row.hasApproval {
+                                Button("Revoke") {
+                                    controller.commandApprovals.revoke(app: row.app, template: row.template)
+                                    controller.changed()
+                                }
+                            }
+                        }
+                        ForEach(row.commands, id: \.self) { c in
+                            Text(c).font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                                .lineLimit(2).truncationMode(.tail).textSelection(.enabled)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            } header: { Text("Template commands") } footer: {
+                Text("A command a template carries itself asks for one confirmation per template the first time it runs. Changing a command asks again. Commands an app sends in its own buttons follow the per-app switch under Apps.")
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { scripts = controller.actionRunner.listScripts() }
+    }
+
+    private static func runsWith(_ s: ActionRunner.ScriptEntry) -> String {
+        if s.isExecutable { return "executable" }
+        if let i = s.interpreter { return "runs with \((i as NSString).lastPathComponent)" }
+        return "not runnable (chmod +x)"
+    }
+
+    @ViewBuilder private func statusLabel(_ status: CommandRow.Status) -> some View {
+        switch status {
+        case .confirmed: Text("Confirmed").font(.caption).foregroundStyle(.green)
+        case .changed: Text("Changed since confirmed").font(.caption).foregroundStyle(.orange)
+        case .notConfirmed: Text("Not confirmed yet").font(.caption).foregroundStyle(.secondary)
+        case .templateRemoved: Text("Template removed").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func revealLog() {
+        let url = controller.actionRunner.log.url
+        if FileManager.default.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(url.deletingLastPathComponent())
+        }
     }
 }

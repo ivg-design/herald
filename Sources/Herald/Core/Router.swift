@@ -27,6 +27,43 @@ public protocol HeraldBackend: AnyObject, Sendable {
     func deleteManifest(app: String) async throws
     /// Names of the installed Shortcuts.
     func shortcuts() async throws -> [String]
+    /// `POST|GET /v1/preview`: the PNG of a template rendered offscreen (DESIGN section 7.5).
+    func preview(_ request: PreviewSpec) async throws -> Data
+    /// `GET/PUT /v1/settings/quiet-hours` (DESIGN section 7.9.1).
+    func quietHours() async throws -> HeraldQuietReply
+    func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply
+}
+
+/// Which template a preview draws: one stored for the app (or a `builtin.*` one) by name, or one sent inline.
+/// `nil` in `PreviewSpec.template` means the app's default (its manifest's `defaultTemplate`, else
+/// `builtin.imageLeft`).
+public enum PreviewTemplateChoice: Sendable, Equatable {
+    case named(String)
+    case inline(HeraldTemplate)
+}
+
+public enum PreviewAppearance: String, Sendable, Equatable, CaseIterable {
+    case light, dark
+}
+
+/// A decoded, validated `/v1/preview` request.
+public struct PreviewSpec: Sendable, Equatable {
+    public static let scaleRange: ClosedRange<Double> = 1...3
+    public static let defaultScale: Double = 2
+
+    public var template: PreviewTemplateChoice?
+    public var app: String
+    /// The data to draw: nil means the manifest's sample values; otherwise a notification whose top-level
+    /// keys and `metadata` are the fields (as for `/v1/notify`).
+    public var data: HeraldNotification?
+    public var appearance: PreviewAppearance
+    public var scale: Double
+
+    public init(template: PreviewTemplateChoice? = nil, app: String, data: HeraldNotification? = nil,
+                appearance: PreviewAppearance = .light, scale: Double = PreviewSpec.defaultScale) {
+        self.template = template; self.app = app; self.data = data
+        self.appearance = appearance; self.scale = scale
+    }
 }
 
 /// Template support is opt-in for a backend, so a conformer that predates it still compiles
@@ -41,6 +78,9 @@ public extension HeraldBackend {
     func putManifest(_ m: HeraldManifest) async throws { throw BackendError(501, "manifests are not supported") }
     func deleteManifest(app: String) async throws { throw BackendError(501, "manifests are not supported") }
     func shortcuts() async throws -> [String] { throw BackendError(501, "shortcuts are not supported") }
+    func preview(_ request: PreviewSpec) async throws -> Data { throw BackendError(501, "previews are not supported") }
+    func quietHours() async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
+    func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
 }
 
 /// Routes the DESIGN section 2 endpoints. Only /v1/health is unauthenticated.
@@ -72,7 +112,20 @@ public final class Router: @unchecked Sendable {
                 guard !n.app.isEmpty else { throw BackendError(400, "app is required") }
                 // A template may supply the title; the backend re-checks once it has resolved it.
                 guard !n.title.isEmpty || n.template?.isEmpty == false else { throw BackendError(400, "title is required") }
+                if let speak = n.speak { try Self.validateSpeak(speak) }
                 let id = try await backend.notify(n)
+                return .json(200, NotifyReply(ok: true, id: id))
+            case ("GET", "/v1/settings/quiet-hours"):
+                return .json(200, try await backend.quietHours())
+            case ("PUT", "/v1/settings/quiet-hours"):
+                let u = try decode(HeraldQuietUpdate.self, req)
+                return .json(200, try await backend.updateQuietHours(u))
+            case ("POST", "/v1/speak"):
+                let r = try decode(HeraldSpeakRequest.self, req)
+                guard !r.app.isEmpty else { throw BackendError(400, "app is required") }
+                guard !HeraldSpeak.clean(r.text).isEmpty else { throw BackendError(400, "text is required") }
+                try Self.validateSpeak(HeraldSpeak(text: r.text, voice: r.voice, speed: r.speed, lang: r.lang))
+                let id = try await backend.notify(r.notification())
                 return .json(200, NotifyReply(ok: true, id: id))
             case ("POST", "/v1/dismiss"):
                 let b = try decode(DismissBody.self, req)
@@ -96,11 +149,22 @@ public final class Router: @unchecked Sendable {
                 return .json(200, AppsReply(apps: try await backend.apps()))
             case ("GET", "/v1/templates"):
                 let app = req.query["app"].flatMap { $0.isEmpty ? nil : $0 }
-                return .json(200, TemplatesReply(items: try await backend.templates(app: app)))
+                // Names that start with "_" are scratch templates (the Designer's "Send test" writes `_designer-test`):
+                // they are used by name but never listed, so agents and clients do not mistake them for designs.
+                let items = try await backend.templates(app: app).filter { !$0.name.hasPrefix("_") }
+                return .json(200, TemplatesReply(items: items))
             case ("PUT", "/v1/templates"):
                 let t = try decode(HeraldTemplate.self, req)
                 guard !t.app.isEmpty else { throw BackendError(400, "app is required") }
                 guard !t.name.isEmpty else { throw BackendError(400, "name is required") }
+                // A saved template is read and laid out on every delivery for its app, so it is checked on the way in
+                // (grid size, cell count, sizes), the same as the MCP server and the Designer do.
+                let errors = t.validate().filter(\.isError)
+                guard errors.isEmpty else {
+                    throw BackendError(400, "invalid template: " + errors.map { issue in
+                        (issue.cellId.map { "cell \($0): " } ?? "") + issue.path + ": " + issue.message
+                    }.joined(separator: "; "))
+                }
                 try await backend.putTemplate(t)
                 return .json(200, ["ok": true])
             case ("DELETE", "/v1/templates"):
@@ -131,9 +195,14 @@ public final class Router: @unchecked Sendable {
                 return componentsResponse()
             case ("GET", "/v1/shortcuts"):
                 return .json(200, ShortcutsReply(items: try await backend.shortcuts()))
-            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"),
+            case ("POST", "/v1/preview"):
+                return .png(try await backend.preview(try decodePreview(req)))
+            case ("GET", "/v1/preview"):
+                return .png(try await backend.preview(try previewRequest(query: req.query)))
+            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"),
                  (_, "/v1/history"), (_, "/v1/apps"), (_, "/v1/templates"),
-                 (_, "/v1/manifests"), (_, "/v1/manifest"), (_, "/v1/components"), (_, "/v1/shortcuts"):
+                 (_, "/v1/manifests"), (_, "/v1/manifest"), (_, "/v1/components"), (_, "/v1/shortcuts"),
+                 (_, "/v1/preview"):
                 return .error(405, "method not allowed")
             default:
                 return .error(404, "not found")
@@ -146,6 +215,13 @@ public final class Router: @unchecked Sendable {
     }
 
     private struct NotifyReply: Encodable { var ok: Bool; var id: String }
+
+    /// Voice, speed and language are checked here so a bad value is a 400 for the sender, not a silent failure later.
+    static func validateSpeak(_ s: HeraldSpeak) throws {
+        if let v = s.voice, !HeraldSpeak.isValidVoice(v) { throw BackendError(400, "invalid voice") }
+        if let l = s.lang, !HeraldSpeak.isValidLang(l) { throw BackendError(400, "invalid lang") }
+        if let sp = s.speed, !HeraldSpeak.speedRange.contains(sp) { throw BackendError(400, "speed must be between 0.5 and 2.0") }
+    }
     private struct HistoryReply: Encodable { var items: [HeraldHistoryItem] }
     private struct AppsReply: Encodable { var apps: [HeraldAppRegistration] }
     private struct TemplatesReply: Encodable { var items: [HeraldTemplate] }
@@ -185,6 +261,10 @@ public final class Router: @unchecked Sendable {
             patched["title"] = ""
             changed = true
         }
+        if let flag = obj["speak"] as? Bool, !flag {   // `speak: false` means no speech
+            patched["speak"] = nil
+            changed = true
+        }
         let extras = obj.filter { !Self.notificationKeys.contains($0.key) }
         if !extras.isEmpty, obj["metadata"] == nil || obj["metadata"] is [String: Any] || obj["metadata"] is NSNull {
             var metadata = (obj["metadata"] as? [String: Any]) ?? [:]
@@ -197,6 +277,135 @@ public final class Router: @unchecked Sendable {
             return try decode(HeraldNotification.self, body: data)
         }
         return try decode(HeraldNotification.self, req)
+    }
+
+    // MARK: Preview
+
+    /// `GET /v1/preview?app=&template=&appearance=&scale=`: a quick check with the manifest's sample data.
+    private func previewRequest(query: [String: String]) throws -> PreviewSpec {
+        guard let app = query["app"], !app.isEmpty else { throw BackendError(400, "app is required") }
+        var template: PreviewTemplateChoice?
+        if let name = query["template"], !name.isEmpty { template = .named(name) }
+        let appearance = try Self.previewAppearance(query["appearance"])
+        let scale = try Self.previewScale(query["scale"].map { .string($0) })
+        return PreviewSpec(template: template, app: app, data: nil, appearance: appearance, scale: scale)
+    }
+
+    /// `POST /v1/preview` `{template, app, data, appearance, scale}`. `template` is a name or an inline template
+    /// object (checked against the grid schema, so an agent gets the offending cell back); `data` is an object of
+    /// field values or the string "sample" (the default); `appearance` is light (default) or dark; `scale` 1 to 3
+    /// (default 2).
+    private func decodePreview(_ req: HTTPRequest) throws -> PreviewSpec {
+        guard let obj = (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any] else {
+            throw BackendError(400, req.body.isEmpty ? "a JSON body is required" : "invalid JSON")
+        }
+        var template: PreviewTemplateChoice?
+        switch obj["template"] {
+        case nil, is NSNull: break
+        case let name as String:
+            if !name.isEmpty { template = .named(name) }
+        case let dict as [String: Any]:
+            guard let bytes = try? JSONSerialization.data(withJSONObject: dict) else { throw BackendError(400, "invalid template") }
+            let t: HeraldTemplate
+            do { t = try HeraldJSON.decoder().decode(HeraldTemplate.self, from: bytes) }
+            catch let e as DecodingError { throw BackendError(400, "invalid template: " + Self.describe(e)) }
+            catch { throw BackendError(400, "invalid template") }
+            let errors = t.validate().filter(\.isError)
+            guard errors.isEmpty else {
+                throw BackendError(400, "invalid template: " + errors.map { issue in
+                    (issue.cellId.map { "cell \($0): " } ?? "") + issue.path + ": " + issue.message
+                }.joined(separator: "; "))
+            }
+            template = .inline(t)
+        default:
+            throw BackendError(400, "invalid field: template (a name or a template object)")
+        }
+        var app = ""
+        switch obj["app"] {
+        case nil, is NSNull: break
+        case let s as String: app = s
+        default: throw BackendError(400, "invalid field: app")
+        }
+        if app.isEmpty, case .inline(let t)? = template { app = t.app }
+        guard !app.isEmpty else { throw BackendError(400, "app is required") }
+
+        var data: HeraldNotification?
+        switch obj["data"] {
+        case nil, is NSNull: break
+        case let s as String:
+            guard s == "sample" else { throw BackendError(400, "invalid field: data (an object, or \"sample\")") }
+        case let dict as [String: Any]:
+            data = try previewNotification(app: app, data: dict)
+        default:
+            throw BackendError(400, "invalid field: data (an object, or \"sample\")")
+        }
+        let appearance = try Self.previewAppearance(obj["appearance"])
+        let scale = try Self.previewScale(Self.previewScaleValue(obj["scale"]))
+        return PreviewSpec(template: template, app: app, data: data, appearance: appearance, scale: scale)
+    }
+
+    /// The `data` object as a notification, by the same rules as `/v1/notify`: its notification keys are
+    /// taken as they are, any other top-level key becomes a field in `metadata`. A missing title is allowed
+    /// (the template supplies it or the preview shows none).
+    private func previewNotification(app: String, data: [String: Any]) throws -> HeraldNotification {
+        var patched = data
+        patched["app"] = app
+        if patched["title"] == nil { patched["title"] = "" }
+        guard let bytes = try? JSONSerialization.data(withJSONObject: patched) else { throw BackendError(400, "invalid field: data") }
+        do { return try decodeNotification(HTTPRequest(method: "POST", path: "/v1/notify", body: bytes)) }
+        catch let e as BackendError { throw BackendError(e.status, e.message.replacingOccurrences(of: "field: ", with: "field: data.")) }
+    }
+
+    private enum ScaleInput { case string(String), number(Double), invalid }
+
+    private static func previewScaleValue(_ raw: Any?) -> ScaleInput? {
+        switch raw {
+        case nil, is NSNull: return nil
+        case let n as NSNumber where CFGetTypeID(n) != CFBooleanGetTypeID(): return .number(n.doubleValue)
+        case let s as String: return .string(s)
+        default: return .invalid
+        }
+    }
+
+    private static func previewScale(_ raw: ScaleInput?) throws -> Double {
+        guard let raw else { return PreviewSpec.defaultScale }
+        let value: Double?
+        switch raw {
+        case .number(let d): value = d
+        case .string(let s): value = Double(s.trimmingCharacters(in: .whitespaces))
+        case .invalid: value = nil
+        }
+        guard let v = value, v.isFinite, PreviewSpec.scaleRange.contains(v) else {
+            throw BackendError(400, "invalid field: scale (a number from 1 to 3)")
+        }
+        return v
+    }
+
+    private static func previewAppearance(_ value: Any?) throws -> PreviewAppearance {
+        if value == nil || value is NSNull { return .light }
+        guard let raw = value as? String else { throw BackendError(400, "invalid field: appearance (light or dark)") }
+        if raw.isEmpty { return .light }
+        guard let a = PreviewAppearance(rawValue: raw.lowercased()) else {
+            throw BackendError(400, "invalid field: appearance (light or dark)")
+        }
+        return a
+    }
+
+    private static func describe(_ e: DecodingError) -> String {
+        func path(_ keys: [CodingKey]) -> String {
+            var out = ""
+            for key in keys {
+                if let i = key.intValue { out += "[\(i)]" } else { out += (out.isEmpty ? "" : ".") + key.stringValue }
+            }
+            return out
+        }
+        switch e {
+        case .keyNotFound(let k, let c): return path(c.codingPath + [k]) + ": missing field"
+        case .typeMismatch(_, let c), .valueNotFound(_, let c), .dataCorrupted(let c):
+            let p = path(c.codingPath)
+            return (p.isEmpty ? "" : p + ": ") + (c.debugDescription.isEmpty ? "wrong type" : c.debugDescription)
+        @unknown default: return "invalid JSON"
+        }
     }
 
     /// Like `decode`, but says what is wrong and where: an agent authoring a manifest needs "actions[1].kind:
@@ -235,6 +444,9 @@ public final class Router: @unchecked Sendable {
             case .keyNotFound(let k, _): throw BackendError(400, "missing field: \(k.stringValue)")
             case .typeMismatch(_, let c), .valueNotFound(_, let c):
                 throw BackendError(400, "invalid field: \(c.codingPath.map(\.stringValue).joined(separator: "."))")
+            case .dataCorrupted(let c) where !c.codingPath.isEmpty:
+                // A value the model refused (a grid with 40 million rows, a size that is not a size): say which.
+                throw BackendError(400, "invalid field: " + Self.describe(e))
             default: throw BackendError(400, "invalid JSON")
             }
         } catch { throw BackendError(400, "invalid JSON") }

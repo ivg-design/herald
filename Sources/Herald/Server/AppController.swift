@@ -21,6 +21,11 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func putManifest(_ m: HeraldManifest) async throws { try await controller.putManifest(m) }
     func deleteManifest(app: String) async throws { try await controller.deleteManifest(app: app) }
     func shortcuts() async throws -> [String] { try await controller.shortcutNames() }
+    func preview(_ request: PreviewSpec) async throws -> Data { try await controller.previewPNG(request) }
+    func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
+    func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
+        try await MainActor.run { try QuietHoursCoordinator.shared.apply(update) }
+    }
 }
 
 @MainActor
@@ -54,6 +59,9 @@ final class AppController {
         manifests = ManifestStore(directory: supportDirectory.appendingPathComponent("manifests", isDirectory: true))
         registry = AppRegistry(file: supportDirectory.appendingPathComponent("apps.json"))
         banners = BannerCenter(controller: self)
+        // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
+        // controller, which works out the origin itself and applies the permission each kind needs.
+        banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
     }
 
     var muted: Bool {
@@ -64,6 +72,14 @@ final class AppController {
     func start() {
         do { token = try TokenStore.loadOrCreate(in: supportDirectory) }
         catch { serverStatus = "Cannot create token: \(error.localizedDescription)"; return }
+        let voice = VoiceCoordinator.shared
+        voice.history = history
+        voice.showBanner = { [unowned self] item in
+            let record = registry.ensure(item.app)
+            banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record)
+            changed()
+        }
+        voice.start()
         startServer()
         restoreBanners()
         changed()
@@ -133,13 +149,23 @@ final class AppController {
         var imagePath: String?
         if let spec = n.image, !spec.isEmpty { imagePath = await history.cacheImage(spec) }
         guard pendingNotifies.isCurrent(key, ticket) else { return id }
-        // What a grid template binds to: payload fields, then metadata (the manifest's samples are for the designer only).
-        let fields = TemplateResolver.fields(for: note, manifest: manifest)
-        let item = HeraldHistoryItem(id: id, app: n.app, notification: note, deliveredAt: Date(), imagePath: imagePath, fields: fields)
+        // What a grid template binds to: payload fields, then metadata, plus the template's own `extra` values
+        // and the delivery time (the manifest's samples are for the designer only).
+        let delivered = Date()
+        let fields = TemplateResolver.fields(for: note, manifest: manifest, extra: template?.extra ?? [:], deliveredAt: delivered)
+        let item = HeraldHistoryItem(id: id, app: n.app, notification: note, deliveredAt: delivered, imagePath: imagePath, fields: fields)
         history.upsert(item)
         let eff = EffectiveSettings.resolve(note, record)
-        banners.show(item, settings: eff, record: record)
-        playSound(eff, record: record)
+        // Voice (DESIGN section 7.9): speech is queued here; a voice-only notification gets no banner and no chime.
+        // Quiet hours (DESIGN section 7.9.1) may silence speech, the chime and the banner; `priority: urgent` can
+        // break through when the app allows it.
+        let quiet = QuietHoursCoordinator.shared.state(for: note)
+        let voiceOnly = VoiceCoordinator.shared.handle(notification: note, historyItem: item, quiet: quiet)
+        if !voiceOnly {
+            if quiet.active && quiet.banners { banners.deferBanner(key: key, corner: eff.corner) }
+            else { banners.show(item, settings: eff, record: record) }
+            if !(quiet.active && quiet.sounds) { playSound(eff, record: record) }
+        }
         changed()
         return id
     }
@@ -157,6 +183,7 @@ final class AppController {
     func dismissItem(app: String, id: String, action: String?, notify: Bool = true, supersedePending: Bool = true) {
         if supersedePending { pendingNotifies.invalidate(BannerCenter.key(app, id)) }
         cancelFlash(BannerCenter.key(app, id))
+        VoiceCoordinator.shared.cancel(app: app, id: id)
         history.update(app: app, id: id) { item in
             // The first way an item was dismissed is the one History records; a late click or a repeated
             // dismiss must not rewrite it.
@@ -173,6 +200,7 @@ final class AppController {
     /// One `changed()` for the whole sweep: each one refreshes the menu bar and re-reads history.
     func dismissAll(app: String?) {
         pendingNotifies.invalidateAll(prefix: app.map { $0 + "\u{1}" })
+        if app == nil { VoiceCoordinator.shared.stopAll() }
         for item in history.undismissed() where app == nil || item.app == app {
             dismissItem(app: item.app, id: item.id, action: nil, notify: false)
         }
@@ -222,6 +250,9 @@ final class AppController {
         guard manifests.hasRoom(for: m.app) else { throw BackendError(429, "too many manifests (at most \(ManifestStore.maxManifests))") }
         guard registry.hasRoom(for: m.app) else { throw BackendError(429, "too many apps (at most \(AppRegistry.maxApps))") }
         guard manifests.put(m) else { throw BackendError(500, "could not save manifest \(m.app)") }
+        // Copy the issuer's Rive files in now, so a banner can still draw them if the originals move later.
+        // A bad asset is reported when a banner tries to draw it, so it never blocks the manifest.
+        for r in AssetStore.shared.installAll(m) where !r.ok { log("manifest \(m.app): asset \(r.id): \(r.error?.localizedDescription ?? "not installed")") }
         let own = registry.record(for: m.app)?.registration
         let name = own?.appName == nil && m.appName != m.app ? m.appName : nil
         let icon = own?.icon == nil ? m.icon : nil
@@ -233,7 +264,9 @@ final class AppController {
     }
 
     func deleteManifest(app: String) throws {
+        let old = manifests.get(app: app)
         guard manifests.delete(app: app) else { throw BackendError(404, "manifest not found") }
+        if let old { AssetStore.shared.remove(manifest: old) }
         changed()
     }
 
@@ -244,6 +277,27 @@ final class AppController {
         catch let e as ShortcutsError {
             if case .timedOut = e { throw BackendError(504, e.localizedDescription) }
             throw BackendError(502, e.localizedDescription)
+        }
+    }
+
+    // MARK: Preview
+
+    /// `POST|GET /v1/preview`: the template drawn offscreen with the one banner view, as PNG. Nothing is stored,
+    /// shown, played or added to history; a sample preview needs no notification at all. An image the data
+    /// names is loaded without touching the history's image cache.
+    func previewPNG(_ request: PreviewSpec) async throws -> Data {
+        let plan = try PreviewPlan.make(request, manifest: manifests.get(app: request.app),
+                                        stored: { [templates] in templates.get(app: request.app, name: $0) },
+                                        placeholderImage: PreviewRenderer.placeholderImageSpec)
+        let record = registry.record(for: request.app)
+        let appName = record?.displayName ?? plan.manifest?.appName ?? request.app
+        // The banner shows the notification's own image from this (remote ones would not load offscreen otherwise).
+        let image = await PreviewRenderer.loadImage(plan.notification.image)
+        do {
+            return try PreviewRenderer.png(plan: plan, appName: appName, icon: AppIcons.icon(for: record, app: request.app),
+                                           image: image, appearance: request.appearance, scale: request.scale)
+        } catch {
+            throw BackendError(500, error.localizedDescription)
         }
     }
 
@@ -259,7 +313,11 @@ final class AppController {
     private var failureFlashes: [String: Task<Void, Never>] = [:]
     private var systemObservers: [NSObjectProtocol] = []
     private let callbacks = CallbackDelivery()
-    private let commandRunner = CommandRunner()
+    /// Runs script, command and shortcut actions (DESIGN 7.3); their output goes to ~/Library/Logs/Herald/actions.log.
+    let actionRunner = ActionRunner()
+    /// The templates whose commands the user confirmed (template-authored commands ask once per template).
+    let commandApprovals = TemplateCommandApprovals(
+        file: HeraldPaths.defaultSupportDirectory.appendingPathComponent("template-approvals.json"))
 
     static let failureLineDuration: TimeInterval = 4
 
@@ -301,35 +359,85 @@ final class AppController {
         dismissItem(app: app, id: id, action: "open")
     }
 
-    /// A button was pressed. Link buttons open and dismiss. Callback and command buttons dismiss only once the
-    /// action succeeded: when it fails the banner stays, shows a brief "Action failed" line and can be tried again.
+    /// A v1 button was pressed (the classic banner layouts). It is the issuer's own button and runs under the
+    /// issuer rules, with v1's precedence (url, command, callback, else dismiss).
     func userPressed(app: String, id: String, button: HeraldButton) {
+        userPerformed(app: app, id: id, action: ActionRunner.legacyAction(button))
+    }
+
+    /// The actions a banner for `item` can offer, with their origins: the issuer's buttons after the template's
+    /// rules, then the template's own inline component actions.
+    func resolvedActions(for item: HeraldHistoryItem) -> [HeraldResolvedAction] {
+        ActionRunner.resolvedActions(notification: item.notification, manifest: manifests.get(app: item.app),
+                                     template: templates.template(for: item.notification))
+    }
+
+    /// An action was pressed on a banner: a grid button, the action row, an icon button or a Rive click. The
+    /// controller works out where the action came from itself, so a view cannot claim a template origin for an
+    /// issuer's command. Link, dismiss and snooze actions run at once; callbacks, commands, scripts and
+    /// shortcuts dismiss the banner only once they succeed. When one fails the banner stays, shows a brief
+    /// "Action failed" line and can be tried again.
+    func userPerformed(app: String, id: String, action pressed: HeraldAction) {
         guard let item = history.item(app: app, id: id) else { return }
         guard !busyActions.contains(BannerCenter.key(app, id)) else { return }
-        if let u = button.url {
-            guard let url = URL(string: u) else { flashFailure(app: app, id: id, reason: "invalid link"); return }
+        let template = templates.template(for: item.notification)
+        let manifest = manifests.get(app: app)
+        let offered = ActionRunner.resolvedActions(notification: item.notification, manifest: manifest, template: template)
+        let found = ActionRunner.match(pressed, in: offered)
+        // An action the notification does not offer is treated as the issuer's: the strictest rule.
+        perform(found?.action ?? pressed, origin: found?.origin ?? .issuer, item: item, template: template, manifest: manifest)
+    }
+
+    private func perform(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
+                         template: HeraldTemplate?, manifest: HeraldManifest?) {
+        let app = item.app, id = item.id
+        let extra = template?.extra ?? [:]
+        let invocation = ActionInvocation(
+            notification: item.notification,
+            fields: TemplateResolver.fields(for: item.notification, manifest: manifest, extra: extra, deliveredAt: item.deliveredAt),
+            extra: extra, template: item.notification.template, imagePath: item.imagePath)
+        let plan: ActionPlan
+        switch actionRunner.plan(action, origin: origin, invocation: invocation) {
+        case .failure(let e):
+            log("\(action.kind.rawValue) action \(action.label) of \(app) cannot run: \(e.reason)")
+            flashFailure(app: app, id: id, reason: e.reason)
+            return
+        case .success(let p):
+            plan = p
+        }
+        guard authorize(action, origin: origin, item: item, template: template, manifest: manifest) else { return }
+        switch plan {
+        case .openURL(let url):
             let outcome = Self.openLink(url)
             guard outcome == .opened else {
-                log("link button \(button.label) of \(app) not opened (\(outcome)): \(u)")
+                log("link action \(action.label) of \(app) not opened (\(outcome)): \(url.absoluteString)")
                 flashFailure(app: app, id: id, reason: Self.failureReason(outcome))
                 return
             }
-            dismissItem(app: app, id: id, action: button.label)
-        } else if let cmd = button.command {
-            runCommandButton(item: item, button: button, command: cmd)
-        } else if let cb = button.callback {
-            runCallbackButton(item: item, button: button, callback: cb)
-        } else {
-            dismissItem(app: app, id: id, action: button.label)
+            dismissItem(app: app, id: id, action: action.label)
+        case .callback(let callback):
+            // The issuer is told which of ITS buttons was pressed: its own label, even when a template rule
+            // relabelled the action on the banner.
+            let label = origin == .issuer
+                ? (ActionRunner.issuerLabel(id: action.id, notification: item.notification, manifest: manifest) ?? action.label)
+                : action.label
+            runCallbackButton(item: item, label: label, callback: callback)
+        case .process(let spec):
+            runProcess(spec, action: action, origin: origin, item: item)
+        case .dismiss:
+            dismissItem(app: app, id: id, action: action.label)
+        case .snooze(let minutes):
+            do { _ = try snoozeItem(app: app, id: id, minutes: minutes) }
+            catch { flashFailure(app: app, id: id, reason: "could not snooze") }
         }
     }
 
     // MARK: Callback buttons
 
-    private func runCallbackButton(item: HeraldHistoryItem, button: HeraldButton, callback: HeraldCallback) {
+    private func runCallbackButton(item: HeraldHistoryItem, label: String, callback: HeraldCallback) {
         let target = callback.url ?? registry.record(for: item.app)?.registration.callbackURL
         guard let target, let url = URL(string: target) else {
-            log("callback button \(button.label) of \(item.app) has no callback URL")
+            log("callback action \(label) of \(item.app) has no callback URL")
             flashFailure(app: item.app, id: item.id, reason: "no callback URL")
             return
         }
@@ -350,7 +458,7 @@ final class AppController {
             }
             approvedHosts = [host]
         }
-        let event = HeraldCallbackEvent(notificationId: item.id, app: item.app, action: button.label, payload: callback.payload)
+        let event = HeraldCallbackEvent(notificationId: item.id, app: item.app, action: label, payload: callback.payload)
         let key = BannerCenter.key(item.app, item.id)
         busyActions.insert(key)
         Task { @MainActor in
@@ -358,7 +466,7 @@ final class AppController {
             busyActions.remove(key)
             switch outcome {
             case .delivered:
-                dismissItem(app: item.app, id: item.id, action: button.label)
+                dismissItem(app: item.app, id: item.id, action: label)
             case .failed(_, let reason):
                 flashFailure(app: item.app, id: item.id, reason: reason)
             }
@@ -385,46 +493,77 @@ final class AppController {
         }
     }
 
-    // MARK: Command buttons
+    // MARK: Code-running actions
 
-    /// Commands run only when the app registered with `allowCommands` AND the user agreed. The agreement is
-    /// asked for the first time such a button is pressed, with the exact command in front of the user.
-    private func runCommandButton(item: HeraldHistoryItem, button: HeraldButton, command: String) {
-        let record = registry.record(for: item.app)
-        let name = record?.displayName ?? item.app
-        switch CommandPermission.evaluate(record) {
-        case .denied(let why):
-            log("command button \(button.label) ignored for \(item.app): \(why)")
-            flashFailure(app: item.app, id: item.id, reason: "commands are not allowed for \(name)")
-            return
-        case .needsConfirmation:
-            guard confirmCommand(app: item.app, displayName: name, command: command) else { return }
-        case .allowed:
-            break
+    /// The rules for actions that run code. An issuer's command (or script, or shortcut) needs the app's
+    /// `allowCommands` AND the user's agreement, asked for the first time such a button is pressed with the
+    /// exact command in front of the user. A command, script or Shortcut from the template is confirmed once
+    /// per template and again whenever one of them changes (the script's SHA-256 included). False means
+    /// "do not run": a failure line was shown, or the user said cancel.
+    private func authorize(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
+                           template: HeraldTemplate?, manifest: HeraldManifest?) -> Bool {
+        switch ActionRunner.gate(for: action, origin: origin) {
+        case .open:
+            return true
+        case .appPermission:
+            let record = registry.record(for: item.app)
+            let name = record?.displayName ?? item.app
+            switch CommandPermission.evaluate(record) {
+            case .denied(let why):
+                log("\(action.kind.rawValue) action \(action.label) ignored for \(item.app): \(why)")
+                flashFailure(app: item.app, id: item.id, reason: "commands are not allowed for \(name)")
+                return false
+            case .needsConfirmation:
+                return confirmCommand(app: item.app, displayName: name, action: action)
+            case .allowed:
+                return true
+            }
+        case .templateConfirmation:
+            // The approval key binds to the command text, the script file's hash or the Shortcut's name and input.
+            guard let key = actionRunner.approvalKey(for: action) else { return true }
+            let templateName = template?.name ?? item.notification.template ?? ""
+            if commandApprovals.isApproved(app: item.app, template: templateName, command: key) { return true }
+            let all = template.map { actionRunner.templateApprovalKeys(of: $0) } ?? [key]
+            let replaced = ActionRunner.replacedIssuerLabel(for: action, notification: item.notification,
+                                                            manifest: manifest, template: template)
+            return confirmTemplateCommands(app: item.app, template: templateName, action: action, key: key,
+                                           all: all, replacedIssuerLabel: replaced)
         }
+    }
+
+    private func runProcess(_ spec: ActionProcessSpec, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem) {
         let key = BannerCenter.key(item.app, item.id)
         busyActions.insert(key)
-        let context = CommandContext(app: item.app, notificationId: item.id, action: button.label)
+        let context = CommandContext(app: item.app, notificationId: item.id, action: action.label)
         Task { @MainActor in
-            let result = await commandRunner.run(command, context: context)
+            let result = await actionRunner.run(spec, context: context, origin: origin)
             busyActions.remove(key)
             if result.succeeded {
-                dismissItem(app: item.app, id: item.id, action: button.label)
+                dismissItem(app: item.app, id: item.id, action: action.label)
             } else {
-                log("command for \(item.app)/\(item.id) failed: \(result.summary) (see \(commandRunner.log.url.path))")
-                flashFailure(app: item.app, id: item.id, reason: result.summary)
+                log("\(spec.kind.rawValue) action for \(item.app)/\(item.id) failed: \(result.summary) (see \(actionRunner.log.url.path))")
+                flashFailure(app: item.app, id: item.id, reason: actionRunner.failureReason(result))
             }
         }
     }
 
     /// "Run Once" is the default button on purpose: the lasting permission is one click further away than
     /// the safe choice, so pressing Return by habit cannot grant it.
-    private func confirmCommand(app: String, displayName: String, command: String) -> Bool {
+    private func confirmCommand(app: String, displayName: String, action: HeraldAction) -> Bool {
         let a = NSAlert()
         a.alertStyle = .warning
-        a.messageText = "Run this command for \(displayName)?"
-        a.informativeText = "\(displayName) wants Herald to run the command below with your user permissions (/bin/zsh -lc)."
-        a.accessoryView = Self.commandView(command)
+        switch action.kind {
+        case .script:
+            a.messageText = "Run this script for \(displayName)?"
+            a.informativeText = "A notification sent as \(displayName) asks Herald to run a script from your Herald scripts folder with your user permissions. Herald cannot verify who sent it."
+        case .shortcut:
+            a.messageText = "Run this Shortcut for \(displayName)?"
+            a.informativeText = "A notification sent as \(displayName) asks Herald to run the Shortcut below. Shortcuts can do anything you can. Herald cannot verify who sent it."
+        default:
+            a.messageText = "Run this command for \(displayName)?"
+            a.informativeText = "A notification sent as \(displayName) asks Herald to run the command below with your user permissions (/bin/zsh -lc). Herald cannot verify who sent it."
+        }
+        a.accessoryView = Self.commandView(ActionRunner.describe(action))
         a.addButton(withTitle: "Run Once")
         a.addButton(withTitle: "Always Allow \(displayName)")
         a.addButton(withTitle: "Cancel")
@@ -434,6 +573,49 @@ final class AppController {
             return true
         case .alertSecondButtonReturn:
             registry.update(app) { $0.commandsConfirmed = true }
+            changed()
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// One confirmation per template: the alert shows exactly what is about to run (the command, the script
+    /// and its hash, or the Shortcut and its input) and everything else the template carries, and "Always Allow
+    /// This Template" approves exactly what was shown. When the action took the place of one of the issuer's
+    /// own buttons, the alert says which, since the issuer will not hear about that press.
+    private func confirmTemplateCommands(app: String, template: String, action: HeraldAction, key: String,
+                                         all: [String], replacedIssuerLabel: String?) -> Bool {
+        let name = registry.record(for: app)?.displayName ?? app
+        let others = all.filter { $0 != key }
+        let a = NSAlert()
+        a.alertStyle = .warning
+        let what: String
+        switch action.kind {
+        case .script: what = "script"
+        case .shortcut: what = "Shortcut"
+        default: what = "command"
+        }
+        a.messageText = "Run a \(what) from the \"\(template)\" template?"
+        var info = "This template for \(name) runs code with your user permissions: shell commands (/bin/zsh -lc), scripts and Shortcuts."
+        if let r = replacedIssuerLabel {
+            info += " It replaces \(name)'s own \"\(r)\" button, so \(name) will not be told when you press it."
+        }
+        if !others.isEmpty { info += " Always Allow covers everything listed." }
+        info += " If any of it changes, Herald asks again."
+        a.informativeText = info
+        let pressed = actionRunner.confirmationText(for: action)
+        let shown = others.isEmpty ? pressed : "Running now:\n\(pressed)\n\nAlso in this template:\n" + others.joined(separator: "\n")
+        a.accessoryView = Self.commandView(shown)
+        a.addButton(withTitle: "Run Once")
+        a.addButton(withTitle: "Always Allow This Template")
+        a.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        switch a.runModal() {
+        case .alertFirstButtonReturn:
+            return true
+        case .alertSecondButtonReturn:
+            commandApprovals.approve(app: app, template: template, commands: [key] + others)
             changed()
             return true
         default:
@@ -458,24 +640,24 @@ final class AppController {
 
     // MARK: Failure line
 
-    /// A failed button action leaves the banner up and shows "Action failed" in its subtitle line for a few
-    /// seconds. It goes through `BannerCenter.show` (which replaces a banner in place) with a copy of the
-    /// notification, so it works in every layout without the banner views knowing about failures. History is
-    /// never touched: the original payload comes back when the line expires.
+    /// A failed action leaves the banner up and shows an "Action failed" strip under its grid for a few seconds
+    /// (`BannerModel.failureLine`), whatever the template draws. History is never touched.
     private func flashFailure(app: String, id: String, reason: String) {
         if !settings.muted { NSSound.beep() }
         guard let item = history.item(app: app, id: id), item.dismissedAt == nil, item.snoozedUntil == nil else { return }
         let key = BannerCenter.key(app, id)
-        var shown = item
-        let detail = reason.count > 60 ? String(reason.prefix(57)) + "..." : reason
-        shown.notification.subtitle = "Action failed" + (detail.isEmpty ? "" : " \u{00B7} \(detail)")
-        showInPlace(shown)
+        let detail = reason.count > 100 ? String(reason.prefix(97)) + "..." : reason
+        let line = "Action failed" + (detail.isEmpty ? "" : " \u{00B7} \(detail)")
+        if !banners.setFailureLine(app: app, id: id, line) {
+            showInPlace(item)
+            banners.setFailureLine(app: app, id: id, line)
+        }
         failureFlashes[key]?.cancel()
         failureFlashes[key] = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.failureLineDuration * 1_000_000_000))
             guard !Task.isCancelled, let self else { return }
             self.failureFlashes[key] = nil
-            self.restoreBanner(app: app, id: id)
+            self.banners.setFailureLine(app: app, id: id, nil)
         }
     }
 
@@ -486,12 +668,6 @@ final class AppController {
     private func showInPlace(_ item: HeraldHistoryItem) {
         let record = registry.ensure(item.app)
         banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record)
-    }
-
-    /// Shows the banner exactly as History has it. Does nothing if it was dismissed or snoozed in the meantime.
-    private func restoreBanner(app: String, id: String) {
-        guard let item = history.item(app: app, id: id), item.dismissedAt == nil, item.snoozedUntil == nil else { return }
-        showInPlace(item)
     }
 
     // MARK: Sound

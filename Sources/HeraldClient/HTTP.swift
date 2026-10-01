@@ -19,8 +19,16 @@ public struct HTTPResponse: Sendable {
     public var body: Data
     /// Extra response headers (the fixed ones, Content-Type/Content-Length/Connection, are always written).
     public var headers: [String: String]
-    public init(status: Int, body: Data = Data(), headers: [String: String] = [:]) {
-        self.status = status; self.body = body; self.headers = headers
+    /// The `Content-Type` written on the response: JSON unless a route returns something else (`image/png`).
+    public var contentType: String
+    public init(status: Int, body: Data = Data(), headers: [String: String] = [:],
+                contentType: String = "application/json") {
+        self.status = status; self.body = body; self.headers = headers; self.contentType = contentType
+    }
+
+    /// A binary 200 response, such as the PNG of `/v1/preview`.
+    public static func png(_ data: Data) -> HTTPResponse {
+        HTTPResponse(status: 200, body: data, contentType: "image/png")
     }
 
     public static func json<T: Encodable>(_ status: Int = 200, _ value: T) -> HTTPResponse {
@@ -56,7 +64,8 @@ public struct HTTPResponse: Sendable {
             let clean = String(String.UnicodeScalarView(value.unicodeScalars.filter { $0 != "\r" && $0 != "\n" }))
             head += "\(name): \(clean)\r\n"
         }
-        head += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
+        let type = String(String.UnicodeScalarView(contentType.unicodeScalars.filter { $0 != "\r" && $0 != "\n" }))
+        head += "Content-Type: \(type)\r\nContent-Length: \(body.count)\r\nConnection: close\r\n\r\n"
         var out = Data(head.utf8)
         out.append(body)
         return out

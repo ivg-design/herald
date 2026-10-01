@@ -49,6 +49,36 @@ shown as sent.
 
 Manage templates with the Composer, the Template editor, or the API (`GET`, `PUT`, `DELETE /v1/templates`).
 
+## Herald 1.1: manifests, the Designer, actions, MCP
+
+Herald 1.1 adds a four-step path from "an app can send data" to "a banner that looks and acts the way
+you want".
+
+1. **Manifest.** The issuing app declares the fields it sends (with sample values), the actions it
+   supports and any assets: `PUT /v1/manifest` (see [API.md](API.md#manifests)). Fields you did not
+   declare still arrive in `metadata` and show up in the palette as "custom".
+2. **Grid template.** Menu bar > Design Template opens the Designer. The palette on the left lists
+   components, the issuer's fields (drag a field onto a cell to bind it) and actions. The centre canvas is
+   the 3 x 4 grid at real banner size: select cells to Merge or Split, drag components between cells,
+   resize spans, pick one of nine alignments. The inspector on the right edits bindings, style, size and
+   **empty behaviour**. The preview bar switches between Sample data and the last real notification, light
+   and dark; **Send test** delivers it for real; **Set as issuer default** makes it the template used
+   when a notification names none. Reference: [TEMPLATES.md](TEMPLATES.md).
+3. **Empty fields: collapse or keep.** For each template (and each component) you choose whether an
+   empty field disappears and frees its space, or stays and keeps the banner shape. See
+   [Collapse semantics](TEMPLATES.md#collapse-semantics).
+4. **Two-way actions.** Keep the issuer's buttons, hide or relabel them, and add your own: a shell command,
+   a script, an Apple Shortcut, a URL. Details in [ACTIONS.md](ACTIONS.md).
+
+### Authoring with an agent (MCP)
+
+`herald-mcp` is an MCP server (stdio) that lets Claude Code, Codex or any MCP client design templates
+for you. A typical session: the agent calls `list_manifests` and `get_manifest` to learn the fields,
+`component_schema` for what it may place, drafts a template with `put_template` (errors name the
+offending cell id), checks it with `render_preview` (it receives the PNG), adds a rule with
+`add_action_rule` or an action found with `list_shortcuts`, and finishes with `send_test`. Setup and the
+tool list are in [MCP.md](MCP.md).
+
 ## Composer
 
 Open it from the menu bar (Compose...) or run `herald compose`, which only opens the window.

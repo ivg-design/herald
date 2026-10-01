@@ -162,6 +162,11 @@ struct TemplateEditorView: View {
         HStack {
             if let error { Text(error).font(.caption).foregroundStyle(.red).lineLimit(2) }
             Spacer()
+            if draft.usesGrid {
+                Button("Open in Designer") { DesignerWindow.show(controller: controller, app: app, template: savedName) }
+                    .disabled(savedName == nil)
+                    .help("Edit this grid template visually. Opens the saved version.")
+            }
             Button("Delete", role: .destructive, action: delete).disabled(savedName == nil)
             Button("Duplicate", action: duplicate).disabled(savedName == nil)
             Button("Save", action: save)

@@ -15,6 +15,8 @@ final class BannerEntry {
     let seq: Int
     var corner: HeraldCorner
     var height: CGFloat = 80
+    /// The banner's width: a v2 template sets its own (`BannerModel.bannerWidth`), so it is per banner.
+    var width: CGFloat = BannerView.width
     var remaining: Double?
     var shown = false
     var measured = false
@@ -45,6 +47,12 @@ final class BannerCenter {
     private var deferredKeys: Set<String> = []
     private var deferredCorner: HeraldCorner = .topRight
 
+    /// Handles a pressed action other than dismiss, the snooze menu and Add to Reminders: url, callback,
+    /// command, script and shortcut actions, whether the issuer sent them or the template added them (`origin`
+    /// says which). Arguments are the banner's app and id. While nil, url, callback and command actions run as
+    /// v1 buttons did and the rest are ignored.
+    var actionHandler: ((_ app: String, _ id: String, _ action: HeraldAction, _ origin: HeraldActionOrigin) -> Void)?
+
     init(controller: AppController) {
         self.controller = controller
         // A monitor that comes or goes changes the visible frame; banners would otherwise stay where the old
@@ -63,8 +71,13 @@ final class BannerCenter {
 
     // MARK: Show / update
 
-    func show(_ item: HeraldHistoryItem, settings: EffectiveSettings, record: AppRecord?) {
+    func show(_ item: HeraldHistoryItem, settings: EffectiveSettings, record: AppRecord?,
+              template: HeraldTemplate? = nil, manifest: HeraldManifest? = nil) {
         let key = Self.key(item.app, item.id)
+        // What a banner draws besides its notification is looked up where the controller keeps it, so every show
+        // (a new notification, a snooze coming back, a restore at launch, a failure line) draws the same banner.
+        let template = template ?? storedTemplate(for: item)
+        let manifest = manifest ?? controller.manifests.get(app: item.app)
         cancelSnooze(key)
         deferredKeys.remove(key)
         let image = item.imagePath.flatMap { NSImage(contentsOfFile: $0) }
@@ -72,26 +85,31 @@ final class BannerCenter {
         let name = record?.displayName ?? item.app
 
         if let e = entries[key] {
+            // Template and manifest first, so the item change below redraws once with everything in place.
+            e.model.template = template
+            e.model.manifest = manifest
             e.model.item = item
             e.model.image = image
             e.model.icon = icon
             e.model.appName = name
             e.model.reminderState = .idle
+            e.model.failureLine = nil
             e.remaining = settings.timeout
             e.corner = settings.corner
+            e.width = e.model.bannerWidth
             relayout(animated: true)
             return
         }
 
-        let model = BannerModel(item: item, appName: name, icon: icon, image: image)
+        let model = BannerModel(item: item, appName: name, icon: icon, image: image, template: template, manifest: manifest)
         model.onClose = { [weak self] in self?.controller.userClosed(app: item.app, id: item.id) }
         model.onOpen = { [weak self] in self?.controller.userOpened(app: item.app, id: item.id) }
-        model.onButton = { [weak self] b in self?.controller.userPressed(app: item.app, id: item.id, button: b) }
+        model.onAction = { [weak self] action, origin in self?.route(action, origin: origin, app: item.app, id: item.id) }
         model.onSnooze = { [weak self] o in self?.controller.userSnoozed(app: item.app, id: item.id, option: o) }
         model.onReminder = { [weak self] in self?.controller.userAddedReminder(app: item.app, id: item.id) }
 
         let host = NSHostingView(rootView: BannerView(model: model))
-        let panel = BannerPanel(contentRect: NSRect(x: 0, y: 0, width: BannerView.width, height: 80),
+        let panel = BannerPanel(contentRect: NSRect(x: 0, y: 0, width: model.bannerWidth, height: 80),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         panel.level = .statusBar
@@ -106,9 +124,10 @@ final class BannerCenter {
         seqCounter += 1
         let e = BannerEntry(key: key, panel: panel, host: host, model: model, seq: seqCounter, corner: settings.corner)
         e.remaining = settings.timeout
-        // Layouts differ a lot in height (compact ~44 pt, hero ~260 pt); start from the layout's estimate and
+        // Templates differ a lot in height (a one-line banner ~44 pt, a hero ~260 pt); start from an estimate and
         // let the SwiftUI measurement below replace it. The view is the single source of truth for height.
-        e.height = BannerView.estimatedHeight(layout: model.layout, hasImage: image != nil)
+        e.width = model.bannerWidth
+        e.height = BannerView.estimatedHeight(for: model)
         entries[key] = e
         model.onHeight = { [weak self, weak e] h in
             MainActor.assumeIsolated {
@@ -126,8 +145,22 @@ final class BannerCenter {
         // once did) cancelled that fade and left the banner invisible until another notification re-ran relayout.
         let vf = screenFrame
         panel.alphaValue = 0
-        panel.setFrame(NSRect(x: vf.maxX + 40, y: vf.maxY - 200, width: BannerView.width, height: e.height), display: false)
+        panel.setFrame(NSRect(x: vf.maxX + 40, y: vf.maxY - 200, width: e.width, height: e.height), display: false)
         panel.orderFrontRegardless()
+    }
+
+    /// The template the notification names: one saved for its app, else a built-in (`builtin.hero` ...).
+    private func storedTemplate(for item: HeraldHistoryItem) -> HeraldTemplate? {
+        if let t = controller.templates.template(for: item.notification) { return t }
+        guard let name = item.notification.template else { return nil }
+        return BuiltinTemplates.named(name, app: item.app)
+    }
+
+    /// A pressed action goes to the installed handler. Without one, what a v1 button could express (open a
+    /// link, call back, run a command) runs as it always did.
+    private func route(_ action: HeraldAction, origin: HeraldActionOrigin, app: String, id: String) {
+        if let handler = actionHandler { handler(app, id, action, origin); return }
+        if let button = action.legacyButton { controller.userPressed(app: app, id: id, button: button) }
     }
 
     // MARK: Layout
@@ -136,11 +169,11 @@ final class BannerCenter {
         (NSScreen.screens.first ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
     }
 
-    private func targetOrigin(corner: HeraldCorner, offset: CGFloat, height: CGFloat) -> NSPoint {
+    private func targetOrigin(corner: HeraldCorner, offset: CGFloat, width: CGFloat, height: CGFloat) -> NSPoint {
         let vf = screenFrame
         let right = corner == .topRight || corner == .bottomRight
         let top = corner == .topRight || corner == .topLeft
-        let x = right ? vf.maxX - Self.margin - BannerView.width : vf.minX + Self.margin
+        let x = right ? vf.maxX - Self.margin - width : vf.minX + Self.margin
         let y = top ? vf.maxY - Self.margin - offset - height : vf.minY + Self.margin + offset
         return NSPoint(x: x, y: y)
     }
@@ -177,13 +210,13 @@ final class BannerCenter {
                     continue
                 }
                 e.overflowed = false
-                let origin = targetOrigin(corner: corner, offset: plan.offsets[index], height: e.height)
-                let frame = NSRect(origin: origin, size: NSSize(width: BannerView.width, height: e.height))
+                let origin = targetOrigin(corner: corner, offset: plan.offsets[index], width: e.width, height: e.height)
+                let frame = NSRect(origin: origin, size: NSSize(width: e.width, height: e.height))
                 if !e.shown {
                     e.shown = true
                     let right = corner == .topRight || corner == .bottomRight
                     var start = frame
-                    start.origin.x += (right ? 1 : -1) * (BannerView.width + Self.margin)
+                    start.origin.x += (right ? 1 : -1) * (e.width + Self.margin)
                     e.panel.setFrame(start, display: false)
                     e.panel.alphaValue = 0
                     e.panel.orderFrontRegardless()
@@ -242,6 +275,14 @@ final class BannerCenter {
         requestRelayout()
     }
 
+    /// A banner held back by quiet hours: no panel, but History keeps it unread and the "+N more" pill counts it
+    /// until it is dismissed (like banners left without a panel at launch).
+    func deferBanner(key: String, corner: HeraldCorner) {
+        deferredKeys.insert(key)
+        deferredCorner = corner
+        requestRelayout()
+    }
+
     // MARK: Removal
 
     /// Removes the banner (animated) and cancels any pending snooze. Does not touch history.
@@ -277,6 +318,15 @@ final class BannerCenter {
 
     func setReminderState(app: String, id: String, _ s: ReminderState) {
         entries[Self.key(app, id)]?.model.reminderState = s
+    }
+
+    /// Shows (or clears, with nil) the "Action failed" strip on a banner. False when no such banner is up.
+    @discardableResult
+    func setFailureLine(app: String, id: String, _ text: String?) -> Bool {
+        guard let e = entries[Self.key(app, id)] else { return false }
+        e.model.failureLine = text
+        relayout(animated: true)
+        return true
     }
 
     // MARK: Snooze

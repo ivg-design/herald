@@ -56,7 +56,8 @@ public final class ManifestStore: @unchecked Sendable {
             encoder.outputFormatting.insert(.prettyPrinted)   // meant to be read and edited by hand
             try encoder.encode(m).write(to: url, options: .atomic)
             // The same app stored under another file name (a hand-renamed file) must not shadow the new one.
-            for other in jsonFiles() where other != url && read(other)?.app == m.app {
+            // (Compared by file name: both URLs are in `directory`, but the listing may spell the path differently.)
+            for other in jsonFiles() where other.lastPathComponent != url.lastPathComponent && read(other)?.app == m.app {
                 try? FileManager.default.removeItem(at: other)
             }
             return true

@@ -53,6 +53,8 @@ public enum CLIArguments {
       dismiss-all   Dismiss all banners of an app (--app)
       history       Show an app's history (--app [--limit N] [--clear])
       apps          List registered apps
+      speak         Say text aloud (no banner)
+      quiet         Quiet hours: --until HH:MM | --for MINUTES | off | status
       health        Check that Herald is running
 
     GLOBAL OPTIONS
@@ -70,7 +72,7 @@ public enum CLIArguments {
       --timeout SECONDS     0 = until dismissed
       --persistent | --no-persistent
       --snooze              Show the snooze menu
-      --priority low|normal|high
+      --priority low|normal|high|urgent   (urgent breaks quiet hours only for apps that allow it)
       --button "Label=https://..."        Open URL (repeatable)
       --button "Label=cmd:shell command"  Run command (app needs allowCommands)
       --button "Label=cb:{\\"k\\":1}"       POST JSON payload to the app's callback URL
@@ -82,6 +84,13 @@ public enum CLIArguments {
       --accent #RRGGBB      Accent color for title, buttons and links
       --no-subtitle | --no-body | --no-time    Hide that part of the banner
       --max-body-lines N    Body line limit
+      --speak               Say the title, then the body, aloud (DESIGN 7.9)
+      --speak-text T        Say T instead; --voice NAME  --speed 0.5-2.0  --lang en-us
+      --audio PATH|URL|data:  Play a WAV/MP3/M4A voice message (at most 20 MB)
+      --presentation banner|voice|both   voice = spoken only, no banner (history entry kept)
+
+    speak OPTIONS
+      --app ID  --text T  [--voice NAME] [--speed N] [--lang L] [--id ID]   Say T aloud, no banner
 
     snooze OPTIONS
       --app ID  --id ID  --minutes N      (N may be fractional, 0 < N <= 43200)
@@ -99,9 +108,10 @@ public enum CLIArguments {
 
     static let valueFlagsNotify: Set<String> = ["--app", "--id", "--title", "--subtitle", "--body", "--image", "--url",
         "--sound", "--timeout", "--priority", "--button", "--reminder", "--icon", "--callback-url", "--metadata", "--json",
-        "--template", "--layout", "--accent", "--max-body-lines"]
+        "--template", "--layout", "--accent", "--max-body-lines",
+        "--speak-text", "--voice", "--speed", "--lang", "--audio", "--presentation"]
     static let boolFlagsNotify: Set<String> = ["--persistent", "--no-persistent", "--snooze", "--no-snooze",
-        "--no-subtitle", "--no-body", "--no-time"]
+        "--no-subtitle", "--no-body", "--no-time", "--speak"]
 
     public static func parse(_ args: [String],
                              readInput: (String) throws -> Data = { _ in Data() }) throws -> CLIInvocation {
@@ -153,6 +163,10 @@ public enum CLIArguments {
             return inv(.request(try parseNotify(rest, readInput: readInput)))
         case "register":
             return inv(.request(try parseRegister(rest, readInput: readInput)))
+        case "speak":
+            return inv(.request(try parseSpeak(rest)))
+        case "quiet":
+            return inv(.request(try parseQuiet(rest)))
         case "compose":
             let o = try Options(rest, values: [], bools: [])
             try o.finish()
@@ -222,7 +236,7 @@ public enum CLIArguments {
         if let v = o.value("--url") { body["url"] = v }
         if let v = o.value("--sound") { body["sound"] = v }
         if let v = o.value("--priority") {
-            guard ["low", "normal", "high"].contains(v) else { throw CLIParseError("--priority must be low, normal or high") }
+            guard ["low", "normal", "high", "urgent"].contains(v) else { throw CLIParseError("--priority must be low, normal, high or urgent") }
             body["priority"] = v
         }
         if let v = o.value("--timeout") { body["timeout"] = try number(v, "--timeout") }
@@ -245,6 +259,7 @@ public enum CLIArguments {
             guard let n = Int(v), n > 0 else { throw CLIParseError("--max-body-lines needs a positive integer") }
             body["maxBodyLines"] = n
         }
+        try applyVoice(o, into: &body)
         if let v = o.value("--metadata") { body["metadata"] = try parseJSONValue(v, "--metadata") }
         if let v = o.value("--reminder") { body["reminder"] = try parseReminder(v) }
         let buttons = try o.values("--button").map(parseButton)
@@ -257,6 +272,68 @@ public enum CLIArguments {
         guard hasTemplate || !title.isEmpty else { throw CLIParseError("notify needs --title (or --template)") }
         _ = app
         return CLIRequest(method: "POST", path: "/v1/notify", body: body)
+    }
+
+    /// `--speak` / `--speak-text` / `--voice` / `--speed` / `--lang` build the `speak` field (`true` when none
+    /// of the details is given); `--audio` and `--presentation` map to their own fields.
+    static func applyVoice(_ o: Options, into body: inout [String: Any]) throws {
+        var speak: [String: Any] = [:]
+        if let v = o.value("--speak-text") { speak["text"] = v }
+        if let v = o.value("--voice") { speak["voice"] = v }
+        if let v = o.value("--lang") { speak["lang"] = v }
+        if let v = o.value("--speed") {
+            guard let d = Double(v), (0.5...2.0).contains(d) else { throw CLIParseError("--speed needs a number from 0.5 to 2.0") }
+            speak["speed"] = d
+        }
+        if !speak.isEmpty { body["speak"] = speak } else if o.flag("--speak") { body["speak"] = true }
+        if let v = o.value("--audio") { body["audio"] = v }
+        if let v = o.value("--presentation") {
+            guard ["banner", "voice", "both"].contains(v) else { throw CLIParseError("--presentation must be banner, voice or both") }
+            body["presentation"] = v
+        }
+    }
+
+    /// `quiet status` reads, `quiet off` ends the current silence, `quiet --until 07:30` / `--for 60` starts one
+    /// (speech and sounds; `--banners` silences banners too).
+    static func parseQuiet(_ rest: [String]) throws -> CLIRequest {
+        if let first = rest.first, !first.hasPrefix("-") {
+            guard rest.count == 1 else { throw CLIParseError("quiet \(first) takes no further arguments") }
+            switch first {
+            case "status": return CLIRequest(method: "GET", path: "/v1/settings/quiet-hours")
+            case "off": return CLIRequest(method: "PUT", path: "/v1/settings/quiet-hours", body: ["resume": true])
+            default: throw CLIParseError("quiet needs --until HH:MM, --for MINUTES, off or status")
+            }
+        }
+        let o = try Options(rest, values: ["--until", "--for"], bools: ["--banners"])
+        var adHoc: [String: Any] = [:]
+        if let u = o.value("--until") {
+            let parts = u.split(separator: ":")
+            guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]), (0..<24).contains(h), (0..<60).contains(m), parts[1].count == 2 else {
+                throw CLIParseError("--until needs a time such as 07:30")
+            }
+            adHoc["until"] = u
+        }
+        if let f = o.value("--for") { adHoc["minutes"] = try number(f, "--for") }
+        guard adHoc.count == 1 else { throw CLIParseError("quiet needs exactly one of --until HH:MM or --for MINUTES (or off, status)") }
+        if o.flag("--banners") { adHoc["banners"] = true }
+        try o.finish()
+        return CLIRequest(method: "PUT", path: "/v1/settings/quiet-hours", body: ["adHoc": adHoc])
+    }
+
+    static func parseSpeak(_ rest: [String]) throws -> CLIRequest {
+        let o = try Options(rest, values: ["--app", "--text", "--voice", "--speed", "--lang", "--id"], bools: [])
+        let app = try o.require("--app")
+        let text = try o.require("--text")
+        var body: [String: Any] = ["app": app, "text": text]
+        if let v = o.value("--id") { body["id"] = v }
+        if let v = o.value("--voice") { body["voice"] = v }
+        if let v = o.value("--lang") { body["lang"] = v }
+        if let v = o.value("--speed") {
+            guard let d = Double(v), (0.5...2.0).contains(d) else { throw CLIParseError("--speed needs a number from 0.5 to 2.0") }
+            body["speed"] = d
+        }
+        try o.finish()
+        return CLIRequest(method: "POST", path: "/v1/speak", body: body)
     }
 
     static func parseRegister(_ rest: [String], readInput: (String) throws -> Data) throws -> CLIRequest {

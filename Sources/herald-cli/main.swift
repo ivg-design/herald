@@ -34,7 +34,7 @@ case .help:
     print(CLIArguments.usage)
     exit(0)
 case .version:
-    print("herald 1.0.0")
+    print("herald 1.1.0")
     exit(0)
 case .request(let req):
     let port = invocation.port ?? readTrimmed("port").flatMap(Int.init) ?? CLIArguments.defaultPort

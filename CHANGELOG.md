@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1.0 (Build 2) - 2026-10-01
+
+- **Manifests**: `PUT/GET /v1/manifest`, `GET /v1/manifests`. Issuers declare fields (with samples),
+  actions and assets; WebWatcher registers `webwatcher.web` and `webwatcher.email`.
+- **Grid templates** (`layoutVersion: 2`): rows, columns, spans, nine-point alignment, and the components
+  text, image, issuerIcon, timestamp, button, actions, iconButton, badge, progress, rive and spacer.
+  The v1 layouts become built-in grid templates, so existing templates keep rendering.
+- **Collapse or keep**: empty fields collapse or keep their space, chosen per template (`collapseEmpty`)
+  and per component (`emptyBehavior`).
+- **Designer** window with palette, grid canvas, inspector, light/dark and sample/last-notification preview.
+- **Two-way actions**: issuer and template actions merged through `actionRules`; new action kinds
+  `script`, `shortcut`, `dismiss`, `snooze`; template `extra` data added to every action's payload.
+- **Apple Shortcuts**: `GET /v1/shortcuts` and a picker to run a shortcut from a banner button.
+- **Rive** component (Rive Apple runtime) with token-driven inputs, hover and pressed.
+- **Preview API** `POST /v1/preview` (PNG) and `GET /v1/components` (component schema).
+- **`herald-mcp`**: MCP server (stdio) to author templates, render previews, add action rules and send tests.
+- Docs: TEMPLATES.md, ACTIONS.md, MCP.md; clients document manifest registration.
+
 ## Unreleased - security and robustness fixes
 
 - Banner, button and History links open only `http`, `https` and `mailto` URLs. Cached images are

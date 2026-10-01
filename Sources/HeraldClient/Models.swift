@@ -63,6 +63,12 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
     public var showTimestamp: Bool?
     public var maxBodyLines: Int?
 
+    // Voice (DESIGN section 7.9). `speak` says the text aloud, `audio` plays a voice message (path, `data:` URI
+    // or https URL), `presentation` picks banner (default), voice (no banner) or both.
+    public var speak: HeraldSpeak?
+    public var audio: String?
+    public var presentation: HeraldPresentation?
+
     public init(app: String, id: String? = nil, title: String, subtitle: String? = nil,
                 body: String? = nil, image: String? = nil, url: String? = nil,
                 sound: String? = nil, persistent: Bool? = nil, timeout: Double? = nil,
@@ -123,6 +129,8 @@ public struct HeraldHistoryItem: Codable, Equatable, Sendable, Identifiable {
     /// The data a grid template binds to, resolved when the notification was delivered (payload fields,
     /// then `metadata`, see `TemplateResolver.fields`). Nil for items delivered before Herald 1.1.
     public var fields: [String: HeraldFieldValue]?
+    /// What was spoken or played for this notification (DESIGN section 7.9). Nil when nothing was.
+    public var speech: HeraldSpeech?
     public init(id: String, app: String, notification: HeraldNotification, deliveredAt: Date,
                 dismissedAt: Date? = nil, actionUsed: String? = nil, snoozedUntil: Date? = nil,
                 imagePath: String? = nil, fields: [String: HeraldFieldValue]? = nil) {

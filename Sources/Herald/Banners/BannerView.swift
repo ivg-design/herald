@@ -5,18 +5,36 @@ enum ReminderState { case idle, working, added, failed(String) }
 
 /// Everything one banner needs to draw itself. The presentation fields (`layout`, `accentColor`,
 /// `show*`, `maxBodyLines`) are derived from the notification that is already RESOLVED against its
-/// template (the router resolves before anything else), so the view never has to know templates exist.
-/// They are stored (not computed) so previews can nudge one of them, and they re-sync whenever `item`
-/// is replaced, which is how a same-id update changes a live banner's layout in place.
+/// template (the router resolves before anything else). A v2 grid template is handed in separately
+/// (`template`); without one the banner is drawn from the built-in grid for its v1 `layout`, so every
+/// notification renders through `GridBannerView`.
+/// Everything derived (grid, fields, actions, accent) is stored, not computed, so previews can nudge
+/// one of them, and it is rebuilt whenever `item`, `template`, `manifest` or `fieldsOverride` is replaced,
+/// which is how a same-id update changes a live banner's layout in place.
 @MainActor
 final class BannerModel: ObservableObject {
-    @Published var item: HeraldHistoryItem { didSet { applyPresentation(from: item.notification) } }
+    @Published var item: HeraldHistoryItem { didSet { refresh() } }
     @Published var appName: String
     @Published var icon: NSImage
-    @Published var image: NSImage?
+    @Published var image: NSImage? { didSet { refresh() } }
     @Published var reminderState: ReminderState = .idle
+    /// "Action failed - why", shown under the grid for a few seconds after an action fails. It is the card's own
+    /// line, not a template field, so it shows whatever the template draws.
+    @Published var failureLine: String?
     @Published var hovering = false
+    /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
+    /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
+    @Published var liveAnimations = true
 
+    /// The template to draw. nil, or a v1 template, draws the built-in grid for the notification's `layout`.
+    @Published var template: HeraldTemplate? { didSet { refresh() } }
+    /// The issuer's manifest: gives issuer actions their declared ids (what a template's rules match).
+    @Published var manifest: HeraldManifest? { didSet { refresh() } }
+    /// Data for the bindings, replacing what the item carries (designer samples, "last real notification").
+    /// nil binds the item's own fields.
+    @Published var fieldsOverride: [String: HeraldFieldValue]? { didSet { refresh() } }
+
+    // v1 presentation fields, kept in step with the notification (the composer and tests read them).
     @Published var layout: HeraldLayout = .imageLeft
     /// Parsed from the notification's hex string; nil means "use the system accent / primary text".
     @Published var accentColor: NSColor?
@@ -24,45 +42,80 @@ final class BannerModel: ObservableObject {
     @Published var showBody = true
     @Published var showTimestamp = true
     @Published var maxBodyLines = BannerModel.defaultBodyLines
-    /// The body parsed as Markdown, kept so a redraw (a hover, the timer) never re-parses it; it is rebuilt
-    /// only when the body text itself changes.
-    private(set) var bodyText: AttributedString?
-    private var bodyTextSource: String?
+
+    /// The grid template being drawn.
+    private(set) var grid: HeraldTemplate
+    /// What the bindings read: the item's fields (or `fieldsOverride`), with the notification's own title,
+    /// subtitle and body laid over them (a failure line replaces the subtitle without touching the item's
+    /// stored fields) and the template's `extra` values as `extra.<key>`.
+    private(set) var fields: [String: HeraldFieldValue] = [:]
+    /// Issuer actions (the payload's buttons and the built-in snooze) through the template's rules, plus the
+    /// template's added actions.
+    private(set) var actions: [HeraldResolvedAction] = []
 
     static let defaultBodyLines = 8
+    /// What `{image}` holds when the model was given a picture but the notification names no image source
+    /// (a composer preview): the picture is shown, and the binding counts as present.
+    static let cachedImageToken = "herald-cached-image"
 
     var onClose: () -> Void = {}
     var onOpen: () -> Void = {}
-    var onButton: (HeraldButton) -> Void = { _ in }
+    /// An action other than dismiss, the snooze menu and Add to Reminders was pressed. `BannerCenter` routes it
+    /// to the app controller; a preview leaves it a no-op.
+    var onAction: (HeraldAction, HeraldActionOrigin) -> Void = { _, _ in }
     var onSnooze: (SnoozeOption) -> Void = { _ in }
     var onReminder: () -> Void = {}
     var onHeight: (CGFloat) -> Void = { _ in }
 
-    init(item: HeraldHistoryItem, appName: String, icon: NSImage, image: NSImage?) {
+    init(item: HeraldHistoryItem, appName: String, icon: NSImage, image: NSImage?,
+         template: HeraldTemplate? = nil, manifest: HeraldManifest? = nil,
+         fields: [String: HeraldFieldValue]? = nil) {
         self.item = item; self.appName = appName; self.icon = icon; self.image = image
-        applyPresentation(from: item.notification)
+        self.template = template; self.manifest = manifest; self.fieldsOverride = fields
+        self.grid = BuiltinTemplates.gridTemplate(for: item.notification)
+        refresh()
     }
 
-    private func applyPresentation(from n: HeraldNotification) {
-        if n.body != bodyTextSource {
-            bodyTextSource = n.body
-            bodyText = Self.markdown(n.body)
+    /// Banner width in points: the grid's `width`, clamped to what the validator allows.
+    var bannerWidth: CGFloat {
+        CGFloat(GridSolver.clampedWidth(grid.grid?.width ?? Double(BannerView.width)))
+    }
+
+    /// The template accent nudged until it is legible on the given appearance; nil when none is set.
+    func accent(dark: Bool) -> Color? {
+        accentColor.map { Color(nsColor: BannerView.legible($0, dark: dark)) }
+    }
+
+    /// An action was pressed: dismiss closes the banner, everything else goes to `onAction`.
+    func perform(_ action: HeraldAction, origin: HeraldActionOrigin) {
+        if action.kind == .dismiss { onClose() } else { onAction(action, origin) }
+    }
+
+    private func refresh() {
+        let n = item.notification
+        var g = BuiltinTemplates.gridTemplate(for: n)
+        if let t = template {
+            if t.usesGrid {
+                g = t
+            } else {
+                // A v1 template contributes its action rules and extra values to the built-in grid.
+                g.actionRules = t.actionRules; g.extra = t.extra; g.collapseEmpty = t.collapseEmpty
+            }
         }
+        grid = g
+
         layout = n.layout ?? .imageLeft
-        accentColor = Self.color(fromHex: n.accentColor)
+        accentColor = Self.color(fromHex: n.accentColor ?? g.accentColor)
         showSubtitle = n.showSubtitle ?? true
         showBody = n.showBody ?? true
         showTimestamp = n.showTimestamp ?? true
         // Clamped so a typo in a template ("0", "9999") can neither hide the body nor grow a banner without bound.
-        maxBodyLines = max(1, min(n.maxBodyLines ?? Self.defaultBodyLines, 30))
-    }
+        let templateLines = template?.usesGrid == true ? g.maxBodyLines : Self.defaultBodyLines
+        maxBodyLines = max(1, min(n.maxBodyLines ?? templateLines, 30))
 
-    /// Body with `[text](url)` Markdown links. Inline-only so a stray `#` or `-` is not turned into a
-    /// heading or list; whitespace (newlines) is preserved.
-    static func markdown(_ body: String?) -> AttributedString? {
-        guard let b = body, !b.isEmpty else { return nil }
-        let opts = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: b, options: opts)) ?? AttributedString(b)
+        fields = BannerData.fields(for: n, stored: item.fields, override: fieldsOverride, manifest: manifest,
+                                   extra: g.extra, deliveredAt: item.deliveredAt, hasPicture: image != nil)
+        actions = BannerData.actions(for: n, manifest: manifest, rules: g.actionRules)
     }
 
     /// `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA` (the leading `#` is optional). Garbage returns nil rather
@@ -157,41 +210,28 @@ private struct BannerSurface: View {
     }
 }
 
-/// The ONE banner renderer: live panels, the composer preview and history previews all draw this view.
-/// Layouts are variants of one view (shared text column, meta column and action row), not separate views.
+/// The ONE banner: live panels, the composer preview, history rows and the preview PNG all draw this view.
+/// It is the card (material, border, tint, height report) around `GridBannerView`, which lays out and draws
+/// the template's grid; a notification without a v2 template is drawn from the built-in grid for its layout.
 struct BannerView: View {
+    /// The width of the built-in templates. A v2 template sets its own (`BannerModel.bannerWidth`).
     static let width: CGFloat = 380
-    /// Hero images are 16:9 across the full card width.
-    static let heroImageHeight: CGFloat = width * 9 / 16
 
     @ObservedObject var model: BannerModel
     @Environment(\.colorScheme) private var scheme
-    /// Set by the link action so the row's tap gesture (open url + dismiss) can tell it was a link click.
-    @State private var linkClickedAt: Date = .distantPast
-
-    private var n: HeraldNotification { model.item.notification }
 
     /// A first guess for the panel height before SwiftUI has measured the real one, so the off-screen
     /// parked panel is already roughly the right size.
-    static func estimatedHeight(layout: HeraldLayout, hasImage: Bool) -> CGFloat {
-        switch layout {
-        case .compact: return 44
-        case .hero: return hasImage ? heroImageHeight + 90 : 90
-        case .imageLeft, .imageRight: return hasImage ? 96 : 80
-        }
+    @MainActor static func estimatedHeight(for model: BannerModel) -> CGFloat {
+        GridEstimator.height(for: model)
     }
 
     // MARK: Colours
 
-    /// The template accent, nudged until it is legible on the current appearance (a pale yellow on a light
-    /// card or a navy on a dark card would otherwise vanish). Returns nil when no accent is set.
-    private var accent: Color? {
-        guard let c = model.accentColor else { return nil }
-        return Color(nsColor: Self.legible(c, dark: scheme == .dark))
-    }
-
     /// Mixes `c` toward white (dark appearance) or black (light appearance) just far enough to reach a
-    /// minimum perceived lightness / maximum lightness. Colours that already read well are untouched.
+    /// minimum perceived lightness / maximum lightness. Colours that already read well are untouched. The
+    /// template accent goes through this, so a pale yellow on a light card or a navy on a dark card does not
+    /// vanish.
     static func legible(_ c: NSColor, dark: Bool) -> NSColor {
         guard let rgb = c.usingColorSpace(.sRGB) else { return c }
         let l = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
@@ -210,235 +250,38 @@ struct BannerView: View {
     // MARK: Body
 
     var body: some View {
-        card
-            .frame(width: Self.width, alignment: .topLeading)
+        VStack(spacing: 0) {
+            GridBannerView(model: model)
+            if let line = model.failureLine { FailureLine(text: line, inset: model.grid.grid?.padding ?? 14) }
+        }
+            .frame(width: model.bannerWidth, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
             .background(BannerSurface())
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
-            .tint(accent)
-            .environment(\.openURL, linkAction)
+            .tint(model.accent(dark: scheme == .dark))
             .background(GeometryReader { g in Color.clear.preference(key: BannerHeightKey.self, value: g.size.height) })
             .onPreferenceChange(BannerHeightKey.self) { model.onHeight($0) }
     }
+}
 
-    @ViewBuilder private var card: some View {
-        switch model.layout {
-        case .imageLeft, .imageRight: rowCard
-        case .hero: heroCard
-        case .compact: compactCard
+/// The strip under the grid that says an action failed.
+struct FailureLine: View {
+    let text: String
+    let inset: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.caption)
+            Text(text).font(.caption).lineLimit(2)
+            Spacer(minLength: 0)
         }
-    }
-
-    // MARK: Layouts
-
-    /// imageLeft (default, unchanged look) and imageRight: thumbnail beside the text.
-    private var rowCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
-                if model.layout == .imageLeft { thumbnail }
-                textColumn(titleSize: 13)
-                if model.layout == .imageRight { thumbnail }
-                metaColumn(includeClose: true)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { rowTapped() }
-
-            if hasActionRow { actionRow }
-        }
-        .padding(12)
-    }
-
-    /// hero: the image spans the full card width at 16:9 (no inset, the card's rounded clip trims the
-    /// corners), text below. Without an image it degrades to a text-only card with the close button
-    /// back in the meta column, since there is no image to float it over.
-    private var heroCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                if let img = model.image {
-                    ZStack(alignment: .topTrailing) {
-                        Image(nsImage: img)
-                            .resizable().scaledToFill()
-                            .frame(width: Self.width, height: Self.heroImageHeight)
-                            .clipped()
-                        closeButton(size: 20, floating: true).padding(8)
-                    }
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    textColumn(titleSize: 14)
-                    metaColumn(includeClose: model.image == nil)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, model.image == nil ? 12 : 10)
-                .padding(.bottom, hasActionRow ? 10 : 12)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { rowTapped() }
-
-            if hasActionRow { actionRow.padding(.horizontal, 12).padding(.bottom, 12) }
-        }
-    }
-
-    /// compact: one line (app icon, title, time, close). No image, subtitle or body by design; buttons,
-    /// when the notification has any, sit on a second row so they stay reachable.
-    private var compactCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(nsImage: model.icon)
-                    .resizable().frame(width: 18, height: 18)
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                    .help(model.appName)
-                Text(n.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(accent ?? Color.primary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if model.showTimestamp { timestamp }
-                closeButton(size: 16, floating: false)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture { rowTapped() }
-
-            if hasActionRow { actionRow }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-    }
-
-    // MARK: Pieces
-
-    @ViewBuilder private var thumbnail: some View {
-        if let img = model.image {
-            Image(nsImage: img)
-                .resizable().scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-    }
-
-    private func textColumn(titleSize: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(n.title)
-                .font(.system(size: titleSize, weight: .semibold))
-                .foregroundStyle(accent ?? Color.primary)
-                .lineLimit(2)
-            if model.showSubtitle, let s = n.subtitle, !s.isEmpty {
-                Text(s).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(2)
-            }
-            if model.showBody, let t = bodyText {
-                Text(t).font(.system(size: 12)).lineLimit(model.maxBodyLines)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 1)
-            }
-        }
+        .foregroundStyle(Color.red)
+        .padding(.horizontal, inset).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func metaColumn(includeClose: Bool) -> some View {
-        VStack(alignment: .trailing, spacing: 6) {
-            if includeClose { closeButton(size: 18, floating: false) }
-            Image(nsImage: model.icon)
-                .resizable().frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-                .help(model.appName)
-            if model.showTimestamp { timestamp }
-        }
-    }
-
-    private var timestamp: some View {
-        Text(model.item.deliveredAt, style: .time)
-            .font(.system(size: 10)).foregroundStyle(.secondary)
-    }
-
-    /// `floating` puts the glyph on a material disc so it stays visible over any hero image.
-    private func closeButton(size: CGFloat, floating: Bool) -> some View {
-        Button(action: model.onClose) {
-            Image(systemName: "xmark").font(.system(size: size > 18 ? 10 : 9, weight: .bold))
-                .foregroundStyle(floating ? Color.primary : Color.secondary)
-                .frame(width: size, height: size)
-                .background(Circle().fill(floating ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.primary.opacity(0.08))))
-        }
-        .buttonStyle(.plain)
-        .help("Dismiss")
-        .accessibilityLabel("Dismiss")
-    }
-
-    // MARK: Body text and links
-
-    /// Parsed once per body by the model (`BannerModel.bodyText`).
-    private var bodyText: AttributedString? { model.bodyText }
-
-    /// Body links open in the default browser, but only for web and mail schemes: a notification body
-    /// must not be able to launch an arbitrary `file:` or custom-scheme URL on a stray click. The click is
-    /// also recorded so the row's tap gesture does not additionally open the notification's own url and
-    /// dismiss the banner.
-    private var linkAction: OpenURLAction {
-        OpenURLAction { url in
-            guard LinkPolicy.isOpenable(url) else { return .discarded }
-            linkClickedAt = Date()
-            return .systemAction
-        }
-    }
-
-    /// The tap gesture and the link action can both fire for one click on a link, in either order. One
-    /// main-queue hop lets the link action run first, then a link click is ignored here.
-    private func rowTapped() {
-        DispatchQueue.main.async {
-            if Date().timeIntervalSince(linkClickedAt) < 0.5 { return }
-            model.onOpen()
-        }
-    }
-
-    // MARK: Actions
-
-    private var hasActionRow: Bool {
-        !(n.buttons ?? []).isEmpty || n.snooze == true || n.reminder != nil
-    }
-
-    /// A long label would run out of the card; the full text stays in the tooltip.
-    private static func shortLabel(_ label: String, limit: Int = 40) -> String {
-        label.count > limit ? String(label.prefix(limit - 1)) + "\u{2026}" : label
-    }
-
-    /// Buttons wrap as whole capsules onto further rows; the snooze menu stays pinned to the trailing edge.
-    private var actionRow: some View {
-        HStack(alignment: .top, spacing: 6) {
-            FlowLayout(spacing: 6, lineSpacing: 6) {
-                ForEach(Array((n.buttons ?? []).enumerated()), id: \.offset) { _, b in
-                    Button(Self.shortLabel(b.label)) { model.onButton(b) }
-                        .buttonStyle(BannerButtonStyle(kind: b.style ?? "default", accent: accent))
-                        .help(b.label)
-                }
-                if n.reminder != nil { reminderButton }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            if n.snooze == true {
-                Menu {
-                    ForEach(SnoozeOption.allCases, id: \.self) { o in
-                        Button(o.title) { model.onSnooze(o) }
-                    }
-                } label: {
-                    Text("\u{23F0}").font(.system(size: 13))
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("Snooze")
-            }
-        }
-    }
-
-    @ViewBuilder private var reminderButton: some View {
-        switch model.reminderState {
-        case .idle, .working:
-            Button("Add to Reminders") { model.onReminder() }.buttonStyle(BannerButtonStyle(kind: "cancel"))
-        case .added:
-            Text("Added to Reminders \u{2713}").font(.system(size: 11)).foregroundStyle(.secondary)
-                .lineLimit(1).fixedSize()
-        case .failed(let m):
-            Button("Reminders unavailable") { model.onReminder() }
-                .buttonStyle(BannerButtonStyle(kind: "destructive")).help(m)
-        }
+        .background(Color.red.opacity(0.10))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(text)
     }
 }
 

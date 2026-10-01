@@ -1,17 +1,26 @@
 import SwiftUI
 import AppKit
 
-/// Builds a `BannerModel` without a live panel, so the composer, the template editor and history can
-/// render the exact view real banners use. All callbacks stay no-ops (a preview must never dismiss,
-/// run a command or post a callback); pass an already template-RESOLVED notification, because the
-/// presentation fields are read straight from it.
+/// Builds a `BannerModel` without a live panel, so the composer, the designer, history and the preview PNG
+/// render the exact view real banners use. All callbacks stay no-ops (a preview must never dismiss, run a
+/// command or post a callback).
+///
+/// - `notification`: already template-RESOLVED when it came from a v1 template (the presentation fields are
+///   read straight from it); a v2 template needs no such step because it is passed in whole.
+/// - `template`: a v2 grid template to draw. nil (or a v1 template) draws the built-in grid for the
+///   notification's `layout`.
+/// - `fields`: data for the bindings, replacing the notification's own (designer samples, "last real
+///   notification"). nil binds the notification (`TemplateResolver.fields`).
+/// - `manifest`: gives the notification's buttons their declared action ids, so a template's rules match them.
 @MainActor
 enum BannerPreviewFactory {
     static func model(for notification: HeraldNotification, appName: String, icon: NSImage,
-                      image: NSImage?, deliveredAt: Date = Date()) -> BannerModel {
+                      image: NSImage?, deliveredAt: Date = Date(), template: HeraldTemplate? = nil,
+                      fields: [String: HeraldFieldValue]? = nil, manifest: HeraldManifest? = nil) -> BannerModel {
         let item = HeraldHistoryItem(id: notification.id ?? "preview", app: notification.app,
                                      notification: notification, deliveredAt: deliveredAt)
-        return BannerModel(item: item, appName: appName, icon: icon, image: image)
+        return BannerModel(item: item, appName: appName, icon: icon, image: image,
+                           template: template, manifest: manifest, fields: fields)
     }
 }
 
@@ -97,6 +106,34 @@ enum BannerSamples {
     }
 }
 
+extension BannerSamples {
+    /// A v2 template over the standard 3 x 4 grid: image, title across two columns, an issuer icon and a count
+    /// badge on the right, subtitle, body, and the action row.
+    nonisolated static func gridTemplate() -> HeraldTemplate {
+        let cells = [
+            HeraldCell(id: "image", row: 0, col: 0, rowSpan: 3, component: .image(HeraldImageComponent(binding: "{image}", fit: .cover, cornerRadius: 10, aspectRatio: 1))),
+            HeraldCell(id: "title", row: 0, col: 1, colSpan: 2, component: .text(HeraldTextComponent(binding: "{title}", style: .title, maxLines: 2))),
+            HeraldCell(id: "badge", row: 0, col: 3, align: .topTrailing, component: .badge(HeraldBadgeComponent(binding: "{count}"))),
+            HeraldCell(id: "subtitle", row: 1, col: 1, colSpan: 2, component: .text(HeraldTextComponent(binding: "{subtitle}", style: .subtitle, maxLines: 2))),
+            HeraldCell(id: "icon", row: 1, col: 3, align: .topTrailing, component: .issuerIcon(HeraldIssuerIconComponent(size: 22))),
+            HeraldCell(id: "body", row: 2, col: 1, colSpan: 2, component: .text(HeraldTextComponent(binding: "{body}", style: .body, maxLines: 3))),
+            HeraldCell(id: "time", row: 2, col: 3, align: .topTrailing, component: .timestamp(HeraldTimestampComponent())),
+            HeraldCell(id: "actions", row: 3, col: 0, colSpan: 4, component: .actions(HeraldActionsComponent(source: .merged, layout: .row, maxVisible: 3))),
+        ]
+        let grid = HeraldGrid(rows: 4, cols: 4, rowSizes: [.auto, .auto, .auto, .auto],
+                              colSizes: [.points(72), .fill, .fill, .auto], gap: 8, padding: 14, width: 400)
+        return HeraldTemplate(name: "sample", app: "bidbot", grid: grid, cells: cells)
+    }
+
+    static func gridModel(template: HeraldTemplate = gridTemplate(), withImage: Bool = true,
+                          fields: [String: HeraldFieldValue]? = nil) -> BannerModel {
+        var n = notification(layout: .imageLeft)
+        n.metadata = .object(["count": .number(3)])
+        return BannerPreviewFactory.model(for: n, appName: "BidBot", icon: icon(), image: withImage ? image() : nil,
+                                          template: template, fields: fields)
+    }
+}
+
 struct BannerView_Previews: PreviewProvider {
     static var previews: some View {
         ForEach(HeraldLayout.allCases, id: \.self) { layout in
@@ -112,5 +149,9 @@ struct BannerView_Previews: PreviewProvider {
             .previewDisplayName("pale accent on light")
         BannerPreviewView(model: BannerSamples.model(layout: .imageLeft, accent: "#101A4A"), scheme: .dark)
             .previewDisplayName("dark accent on dark")
+        BannerPreviewView(model: BannerSamples.gridModel(), scheme: .light).previewDisplayName("grid light")
+        BannerPreviewView(model: BannerSamples.gridModel(), scheme: .dark).previewDisplayName("grid dark")
+        BannerPreviewView(model: BannerSamples.gridModel(withImage: false), scheme: .light)
+            .previewDisplayName("grid without image")
     }
 }

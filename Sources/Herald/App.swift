@@ -71,10 +71,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
         menu.addItem(item("Compose\u{2026}", #selector(openComposer), "n"))
+        menu.addItem(item("Design Template\u{2026}", #selector(openDesigner), "d"))
         menu.addItem(item("History\u{2026}", #selector(openHistory), "h"))
         let mute = item("Mute Sounds", #selector(toggleMute), "m")
         mute.state = controller.muted ? .on : .off
         menu.addItem(mute)
+        // Quiet hours (DESIGN section 7.9.1)
+        let quiet = QuietHoursCoordinator.shared.status()
+        if quiet.active, let until = quiet.until {
+            let t = until.formatted(date: .omitted, time: .shortened)
+            let label = menu.addItem(withTitle: "Quiet until \(t)", action: nil, keyEquivalent: "")
+            label.isEnabled = false
+            menu.addItem(item("Resume Now", #selector(resumeQuiet), ""))
+        } else {
+            menu.addItem(item("Quiet for 1 Hour", #selector(quietOneHour), ""))
+        }
         menu.addItem(item("Dismiss All", #selector(dismissAll), ""))
         menu.addItem(.separator())
         menu.addItem(item("Settings\u{2026}", #selector(openSettings), ","))
@@ -88,12 +99,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleMute() { controller.muted.toggle() }
+    @objc private func quietOneHour() { QuietHoursCoordinator.shared.quietFor(minutes: 60) }
+    @objc private func resumeQuiet() { QuietHoursCoordinator.shared.resumeNow() }
     @objc private func dismissAll() { controller.dismissAll(app: nil) }
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc func openComposer() {
         composerWindow = present(composerWindow, title: "Compose Notification", size: NSSize(width: 900, height: 620),
                                  content: ComposerView(controller: controller))
+    }
+
+    @objc func openDesigner() {
+        DesignerWindow.show(controller: controller)
     }
 
     @objc func openHistory() {
