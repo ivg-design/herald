@@ -40,6 +40,7 @@ struct GeneralSettingsView: View {
                 Toggle("Launch at login", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 }))
                 Toggle("Mute all sounds", isOn: $settings.muted)
             } header: { Text("General") }
+            HistoryCapSettingsView(history: controller.history)
         }
         .formStyle(.grouped)
         .onAppear { portText = String(settings.effectivePort) }
@@ -134,14 +135,8 @@ struct AppDetail: View {
                     TextField("", value: Binding(get: { d.timeout ?? 0 }, set: { v in editDefaults { $0.timeout = max(0, v) } }),
                               format: .number).frame(width: 60)
                 }
-                Picker("Screen corner", selection: Binding(
-                    get: { d.corner ?? .topRight }, set: { v in editDefaults { $0.corner = v } })) {
-                    Text("Top right").tag(HeraldCorner.topRight)
-                    Text("Top left").tag(HeraldCorner.topLeft)
-                    Text("Bottom right").tag(HeraldCorner.bottomRight)
-                    Text("Bottom left").tag(HeraldCorner.bottomLeft)
-                }
             } header: { Text("Defaults") }
+            AppDisplaySettingsView(controller: controller, app: app)
             Section {
                 Button("Templates\u{2026}") { TemplateEditorWindow.show(controller: controller, app: app) }
             } header: { Text("Templates") } footer: {

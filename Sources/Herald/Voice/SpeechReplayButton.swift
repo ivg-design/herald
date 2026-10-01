@@ -69,26 +69,3 @@ struct BannerReplayStrip: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-
-/// Tells its parent whether it sits inside a live banner panel. History rows, the composer and the designer
-/// draw the same `BannerView`, but only a live banner gets the replay control (History has its own).
-struct LiveBannerProbe: NSViewRepresentable {
-    @Binding var isLive: Bool
-
-    func makeNSView(context: Context) -> ProbeView {
-        let v = ProbeView()
-        v.report = { live in if isLive != live { isLive = live } }
-        return v
-    }
-
-    func updateNSView(_ nsView: ProbeView, context: Context) {}
-
-    final class ProbeView: NSView {
-        var report: (Bool) -> Void = { _ in }
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            let live = window is BannerPanel
-            DispatchQueue.main.async { [weak self] in self?.report(live) }
-        }
-    }
-}

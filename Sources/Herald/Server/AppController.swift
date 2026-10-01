@@ -54,7 +54,7 @@ final class AppController {
     private(set) var serverRunning = false
 
     private init() {
-        history = HistoryStore(directory: supportDirectory.appendingPathComponent("history", isDirectory: true))
+        history = HistoryStore(directory: supportDirectory.appendingPathComponent("history", isDirectory: true), cap: HistoryCapSetting.value)
         templates = TemplateStore(directory: supportDirectory.appendingPathComponent("templates", isDirectory: true))
         manifests = ManifestStore(directory: supportDirectory.appendingPathComponent("manifests", isDirectory: true))
         registry = AppRegistry(file: supportDirectory.appendingPathComponent("apps.json"))

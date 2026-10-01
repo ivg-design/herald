@@ -2,10 +2,6 @@ import SwiftUI
 import AppKit
 
 // Per-app banner placement and mute (issue #28), for Settings > Apps.
-//
-// TODO(integrator): host `AppDisplaySettingsView(controller: controller, app: app)` as a Section in `AppDetail`
-// (Settings/SettingsView.swift) and drop that pane's own "Screen corner" picker, which edits the corner the app
-// registered (`defaults.corner`) rather than the user's choice (`AppRecord.corner`) this view edits.
 
 /// Display, screen corner and banner mute of one app. Changes are written to the app registry and announced with
 /// `controller.changed()`, which makes `BannerCenter` move the banners that are up and apply the mute.

@@ -138,7 +138,7 @@ final class BannerCenter {
         model.onSnooze = { [weak self] o in self?.controller.userSnoozed(app: item.app, id: item.id, option: o) }
         model.onReminder = { [weak self] in self?.controller.userAddedReminder(app: item.app, id: item.id) }
 
-        let host = BannerHostingView(rootView: BannerView(model: model))
+        let host = BannerHostingView(rootView: BannerView(model: model, isLive: true))
         let panel = BannerPanel(contentRect: NSRect(x: 0, y: 0, width: model.bannerWidth, height: 80),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isFloatingPanel = true

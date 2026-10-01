@@ -2,9 +2,6 @@ import SwiftUI
 
 /// How many notifications History keeps per app (issue #26). The store enforces it (`HistoryStore.capPerApp`);
 /// this is the preference behind it.
-///
-/// TODO(integrator): host `HistoryCapSettingsView(history: controller.history)` as a Section in SettingsView,
-/// and create the store in AppController with `HistoryStore(directory: ..., cap: HistoryCapSetting.value)`.
 enum HistoryCapSetting {
     static let key = "historyCapPerApp"
     static let choices = [100, 250, 500, 1000, 2500, 5000, 10_000]

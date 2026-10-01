@@ -236,9 +236,10 @@ struct BannerView: View {
 
     @ObservedObject var model: BannerModel
     @Environment(\.colorScheme) private var scheme
-    /// Set by `LiveBannerProbe` when this card is in a live banner panel (History rows, the composer and the
-    /// designer draw the same view without the replay control).
-    @State private var inLivePanel = false
+    /// True only for the card `BannerCenter` puts in a live banner panel (History rows, the composer, the designer
+    /// and offscreen previews draw the same view without the replay control). A plain value rather than an AppKit
+    /// probe view: an NSViewRepresentable renders as ImageRenderer's yellow "no entry" placeholder in /v1/preview.
+    var isLive = false
 
     /// A first guess for the panel height before SwiftUI has measured the real one, so the off-screen
     /// parked panel is already roughly the right size.
@@ -271,7 +272,7 @@ struct BannerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            GridBannerView(model: model, showsReplay: inLivePanel)
+            GridBannerView(model: model, showsReplay: isLive)
             if let line = model.failureLine { FailureLine(text: line, inset: model.grid.grid?.padding ?? 14) }
         }
             .frame(width: model.bannerWidth, alignment: .topLeading)
@@ -280,7 +281,6 @@ struct BannerView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
             .tint(model.accent(dark: scheme == .dark))
-            .background(LiveBannerProbe(isLive: $inLivePanel))
             .background(GeometryReader { g in Color.clear.preference(key: BannerHeightKey.self, value: g.size.height) })
             .onPreferenceChange(BannerHeightKey.self) { model.onHeight($0) }
     }
