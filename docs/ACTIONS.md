@@ -1,5 +1,11 @@
 # Two-way actions
 
+> **Changed in 1.4.** New action kind `openApp` (brings an app to the front; no confirmation). Button `style` is
+> now `normal`, `prominent`, `destructive` or `cancel`, and a destructive action asks inline before it runs,
+> whether it came from a template or from the issuer. The `actions` component can split the list with `include`
+> and an action is drawn in one cell only; `button` accepts `actionId` as an alias of `actionRef`. A template can
+> make the banner click open the issuing app with `onClick: "openApp"`.
+
 A button on a banner can run something the **issuer** supplied (a callback to the sending app, a URL, a
 command) or something **you** added in the template (a shell command, a script, an Apple Shortcut), or
 both. Herald merges the two lists, lets template rules rewrite the result, and hands every action the
@@ -16,9 +22,10 @@ merged payload.
 |---|---|
 | `id` | Stable id; rules and `actionRef` match on it. Derived from the label when omitted. |
 | `label` | Button text. |
-| `kind` | `url`, `callback`, `command`, `script`, `shortcut`, `dismiss`, `snooze`. |
-| `style` | `default`, `destructive`, `cancel`. |
+| `kind` | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `dismiss`, `snooze`. May be left out when one of `shortcut`, `script`, `command`, `callback`, `url`, `bundleId` / `path` is present. |
+| `style` | `normal`, `prominent`, `destructive` (red, asks before running), `cancel`; `default` means `normal`. |
 | `url` / `callback` / `command` / `script` / `shortcut` | The one property that belongs to the kind. |
+| `bundleId` / `path` | For `openApp`: the app's bundle id, or its path (ends in `.app`, `~` expanded). Both optional. |
 | `input` | For `shortcut`: text with bindings. Absent means the full JSON payload. |
 | `snoozeMinutes` | For `snooze` (default 15). |
 
@@ -37,7 +44,32 @@ v1 buttons (`label` plus one of `url`, `command`, `callback`) are still accepted
   with the merged payload JSON on stdin. The file must be executable.
 - `shortcut`: runs `/usr/bin/shortcuts run "<name>" --input-path <file>`. With `input` set, the file holds
   that text with bindings filled in; without it, the file holds the full merged payload as JSON.
+- `openApp`: brings an application to the front, see [Open app](#open-app).
 - `dismiss`, `snooze`: built in.
+
+## Open app
+
+`openApp` runs no code, so it needs no confirmation, from an issuer or a template. Herald itself stays in the
+background. The application is the first of these that exists on this Mac:
+
+1. the action's `bundleId`;
+2. the action's `path`;
+3. the manifest's `appBundleId`;
+4. the manifest's `appPath`;
+5. the bundle id the issuer registered with;
+6. the app named like the manifest's `appName` (`<appName>.app` in the Applications folders).
+
+With neither `bundleId` nor `path` an `openApp` action opens the issuing app. If nothing resolves, nothing
+happens: the banner stays, shows "Action failed - no installed application found", and History keeps the
+note "<label>: no installed application found" (`actionNote`). `validate_template` reports it as a warning,
+not an error, since the template may be written for another Mac.
+
+| Where | Form |
+|---|---|
+| Template rule | `{"add":{"id":"open-ww","label":"Open WebWatcher","kind":"openApp"}}` |
+| Manifest action (issuer) | `{"id":"open","label":"Open WebWatcher","kind":"openApp"}`, optional `bundleId` / `path`; the manifest also takes `appBundleId` and `appPath` |
+| Payload button (issuer) | `{"label":"Open","openApp":{"bundleId":"com.apple.mail"}}` |
+| Banner click | template option `"onClick": "openApp"` (default `"url"`) |
 
 ## Merging: issuer plus template
 
@@ -61,12 +93,29 @@ declared action, and says so; a preview of real data shows only what that data s
 |---|---|
 | `match` | Selects issuer or template actions by id or label (case-insensitive); `"*"` selects all. |
 | `hide: true` | Removes the matched actions. |
-| `relabel`, `style`, `position` | Change the label, style or 0-based position of the matched actions. |
+| `relabel`, `style`, `position` | Change the label, style (`normal`, `prominent`, `destructive`, `cancel`) or 0-based position of the matched actions. |
 | `add` | Appends a new template-owned action (at `position` if given). Same id replaces. |
 
-An `actions` component with `source: "issuer"`, `"template"` or `"merged"` decides which origin it shows;
-a `button` or `iconButton` points at one action by `actionRef`. Template rules also apply to buttons
+An `actions` component with `source: "issuer"`, `"template"` or `"merged"` decides which origin it shows
+(`include` narrows it to named ids, and `align`, `wrap` and `spacing` arrange the buttons); a `button` or
+`iconButton` points at one action by `actionRef` (a `button` also accepts `actionId`, the same thing). Template rules also apply to buttons
 sent with the notification, so you can relabel an issuer's button without touching the issuer.
+
+## One action, one cell
+
+An action is drawn in at most one cell of a template. Cells are visited top to bottom, left to right: a `button`
+bound by `actionRef` / `actionId` claims its action, an `actions` cell with `include` claims those ids in that
+order, and an `actions` cell without `include` shows what nobody claimed. When two cells ask for the same
+action the first in reading order draws it and the other renders empty (validation warns, naming both). That
+is how one action list is split across a banner; see [TEMPLATES.md](TEMPLATES.md#one-action-one-cell).
+
+## Destructive actions
+
+An action whose effective style is `destructive` (set by the issuer, the manifest, a rule or the button) is drawn
+with a red label and asks first: pressing it replaces the buttons with an inline "Run "Delete"?" row and Cancel,
+every time. It applies to template buttons and issuer actions alike, and comes before any approval the kind
+itself needs (a command's permission, a template's confirmation). The question is drawn in the banner and never
+takes focus. Old templates with `"destructive": true` on a button still work.
 
 ## Symbols on actions
 
@@ -91,7 +140,7 @@ again when either changes. It only runs when you press the button. Text input go
 
 ## Security
 
-- Nothing runs on delivery. Actions run only when you press the button.
+- Nothing runs on delivery. Actions run only when you press the button. `openApp`, `url`, `dismiss` and `snooze` run no code and need no confirmation (`openApp` only activates an app; a `destructive` style still asks first).
 - **Issuer commands** (`command` buttons sent in a notify) need `allowCommands` requested by the app and
   confirmed in Settings > Apps, as in 1.0.
 - **Template-authored commands, scripts and shortcuts** (rule `add`s, inline component actions and a

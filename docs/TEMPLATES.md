@@ -1,5 +1,13 @@
 # Grid templates (layoutVersion 2)
 
+> **Changed in 1.4.** The `actions` component takes `include`, `align`, `wrap` and `spacing`, and an action is
+> drawn in one cell only (first cell in reading order wins). `button` accepts `actionId` as another spelling of
+> `actionRef` and a `style` of `normal`, `prominent`, `destructive` or `cancel`; a destructive button is red
+> and asks inline before it runs. A template can set `onClick: "openApp"` so a click on the banner brings the
+> issuing app to the front. The `image` component has a Source choice (issuer image, fixed image, another image
+> field), and the Designer files every token under where its value comes from. See "One action, one cell",
+> "Button style", "Image source" and "Where a token comes from" below.
+
 A v2 template lays a notification out on a grid of cells. Each cell holds one component. Issuer data
 reaches components through `{token}` bindings. The same `GridBannerView` draws live banners, the
 Designer canvas, history previews and `POST /v1/preview`, so a preview is what you get on screen.
@@ -31,6 +39,7 @@ Templates live at `~/Library/Application Support/Herald/templates/<app>/<name>.j
 | `collapseEmpty` | Template default for empty components, rows and columns. Default `true`. |
 | `actionRules` | Rules over the issuer's actions, see [ACTIONS.md](ACTIONS.md). |
 | `extra` | Key/values you author. They are merged into the payload every action receives. |
+| `onClick` | What a click on the banner body does: `url` (default) opens the notification's link, `openApp` brings the issuing app to the front (see [ACTIONS.md](ACTIONS.md#open-app)). |
 | `title`, `body`, `url`, ... | v1 defaults still apply: the payload overrides them. |
 
 ## Grid
@@ -58,6 +67,19 @@ from the notification's top-level keys first, then from `metadata`; manifest `sa
 the Designer. Unknown tokens render as nothing. A component whose every bound token is absent is
 **empty**.
 
+### Where a token comes from
+
+The Designer's pickers file every token under one of three provenances, and the sample beside it is what a
+preview fills it with:
+
+| Group in the picker | Provenance | Meaning |
+|---|---|---|
+| From the issuer app (manifest field) | the issuer | A field the issuer's manifest declares (`sender`, `thumbnail`). The issuer promises to send it, with a type and a sample. |
+| From the notification (payload field) | the notification | A standard key (`title`, `body`, `image`, `deliveredAt`, `stack.count`...) or any other key a real notification carried or you typed as a custom token. Nobody promises it: it is absent when the notification does not send it. |
+| Set here (fixed value) | the template | An `extra.<key>` value you wrote in the template. The same for every notification. |
+
+See [reference/bindings.md](reference/bindings.md#three-provenances).
+
 ## Collapse semantics
 
 Empty fields can either collapse or keep their place. It is your choice, at two levels:
@@ -83,11 +105,11 @@ Every component accepts `emptyBehavior`. All other properties are optional unles
 | `type` | Properties |
 |---|---|
 | `text` | `binding` (required), `style` (`title`, `subtitle`, `body`, `caption`, `mono`), `maxLines`, `color` (hex), `fontSize`, `weight` (`regular`, `medium`, `semibold`, `bold`), `alignment` (`leading`, `center`, `trailing`), `markdown` (default true for `body`) |
-| `image` | `binding`, `fit` (`fit`, `fill`, `cover`), `cornerRadius`, `aspectRatio`, `height` |
+| `image` | `binding` (an issuer `{image}`, a fixed file path or another image field, see "Image source"), `fit` (`fit`, `fill`, `cover`), `cornerRadius`, `aspectRatio`, `height` |
 | `issuerIcon` | `size` (default 22), `shape` (`circle`, `rounded`), `cornerRadius` |
 | `timestamp` | `binding` (default: delivery time), `relative` (true: "2 min ago"), `style`, `color`, `fontSize` |
-| `button` | `action` (inline action) or `actionRef` (id of an issuer or rule action), `style` |
-| `actions` | `source` (`issuer`, `template`, `merged`), `layout` (`row`, `wrap`, `stack`), `maxVisible` |
+| `button` | `action` (inline action) or `actionRef` / `actionId` (id of an issuer or rule action; the two names are the same), `style` (`normal`, `prominent`, `destructive`, `cancel`) |
+| `actions` | `source` (`issuer`, `template`, `merged`), `layout` (`row`, `wrap`, `stack`), `maxVisible`, `include` (ordered action ids), `align` (`leading`, `center`, `trailing`, `spaceBetween`), `wrap` (true/false), `spacing` (0-64, default 6) |
 | `iconButton` | `symbol` (SF Symbol name), `action` or `actionRef`, `size`, `color`, `tooltip` |
 | `badge` | `binding`, `color`, `textColor` |
 | `progress` | `binding` (0 to 1 or 0 to 100), `color`, `height` |
@@ -95,6 +117,61 @@ Every component accepts `emptyBehavior`. All other properties are optional unles
 | `spacer` | none |
 
 `GET /v1/components` returns the same list as a machine-readable schema, with defaults.
+
+### One action, one cell
+
+An action is drawn in at most one cell, so a single list can be split across the banner. Cells are visited top
+to bottom, left to right:
+
+1. A `button` bound to an action id (`actionRef` or `actionId`) claims that action.
+2. An `actions` cell with `include` claims those ids, in that order.
+3. An `actions` cell without `include` shows every action of its `source` that nobody claimed.
+
+When two cells ask for the same action, the first in reading order draws it and the other shows nothing for it
+(a `button` collapses like an absent action). `validate_template` warns and names both cells. `include` ids that
+no action has show nothing (a warning when a manifest is given). `align` places the buttons across the cell
+(`spaceBetween`: first at the leading edge, last at the trailing edge, the rest spread evenly); the snooze clock
+stays on the trailing edge. `wrap: true` flows onto more lines, `wrap: false` keeps one line with "+N" for the
+rest; absent, `layout: wrap` flows and `row` does not (`stack` is always one per line).
+
+```json
+{"name":"email-split","app":"webwatcher.email","layoutVersion":2,"collapseEmpty":true,
+ "grid":{"rows":4,"cols":4,"rowSizes":["auto","auto","auto","auto"],"colSizes":["104","fill","fill","fill"],"gap":8,"padding":14,"width":400},
+ "cells":[
+  {"id":"icon","row":0,"col":0,"rowSpan":3,"component":{"type":"issuerIcon","size":56,"shape":"rounded"}},
+  {"id":"title","row":0,"col":1,"colSpan":3,"component":{"type":"text","binding":"{title}","style":"title","maxLines":1}},
+  {"id":"sender","row":1,"col":1,"colSpan":3,"component":{"type":"text","binding":"{sender}","style":"subtitle","maxLines":1}},
+  {"id":"subject","row":2,"col":1,"colSpan":3,"component":{"type":"text","binding":"{subject}","style":"caption","maxLines":1}},
+  {"id":"read","row":3,"col":0,"component":{"type":"button","actionId":"markRead"}},
+  {"id":"more","row":3,"col":1,"colSpan":3,"component":{"type":"actions","include":["archive","delete","spam"],"align":"trailing","wrap":false}}]}
+```
+
+### Button style
+
+| `style` | Look | Behaviour |
+|---|---|---|
+| `normal` (also `default`) | accent-tinted capsule | runs when pressed |
+| `prominent` | solid accent capsule, white label | runs when pressed |
+| `destructive` | red label on a red-tinted, outlined capsule | asks first: an inline row "Run "Delete"?" with Cancel replaces the buttons, nothing runs until you answer |
+| `cancel` | quiet grey capsule | runs when pressed |
+
+The old `"destructive": true` on a button still decodes (as `"style": "destructive"`). The confirmation applies
+to any action whose effective style is `destructive`, wherever it was set (the button, an issuer's manifest, an
+`actionRules` entry), and it comes before any approval the action's kind needs. It is drawn inside the banner
+and never takes focus. `style` on a button overrides the action's own.
+
+### Image source
+
+In the Designer the image component's Source control writes the `binding`:
+
+| Choice | Binding | Meaning |
+|---|---|---|
+| From issuer `{image}` | `"{image}"` | The picture the sending app attached. |
+| Fixed image | a file path | A picture you pick, the same for every notification. Herald copies it to `~/Library/Application Support/Herald/template-images/<app>/` (named by a short content hash, so the same file twice is one copy). |
+| Field | `"{key}"` | Another `image` field the manifest declares (`{thumbnail}`). |
+
+A fixed path is never empty while the file exists. **Bundles do not yet carry fixed images**: exporting a
+template to a bundle leaves the path pointing at this Mac, so re-pick the image after importing elsewhere.
 
 ### Rive
 
@@ -118,7 +195,7 @@ with the error and never crashes the banner.
 | `variableValue` | 0-1, or a `{token}` bound to a numeric field (for symbols such as `wifi` or `speaker.wave.3`) |
 | `effect` | `{kind, trigger?, speed?, cumulative?, reversing?}` (macOS 14+) |
 
-Effects: `kind` is `bounce`, `pulse`, `variableColor` (with `cumulative` / `reversing`), `scale`, `appear`, `disappear` or `replace`; `trigger` is `onAppear` (default), `onChange` (when a bound token changes), `onHover` or `repeating`; `speed` is 0.25-4. Effects run only in live banners and the Designer's live preview, never in `render_preview` / `/v1/preview` (those show weight, scale, mode, colours and the variable value), never on macOS 13, and never when Reduce Motion is on.
+Effects (the `effect` key): `kind` is `bounce`, `pulse`, `variableColor` (with `cumulative` / `reversing`), `scale`, `appear`, `disappear` or `replace`; `trigger` is `onAppear` (default), `onChange` (when a bound token changes), `onHover` or `repeating`; `speed` is 0.25-4. Effects run only in live banners and the Designer's live preview, never in `render_preview` / `/v1/preview` (those show weight, scale, mode, colours and the variable value), never on macOS 13, and never when Reduce Motion is on. Validation warns, without failing, on out-of-range `variableValue` or `speed` (both are clamped), more than 3 `colors`, `palette` without colours, `cumulative` / `reversing` on anything but `variableColor`, `appear` / `disappear` with `repeating`, and `replace` with a trigger other than `onChange`.
 
 Plain name:
 
