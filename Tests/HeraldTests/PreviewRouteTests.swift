@@ -247,6 +247,26 @@ final class PreviewRouteTests: XCTestCase {
         XCTAssertEqual(backend.requests.last?.scale, 1)
     }
 
+    /// `Int(Double)` traps outside the Int range: a huge `stackCount` must be a 400, never a crash.
+    func testHugeStackCountIsA400NotACrash() async {
+        for huge in ["1e300", "-1e300", "1e19", "1e20", "9.3e18", "0", "100", "1.5"] {
+            let posted = await post(#"{"app":"a","stackCount":"# + huge + "}")
+            XCTAssertEqual(posted.status, 400, "POST \(huge)")
+            XCTAssertTrue(message(posted).contains("stackCount"), message(posted))
+            let get = await router.handle(req("GET", query: ["app": "a", "stackCount": huge]))
+            XCTAssertEqual(get.status, 400, "GET \(huge)")
+            XCTAssertTrue(message(get).contains("stackCount"), message(get))
+            let quoted = await post(#"{"app":"a","stackCount":""# + huge + #""}"#)
+            XCTAssertEqual(quoted.status, 400, "POST string \(huge)")
+        }
+        XCTAssertTrue(backend.requests.isEmpty)
+        for ok in ["1", "99"] {
+            let posted = await post(#"{"app":"a","stackCount":"# + ok + "}")
+            XCTAssertEqual(posted.status, 200, ok)
+        }
+        XCTAssertEqual(backend.requests.map(\.stackCount), [1, 99])
+    }
+
     func testOtherMethodsAreNotAllowed() async {
         for m in ["PUT", "DELETE", "PATCH"] {
             let r = await router.handle(req(m, body: "{}"))

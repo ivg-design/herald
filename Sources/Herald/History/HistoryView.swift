@@ -24,6 +24,8 @@ struct HistoryView: View {
     @State private var search = ""
     @State private var picked = Set<HistoryKey>()
     @State private var confirmClearApp: String?
+    /// Groups (`HistoryGrouping`) the user has opened; the rest show one row.
+    @State private var openGroups = Set<String>()
     @FocusState private var searchFocused: Bool
 
     private static let allApps = "__all__"
@@ -105,19 +107,63 @@ struct HistoryView: View {
                 emptyState
             } else {
                 List(selection: $picked) {
-                    ForEach(shown) { item in
-                        HistoryRow(item: item, appName: displayName(item.app),
-                                   icon: AppIcons.icon(for: controller.registry.record(for: item.app), app: item.app))
-                            .tag(HistoryKey(item))
-                            // simultaneous so the click still selects the row while also opening its url.
-                            .simultaneousGesture(TapGesture().onEnded { open(item) })
-                            .contextMenu { menu(for: item) }
+                    // Notifications of one app that share a `group` (DESIGN section 9) fold under one disclosure row.
+                    ForEach(HistoryGrouping.rows(shown)) { row in
+                        switch row {
+                        case .item(let item):
+                            historyRow(item)
+                        case .group(let g):
+                            groupHeader(g)
+                            if openGroups.contains(g.id) {
+                                ForEach(g.items) { item in historyRow(item).padding(.leading, 20) }
+                            }
+                        }
                     }
                 }
                 // Backspace / forward-delete on the selection (macOS "Delete" key).
                 .onDeleteCommand { delete(picked.isEmpty ? [] : shown.filter { picked.contains(HistoryKey($0)) }) }
             }
         }
+    }
+
+    private func historyRow(_ item: HeraldHistoryItem) -> some View {
+        HistoryRow(item: item, appName: displayName(item.app),
+                   icon: AppIcons.icon(for: controller.registry.record(for: item.app), app: item.app))
+            .tag(HistoryKey(item))
+            // simultaneous so the click still selects the row while also opening its url.
+            .simultaneousGesture(TapGesture().onEnded { open(item) })
+            .contextMenu { menu(for: item) }
+    }
+
+    /// The row of a group: its name, how many notifications it holds and how many are not dismissed. A click opens it.
+    private func groupHeader(_ g: HistoryGrouping.Group) -> some View {
+        let isOpen = openGroups.contains(g.id)
+        return HStack(spacing: 8) {
+            Image(systemName: isOpen ? "chevron.down" : "chevron.right")
+                .font(.caption.weight(.bold)).foregroundStyle(.secondary).frame(width: 12)
+            Image(nsImage: AppIcons.icon(for: controller.registry.record(for: g.app), app: g.app))
+                .resizable().frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(g.group).font(.headline).lineLimit(1)
+                Text("\(displayName(g.app)) \u{00B7} \(g.items.count) notifications" + (g.unread > 0 ? " \u{00B7} \(g.unread) not dismissed" : ""))
+                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 4)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { if isOpen { openGroups.remove(g.id) } else { openGroups.insert(g.id) } }
+        .contextMenu {
+            if g.unread > 0 {
+                Button("Dismiss \(g.unread) Not Dismissed") {
+                    for t in g.items where t.dismissedAt == nil { controller.dismissItem(app: t.app, id: t.id, action: nil, notify: false) }
+                    controller.changed()
+                }
+            }
+            Button("Delete Group", role: .destructive) { delete(g.items) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(g.group), \(g.items.count) notifications, \(isOpen ? "expanded" : "collapsed")")
     }
 
     private func searchBar(count: Int) -> some View {

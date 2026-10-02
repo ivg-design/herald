@@ -74,8 +74,9 @@ final class ReminderService {
         default: break
         }
         if hasFullAccess(status) { return }
-        // Herald is a menu bar app with no windows; without this the permission prompt can open behind others.
-        NSApp.activate(ignoringOtherApps: true)
+        // No NSApp.activate here (DESIGN 8): this runs from a banner button or the HTTP API, and activating Herald
+        // would take the keyboard from the app the user is typing in. The one-time Reminders permission prompt is
+        // a system (tccd) dialog, which macOS puts in front on its own.
         let granted: Bool
         if #available(macOS 14.0, *) {
             granted = try await store.requestFullAccessToReminders()

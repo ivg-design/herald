@@ -19,7 +19,10 @@ AUTH="Authorization: Bearer $(cat "$D/token")"
 | POST | `/v1/register` | Register or update an app. |
 | POST | `/v1/notify` | Show a notification. Resolves `template` first. |
 | POST | `/v1/dismiss` | `{"app","id"}` dismiss one banner. |
-| POST | `/v1/dismissAll` | `{"app"}` dismiss every banner of the app (all apps if omitted). |
+| POST | `/v1/dismissAll` | `{"app"}` dismiss every banner of the app (all apps if omitted); `{"app","group"}` only those sent with that `group` (a stack). |
+| GET | `/v1/stacks?app=` | `{"stacks":[...]}` the stacks of banners on screen: level, app, group, count, expanded, members newest first (1.2). |
+| POST | `/v1/stacks/expand` | `{"app","group","expanded":true}` open or close a stack in place, as its badge and Collapse button do (1.2). |
+| GET, PUT | `/v1/settings/stacking` | The global stacking default (the bell menu's choice). `PUT {"level":"bySender"}`, where level is `byApp`, `byIssuer`, `bySender` or `never`; both reply `{"level","levels"}`. Live banners regroup at once. An issuer's own setting still wins (1.2). |
 | POST | `/v1/snooze` | `{"app","id","minutes"}` snooze a banner. `{"ok":true,"until":"<ISO 8601>"}` |
 | POST | `/v1/unsnooze` | `{"app","id"}` bring a snoozed banner back now (silently). |
 | POST | `/v1/compose` | Open the Composer window (`herald compose`). |
@@ -107,6 +110,23 @@ happened: Herald then dismisses the banner. Any other status keeps the banner an
 The URL must be on this Mac (`127.0.0.1`, `::1`, `localhost`) unless the user approved its host (an alert
 the first time a button is pressed, or the toggle in Settings > Apps). Redirects are not followed.
 
+### Stacking (1.2)
+
+Banners that share a key fold into one stacked banner: the newest notification on top, a count badge and the edges of the
+cards behind it. Clicking the badge opens the stack in place as a scrollable list (newest first, six rows before it scrolls)
+with Collapse and Dismiss all; a member dismissed from the list leaves the stack, the card's close button dismisses the
+group, and snoozing the card snoozes the group and brings it back as a stack. Nothing here takes focus from the app you are in.
+
+The key follows the stacking level, a global default (`bySender`, switched from the bell menu) with a per-issuer override
+(Settings > Apps): `byApp` (the manifest's `family`, else the issuer id before its first dot), `byIssuer` (the issuer id),
+`bySender` (the notification's `group`; the issuer id when it sends none) or `never`. A notification sent again under
+the same `id` updates its card and never raises the count.
+
+`group` is a top-level notification key (`"group":"rive.app"`, `herald notify --group`). Templates read the count as
+`{stack.count}` (absent, so empty, below 2) or with a `stackBadge` component; a template without one gets the badge at the
+top right. `POST /v1/preview` takes `stackCount` (1 to 99) to draw a banner as a stack's top card and `stackExpanded` for
+the open list. `GET /v1/stacks` also reports each stack panel's `frame` in screen points.
+
 ### POST /v1/snooze and /v1/unsnooze
 
 `{"app":"bidbot","id":"bid-42","minutes":15}` hides the banner and shows it again (same id) after
@@ -174,6 +194,12 @@ action gets none, even when the manifest declares some.
 `template` is a name or a full v2 template object, `data` a JSON object or `"sample"`, `appearance`
 `light` or `dark`, `scale` the pixel scale. The response is `image/png`. `400` carries validation errors
 with cell ids.
+
+`confirmation` (optional) draws the inline question a banner shows before it runs something (DESIGN section 8):
+the row that replaces the actions row, with its buttons. It is a kind (`callbackHost`, `command`, `script`,
+`shortcut`, `templateCommand`, `remindersError`, `remindersDenied`) or an object `{"kind": ..., "name", "host",
+"url", "command", "template", "others", "replaces", "message"}` whose optional fields fill the same text a live
+banner asks with, for example `{"app":"acme","confirmation":{"kind":"command","command":"say hello"}}`.
 
 ### GET /v1/shortcuts and /v1/components
 

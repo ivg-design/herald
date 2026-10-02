@@ -178,3 +178,32 @@ public struct BannerStackPlan: Equatable, Sendable {
                                stubOffset: offsets.isEmpty ? 0 : used + gap)
     }
 }
+
+/// How tall the open stack's list may be (DESIGN section 9). The list is one panel, so the plan above never trims it:
+/// without a bound from the screen, six tall rows (or one inline question) push the footer, Collapse and Dismiss
+/// all, below the visible frame. Pure so the arithmetic is tested; `StackListView` draws it.
+public enum StackListLayout {
+    /// Rows shown before the list scrolls.
+    public static let maxVisible = 6
+    /// Space between rows, and between the list and the footer.
+    public static let gap: CGFloat = 8
+    /// What the footer card takes (a button row with its padding), a little generous: a list a few points short of
+    /// the room is harmless, a footer that is off the screen is not.
+    public static let footerHeight: CGFloat = 40
+
+    /// The tallest the list may be when the panel may use `available` points of height: what is left under the
+    /// footer and the gap above it.
+    public static func cap(available: CGFloat) -> CGFloat {
+        max(available - footerHeight - gap, 0)
+    }
+
+    /// The list's height from the heights of its rows (newest first): the first `maxVisible` of them, held to `cap`.
+    /// The cap never goes below the newest row, so that banner stays usable on a short screen. `capped` is true when
+    /// the cap cut the list, which then scrolls whatever the row count.
+    public static func height(rows: [CGFloat], cap: CGFloat) -> (height: CGFloat, capped: Bool) {
+        let shown = rows.prefix(maxVisible)
+        let total = shown.reduce(0, +) + CGFloat(max(shown.count - 1, 0)) * gap
+        let limit = max(cap, rows.first ?? 0)
+        return total > limit ? (limit, true) : (total, false)
+    }
+}

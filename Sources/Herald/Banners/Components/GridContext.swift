@@ -34,6 +34,10 @@ struct GridContext {
     var snooze: (SnoozeOption) -> Void
     var addReminder: () -> Void
     var dismiss: () -> Void
+    /// This card is the top of a stack of this many notifications (1 when it is alone), and pressing the stack
+    /// counter (`stackBadge`) opens the stack in place.
+    var stackCount = 1
+    var expandStack: () -> Void = {}
 
     // MARK: Data
 

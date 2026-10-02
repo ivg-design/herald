@@ -33,6 +33,16 @@ final class AppSettings: ObservableObject {
         get { quiet.windows }
         set { quiet.windows = newValue }
     }
+    /// How banners stack by default (DESIGN section 9). An issuer can override it (`AppRecord.stacking`); the bell
+    /// menu switches this one. A development instance keeps it in its own suite, away from the installed Herald's.
+    @Published var stacking: StackingLevel {
+        didSet {
+            guard stacking != oldValue else { return }
+            Self.quietDefaults.set(stacking.rawValue, forKey: "stacking")
+            NotificationCenter.default.post(name: .heraldChanged, object: nil)
+        }
+    }
+
     private static var quietDefaults: UserDefaults {
         if ProcessInfo.processInfo.environment["HERALD_SUPPORT_DIR"]?.isEmpty == false,
            let suite = UserDefaults(suiteName: "com.ivg.herald.voice-dev") { return suite }
@@ -50,6 +60,7 @@ final class AppSettings: ObservableObject {
         muted = UserDefaults.standard.bool(forKey: "muted")
         quiet = Self.quietDefaults.data(forKey: "quietHours")
             .flatMap { try? HeraldJSON.decoder().decode(HeraldQuietHours.self, from: $0) } ?? HeraldQuietHours()
+        stacking = Self.quietDefaults.string(forKey: "stacking").flatMap(StackingLevel.init(rawValue:)) ?? .defaultLevel
     }
 
     var launchAtLogin: Bool {

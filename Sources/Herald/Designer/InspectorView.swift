@@ -310,6 +310,9 @@ extension PayloadBinder where P == HeraldIconButtonComponent {
 extension PayloadBinder where P == HeraldBadgeComponent {
     static func of(_ m: DesignerModel, _ id: String) -> Self { .init(model: m, id: id, extract: { if case .badge(let p) = $0 { return p }; return nil }, embed: { .badge($0) }) }
 }
+extension PayloadBinder where P == HeraldStackBadgeComponent {
+    static func of(_ m: DesignerModel, _ id: String) -> Self { .init(model: m, id: id, extract: { if case .stackBadge(let p) = $0 { return p }; return nil }, embed: { .stackBadge($0) }) }
+}
 extension PayloadBinder where P == HeraldProgressComponent {
     static func of(_ m: DesignerModel, _ id: String) -> Self { .init(model: m, id: id, extract: { if case .progress(let p) = $0 { return p }; return nil }, embed: { .progress($0) }) }
 }
@@ -416,6 +419,7 @@ private struct CellEditor: View {
         case .actions: ActionsRowEditor(model: model, id: cell.id)
         case .iconButton: IconButtonEditor(model: model, id: cell.id)
         case .badge: BadgeEditor(model: model, id: cell.id)
+        case .stackBadge: StackBadgeEditor(model: model, id: cell.id)
         case .progress: ProgressEditor(model: model, id: cell.id)
         case .rive: RiveEditor(model: model, id: cell.id)
         case .spacer:
@@ -609,6 +613,18 @@ private struct BadgeEditor: View {
     var body: some View {
         let b = PayloadBinder<HeraldBadgeComponent>.of(model, id)
         FieldRow("Value") { TokenTextField(model: model, title: "{count}", text: b.binding(\.binding, "")) }
+        FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Accent") }
+        FieldRow("Text") { ColorFieldRow(value: b.binding(\.textColor, nil), autoLabel: "Automatic") }
+    }
+}
+
+private struct StackBadgeEditor: View {
+    @ObservedObject var model: DesignerModel
+    let id: String
+    var body: some View {
+        let b = PayloadBinder<HeraldStackBadgeComponent>.of(model, id)
+        Text("Shows {stack.count}, the number of notifications folded into this banner. Empty while the banner is alone; click it to expand the stack.")
+            .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Accent") }
         FieldRow("Text") { ColorFieldRow(value: b.binding(\.textColor, nil), autoLabel: "Automatic") }
     }

@@ -113,7 +113,8 @@ is a JSON-RPC error (`-32602`).
 | `list_shortcuts` | none | Names of the installed Apple Shortcuts (`shortcuts list`). |
 | `add_action_rule` | `app`, `template`, `rule` | Append a rule to a saved template's `actionRules`: change an issuer action (`match` by id, label or `*`: `hide`, `relabel`, `style`, `position`) or add your own (`add`: `url`, `command`, `script`, `shortcut`, `dismiss`, `snooze`). Adding an id that an earlier rule already adds replaces that rule. Warns about a Shortcut that is not installed, a script file that is missing or not runnable, and a `match` that hits nothing. Returns the resulting button list. |
 | `list_history` | `app?`, `limit?`, `full?` | Recent delivered notifications with their resolved field values. |
-| `dismiss` | `app`, `id` or `all: true` | Close one banner, or every banner of the app. |
+| `dismiss` | `app`, `id`, `group` or `all: true` | Close one banner, every banner of the app sent with a `group` (a stack), or every banner of the app. |
+| `list_stacks` | `app?` | The stacks of banners on screen (notifications folded into one banner with a counter): level, app, group, count, whether it is open and its notifications newest first. |
 | `speak` | `app`, `text`, `voice?`, `speed?`, `lang?`, `id?` | Say `text` aloud on the Mac with Herald's local voice, without a banner. The history keeps the text. Meant for "the long task finished" in a sentence or two. |
 
 **Scripts.** A `script` action runs a file in `~/Library/Application Support/Herald/scripts/` (a plain file

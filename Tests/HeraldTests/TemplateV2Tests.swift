@@ -51,6 +51,7 @@ final class TemplateV2Tests: XCTestCase {
                                                   tooltip: "Close", emptyBehavior: .keep)),
             .iconButton(HeraldIconButtonComponent(symbol: "alarm", actionRef: "snooze")),
             .badge(HeraldBadgeComponent(binding: "{count}", color: "#FF3B30", textColor: "primary", emptyBehavior: .keep)),
+            .stackBadge(HeraldStackBadgeComponent(color: "#FF3B30", textColor: "primary", emptyBehavior: .keep)),
             .progress(HeraldProgressComponent(binding: "{percent}", color: "accent", height: 6, emptyBehavior: .collapse)),
             .rive(HeraldRiveComponent(asset: "bell", path: "/x.riv", stateMachine: "Main", artboard: "A",
                                       inputBindings: ["count": "{count}", "hover": "hover"],

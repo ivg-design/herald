@@ -21,6 +21,10 @@ final class BannerModel: ObservableObject {
     /// "Action failed - why", shown under the grid for a few seconds after an action fails. It is the card's own
     /// line, not a template field, so it shows whatever the template draws.
     @Published var failureLine: String?
+    /// A question the banner is asking inline (run this command? send to this host?). While it is set it takes the
+    /// place of the actions row (`GridBannerView` hides the action cells, `BannerView` draws the question under
+    /// the grid) and the panel re-measures. Answered by `answerConfirmation`; never a modal alert (DESIGN 8).
+    @Published var confirmation: BannerConfirmation?
     @Published var hovering = false
     /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
     /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
@@ -33,6 +37,9 @@ final class BannerModel: ObservableObject {
     /// Data for the bindings, replacing what the item carries (designer samples, "last real notification").
     /// nil binds the item's own fields.
     @Published var fieldsOverride: [String: HeraldFieldValue]? { didSet { refresh() } }
+    /// How many notifications this card stands for (DESIGN section 9): 2 or more while it is the top card of a closed
+    /// stack. `{stack.count}` and the `stackBadge` component read it; below 2 they are empty.
+    @Published var stackCount = 1 { didSet { if stackCount != oldValue { refresh() } } }
 
     // v1 presentation fields, kept in step with the notification (the composer and tests read them).
     @Published var layout: HeraldLayout = .imageLeft
@@ -65,6 +72,10 @@ final class BannerModel: ObservableObject {
     var onAction: (HeraldAction, HeraldActionOrigin) -> Void = { _, _ in }
     var onSnooze: (SnoozeOption) -> Void = { _ in }
     var onReminder: () -> Void = {}
+    /// The stack counter was pressed: open the stack this card is the top of.
+    var onExpandStack: () -> Void = {}
+    /// A button of the inline confirmation was pressed: the id of the question it belongs to, and the choice.
+    var onConfirmationAnswer: (UUID, ConfirmationChoice) -> Void = { _, _ in }
     var onHeight: (CGFloat) -> Void = { _ in }
 
     init(item: HeraldHistoryItem, appName: String, icon: NSImage, image: NSImage?,
@@ -84,6 +95,11 @@ final class BannerModel: ObservableObject {
     /// The template accent nudged until it is legible on the given appearance; nil when none is set.
     func accent(dark: Bool) -> Color? {
         accentColor.map { Color(nsColor: BannerView.legible($0, dark: dark)) }
+    }
+
+    /// A button on the confirmation row was pressed (a preview leaves `onConfirmationAnswer` a no-op).
+    func answerConfirmation(_ confirmation: BannerConfirmation, _ choice: ConfirmationChoice) {
+        onConfirmationAnswer(confirmation.id, choice)
     }
 
     /// An action was pressed: dismiss closes the banner, everything else goes to `onAction`.
@@ -123,7 +139,8 @@ final class BannerModel: ObservableObject {
         maxBodyLines = max(1, min(n.maxBodyLines ?? templateLines, 30))
 
         fields = BannerData.fields(for: n, stored: item.fields, override: fieldsOverride, manifest: manifest,
-                                   extra: g.extra, deliveredAt: item.deliveredAt, hasPicture: image != nil)
+                                   extra: g.extra, deliveredAt: item.deliveredAt, hasPicture: image != nil,
+                                   stackCount: stackCount)
         actions = BannerData.actions(for: n, manifest: manifest, rules: g.actionRules, template: template)
     }
 
@@ -240,6 +257,9 @@ struct BannerView: View {
     /// and offscreen previews draw the same view without the replay control). A plain value rather than an AppKit
     /// probe view: an NSViewRepresentable renders as ImageRenderer's yellow "no entry" placeholder in /v1/preview.
     var isLive = false
+    /// False when something around the card measures it (a stacked card and the expanded stack list report the whole
+    /// panel's height themselves, see `StackedCardView`).
+    var reportsHeight = true
 
     /// A first guess for the panel height before SwiftUI has measured the real one, so the off-screen
     /// parked panel is already roughly the right size.
@@ -273,7 +293,15 @@ struct BannerView: View {
     var body: some View {
         VStack(spacing: 0) {
             GridBannerView(model: model, showsReplay: isLive)
-            if let line = model.failureLine { FailureLine(text: line, inset: model.grid.grid?.padding ?? 14) }
+            // The question replaces the actions row (the grid hides it), so a failure strip would only compete.
+            if let confirmation = model.confirmation {
+                BannerConfirmationView(confirmation: confirmation, inset: model.grid.grid?.padding ?? 14,
+                                       scrolls: model.liveAnimations, accent: model.accent(dark: scheme == .dark)) {
+                    model.answerConfirmation(confirmation, $0)
+                }
+            } else if let line = model.failureLine {
+                FailureLine(text: line, inset: model.grid.grid?.padding ?? 14)
+            }
         }
             .frame(width: model.bannerWidth, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
@@ -282,7 +310,7 @@ struct BannerView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
             .tint(model.accent(dark: scheme == .dark))
             .background(GeometryReader { g in Color.clear.preference(key: BannerHeightKey.self, value: g.size.height) })
-            .onPreferenceChange(BannerHeightKey.self) { model.onHeight($0) }
+            .onPreferenceChange(BannerHeightKey.self) { if reportsHeight { model.onHeight($0) } }
     }
 }
 

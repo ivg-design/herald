@@ -122,14 +122,18 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
     public var assets: [HeraldAsset]
     /// Name of the template (of this app) used when a notification names none.
     public var defaultTemplate: String?
+    /// The product family this issuer belongs to (`"webwatcher"` for `webwatcher.web` and `webwatcher.email`).
+    /// `byApp` stacking (DESIGN section 9) folds every issuer of one family into one stack; without it the issuer
+    /// id's prefix before the first dot is the family.
+    public var family: String?
 
     public init(app: String, appName: String? = nil, icon: String? = nil, version: Int = 1,
                 fields: [HeraldField] = [], actions: [HeraldButton] = [], actionIDs: [String]? = nil,
-                assets: [HeraldAsset] = [], defaultTemplate: String? = nil) {
+                assets: [HeraldAsset] = [], defaultTemplate: String? = nil, family: String? = nil) {
         self.app = app; self.appName = appName ?? app; self.icon = icon; self.version = version
         self.fields = fields; self.actions = actions
         self.actionIDs = actionIDs ?? Self.derivedIDs(for: actions)
-        self.assets = assets; self.defaultTemplate = defaultTemplate
+        self.assets = assets; self.defaultTemplate = defaultTemplate; self.family = family
     }
 
     /// The id of the action at `index`: the declared one, else one made from its label.
@@ -144,7 +148,7 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
     // MARK: Coding
 
     private enum CodingKeys: String, CodingKey {
-        case app, appName, icon, version, fields, actions, assets, defaultTemplate
+        case app, appName, icon, version, fields, actions, assets, defaultTemplate, family
     }
 
     /// The wire shape of one action.
@@ -210,7 +214,8 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
                   fields: try c.decodeIfPresent([HeraldField].self, forKey: .fields) ?? [],
                   actions: buttons, actionIDs: ids,
                   assets: try c.decodeIfPresent([HeraldAsset].self, forKey: .assets) ?? [],
-                  defaultTemplate: try c.decodeIfPresent(String.self, forKey: .defaultTemplate))
+                  defaultTemplate: try c.decodeIfPresent(String.self, forKey: .defaultTemplate),
+                  family: try c.decodeIfPresent(String.self, forKey: .family))
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -231,6 +236,7 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
         try c.encode(wires, forKey: .actions)
         try c.encode(assets, forKey: .assets)
         try c.encodeIfPresent(defaultTemplate, forKey: .defaultTemplate)
+        try c.encodeIfPresent(family, forKey: .family)
     }
 
     // MARK: Ids
@@ -311,6 +317,7 @@ public extension HeraldManifest {
         tooBig("appName", appName, Limits.maxSmallFieldBytes)
         tooBig("icon", icon, Limits.maxIconBytes)
         tooBig("defaultTemplate", defaultTemplate, Limits.maxSmallFieldBytes)
+        tooBig("family", family, Limits.maxSmallFieldBytes)
         if version < 1 { errors.append("version must be 1 or greater") }
 
         if fields.count > Limits.maxFields { errors.append("too many fields (at most \(Limits.maxFields))") }

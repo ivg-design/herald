@@ -17,16 +17,19 @@ public struct AppRecord: Codable, Equatable, Sendable {
     /// The user turned this app's banners off. Its notifications still arrive: History keeps them unread, and its
     /// sound and speech follow their own settings.
     public var mutedBanners: Bool = false
+    /// How this issuer's banners stack (DESIGN section 9): the user's own override of the global default
+    /// (`AppSettings.stacking`, which the bell menu switches). nil follows the default.
+    public var stacking: StackingLevel?
 
     public init(registration: HeraldAppRegistration, commandsConfirmed: Bool = false, callbackHostApproved: String? = nil,
-                screen: String? = nil, corner: HeraldCorner? = nil, mutedBanners: Bool = false) {
+                screen: String? = nil, corner: HeraldCorner? = nil, mutedBanners: Bool = false, stacking: StackingLevel? = nil) {
         self.registration = registration; self.commandsConfirmed = commandsConfirmed
         self.callbackHostApproved = callbackHostApproved
-        self.screen = screen; self.corner = corner; self.mutedBanners = mutedBanners
+        self.screen = screen; self.corner = corner; self.mutedBanners = mutedBanners; self.stacking = stacking
     }
 
     private enum CodingKeys: String, CodingKey {
-        case registration, commandsConfirmed, callbackHostApproved, screen, corner, mutedBanners
+        case registration, commandsConfirmed, callbackHostApproved, screen, corner, mutedBanners, stacking
     }
 
     /// Records written before the display settings existed have none of them.
@@ -38,6 +41,8 @@ public struct AppRecord: Codable, Equatable, Sendable {
         screen = try c.decodeIfPresent(String.self, forKey: .screen)
         corner = try c.decodeIfPresent(HeraldCorner.self, forKey: .corner)
         mutedBanners = try c.decodeIfPresent(Bool.self, forKey: .mutedBanners) ?? false
+        // An unknown level (a newer Herald wrote it) is no override.
+        stacking = (try? c.decodeIfPresent(String.self, forKey: .stacking)).flatMap { $0 }.flatMap(StackingLevel.init(rawValue:))
     }
 
     /// The stack this app's banners go to, given the connected displays (primary first).

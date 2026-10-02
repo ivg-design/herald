@@ -92,6 +92,20 @@ final class CLIArgumentTests: XCTestCase {
         XCTAssertThrowsError(try request(["frobnicate"]))
     }
 
+    func testStackCommandsAndGroup() throws {
+        var r = try request(["dismiss-all", "--app", "a", "--group", "rive.app"])
+        XCTAssertEqual(r.path, "/v1/dismissAll")
+        XCTAssertEqual(r.body?["group"] as? String, "rive.app"); XCTAssertEqual(r.body?["app"] as? String, "a")
+        r = try request(["dismiss-all", "--app", "a"])
+        XCTAssertNil(r.body?["group"], "without --group it dismisses the whole app, as before")
+        r = try request(["stacks"])
+        XCTAssertEqual(r.method, "GET"); XCTAssertEqual(r.path, "/v1/stacks"); XCTAssertTrue(r.query.isEmpty)
+        r = try request(["stacks", "--app", "a"])
+        XCTAssertEqual(r.query.map { "\($0.name)=\($0.value)" }, ["app=a"])
+        r = try request(["notify", "--app", "a", "--title", "t", "--group", "rive.app"])
+        XCTAssertEqual(r.body?["group"] as? String, "rive.app")
+    }
+
     func testGlobalOptionsAndHelp() throws {
         let inv = try CLIArguments.parse(["--port", "5000", "health", "--token=abc"])
         XCTAssertEqual(inv.port, 5000); XCTAssertEqual(inv.token, "abc")

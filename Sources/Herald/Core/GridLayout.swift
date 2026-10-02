@@ -224,10 +224,12 @@ public enum BannerData {
     /// from the notification (`TemplateResolver.fields`). Unless an `override` is given, the notification's own
     /// title, subtitle and body are laid over the result: a failure line replaces the subtitle of a live banner
     /// without touching the item's stored fields. The template's `extra` values are added as `extra.<key>`, and
-    /// `{image}` is present whenever the banner has a picture (`hasPicture`).
+    /// `{image}` is present whenever the banner has a picture (`hasPicture`), and `{stack.count}` whenever the card
+    /// stands for a stack of two or more notifications (`stackCount`; absent, so empty, below 2).
     public static func fields(for n: HeraldNotification, stored: [String: HeraldFieldValue]?,
                               override: [String: HeraldFieldValue]?, manifest: HeraldManifest?,
-                              extra: [String: String], deliveredAt: Date, hasPicture: Bool) -> [String: HeraldFieldValue] {
+                              extra: [String: String], deliveredAt: Date, hasPicture: Bool,
+                              stackCount: Int = 1) -> [String: HeraldFieldValue] {
         var f = override ?? stored ?? TemplateResolver.fields(for: n, manifest: manifest, extra: extra, deliveredAt: deliveredAt)
         if override == nil {
             for (key, value) in [("title", n.title), ("subtitle", n.subtitle ?? ""), ("body", n.body ?? "")]
@@ -239,6 +241,7 @@ public enum BannerData {
             f["extra.\(k)"] = .text(v)
         }
         if f["image"] == nil, hasPicture { f["image"] = .text(cachedImageToken) }
+        if stackCount > 1 { f[TemplateResolver.stackCountToken] = .number(Double(stackCount)) } else { f[TemplateResolver.stackCountToken] = nil }
         return f
     }
 

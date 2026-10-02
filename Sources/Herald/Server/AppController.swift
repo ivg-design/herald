@@ -9,6 +9,11 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func register(_ r: HeraldAppRegistration) async throws { try await controller.register(r) }
     func dismiss(app: String, id: String) async throws { await controller.dismissItem(app: app, id: id, action: nil) }
     func dismissAll(app: String?) async throws { await controller.dismissAll(app: app) }
+    func dismissGroup(app: String, group: String) async throws { await controller.dismissGroup(app: app, group: group) }
+    func stacks(app: String?) async throws -> [HeraldStackInfo] { await controller.stackInfos(app: app) }
+    func expandStack(app: String, group: String, expanded: Bool) async throws {
+        try await controller.setStackExpanded(app: app, group: group, expanded: expanded)
+    }
     func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { await controller.historyItems(app: app, limit: limit) }
     func clearHistory(app: String?) async throws { await controller.clearHistory(app: app) }
     func apps() async throws -> [HeraldAppRegistration] { await controller.registeredApps() }
@@ -25,6 +30,10 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
         try await MainActor.run { try QuietHoursCoordinator.shared.apply(update) }
+    }
+    func stackingLevel() async throws -> StackingLevel { await controller.settings.stacking }
+    func setStackingLevel(_ level: StackingLevel) async throws -> StackingLevel {
+        await MainActor.run { controller.settings.stacking = level; return controller.settings.stacking }
     }
 }
 
@@ -48,6 +57,8 @@ final class AppController {
     let sounds = SoundPlayer()
     let reminders = ReminderService()
     private(set) var banners: BannerCenter!
+    /// The inline confirmations (DESIGN 8): questions asked inside a banner, never in a modal alert.
+    private(set) var confirmations: ConfirmationFlow!
     private var listener: HTTPLoopbackListener?
     private var token = ""
     private(set) var serverStatus = "Not started"
@@ -59,6 +70,8 @@ final class AppController {
         manifests = ManifestStore(directory: supportDirectory.appendingPathComponent("manifests", isDirectory: true))
         registry = AppRegistry(file: supportDirectory.appendingPathComponent("apps.json"))
         banners = BannerCenter(controller: self)
+        confirmations = ConfirmationFlow(registry: registry, approvals: commandApprovals) { [unowned self] in changed() }
+        confirmations.surface = banners
         // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
@@ -209,6 +222,35 @@ final class AppController {
         changed()
     }
 
+    // MARK: Stacks (DESIGN section 9)
+
+    /// `POST /v1/dismissAll {app, group}`: every banner of `app` that was sent with this `group`, which is a stack
+    /// when stacking is by sender. The group of a notification that sent none is its issuer id.
+    func dismissGroup(app: String, group: String) {
+        for item in history.undismissed()
+        where item.app == app && StackKeying.effectiveGroup(app: item.app, group: item.notification.group) == group {
+            dismissItem(app: item.app, id: item.id, action: nil, notify: false)
+        }
+        changed()
+    }
+
+    /// A stack's banners dismissed at once: its card's close button and "Dismiss all". Each member goes to History as
+    /// dismissed, with one refresh for the lot.
+    func dismissMembers(_ members: [(app: String, id: String)]) {
+        for m in members { dismissItem(app: m.app, id: m.id, action: nil, notify: false) }
+        changed()
+    }
+
+    /// `GET /v1/stacks`: the stacks that are up.
+    func stackInfos(app: String?) -> [HeraldStackInfo] { banners.stackInfos(app: app) }
+
+    /// `POST /v1/stacks/expand`: opens or closes a stack in place (never activates Herald).
+    func setStackExpanded(app: String, group: String, expanded: Bool) throws {
+        guard banners.setStackOpen(app: app, group: group, expanded) else {
+            throw BackendError(404, "no stack of two or more notifications for that app and group")
+        }
+    }
+
     func historyItems(app: String?, limit: Int) -> [HeraldHistoryItem] {
         if let app { return history.items(app: app, limit: limit) }
         return history.allItems(limit: limit)
@@ -297,7 +339,9 @@ final class AppController {
         let image = await PreviewRenderer.loadImage(plan.notification.image)
         do {
             return try PreviewRenderer.png(plan: plan, appName: appName, icon: AppIcons.icon(for: record, app: request.app),
-                                           image: image, appearance: request.appearance, scale: request.scale)
+                                           image: image, appearance: request.appearance, scale: request.scale,
+                                           confirmation: request.confirmation, stackCount: request.stackCount,
+                                           stackExpanded: request.stackExpanded)
         } catch {
             throw BackendError(500, error.localizedDescription)
         }
@@ -407,7 +451,18 @@ final class AppController {
         case .success(let p):
             plan = p
         }
-        guard authorize(action, origin: origin, item: item, template: template, manifest: manifest) else { return }
+        // The gate may have to ask the user first. The question is drawn inside the banner (never an alert), so the
+        // rest of the action runs from its answer: `proceed` is called at once when nothing needs asking.
+        authorize(action, origin: origin, item: item, template: template, manifest: manifest) { [self] in
+            execute(plan, action: action, origin: origin, item: item, manifest: manifest)
+        }
+    }
+
+    /// What an authorized action does.
+    private func execute(_ plan: ActionPlan, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
+                         manifest: HeraldManifest?) {
+        let app = item.app, id = item.id
+        guard !busyActions.contains(BannerCenter.key(app, id)) else { return }
         switch plan {
         case .openURL(let url):
             let outcome = Self.openLink(url)
@@ -444,22 +499,28 @@ final class AppController {
             return
         }
         // A callback goes to a loopback address freely; any other host only after the user agreed to it, because
-        // the event carries the payload the sender attached to the button.
-        var approvedHosts: Set<String> = []
-        if CallbackDelivery.needsApproval(url) {
-            guard let host = CallbackDelivery.normalizedHost(of: url) else {
-                flashFailure(app: item.app, id: item.id, reason: "invalid callback URL")
-                return
-            }
-            if registry.record(for: item.app)?.callbackHostApproved != host {
-                switch confirmCallbackHost(app: item.app, host: host, url: url) {
-                case .once: break
-                case .always: registry.update(item.app) { $0.callbackHostApproved = host }; changed()
-                case .cancel: return
-                }
-            }
-            approvedHosts = [host]
+        // the event carries the payload the sender attached to the button. The question is asked inside the banner
+        // (DESIGN 8) and the delivery runs from its answer; once or always sends, cancel does nothing.
+        guard CallbackDelivery.needsApproval(url) else {
+            deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [])
+            return
         }
+        guard let host = CallbackDelivery.normalizedHost(of: url) else {
+            flashFailure(app: item.app, id: item.id, reason: "invalid callback URL")
+            return
+        }
+        let send = { [self] in deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [host]) }
+        if registry.record(for: item.app)?.callbackHostApproved == host {
+            send()
+        } else {
+            let name = registry.record(for: item.app)?.displayName ?? item.app
+            confirmations.askCallbackHost(app: item.app, id: item.id, name: name, host: host, url: url.absoluteString,
+                                          send: send)
+        }
+    }
+
+    private func deliverCallback(item: HeraldHistoryItem, label: String, callback: HeraldCallback, url: URL,
+                                 approvedHosts: Set<String>) {
         let event = HeraldCallbackEvent(notificationId: item.id, app: item.app, action: label, payload: callback.payload)
         let key = BannerCenter.key(item.app, item.id)
         busyActions.insert(key)
@@ -475,38 +536,20 @@ final class AppController {
         }
     }
 
-    private enum HostChoice { case once, always, cancel }
-
-    /// "Send Once" is the default: the lasting approval is one click further away than the safe choice.
-    private func confirmCallbackHost(app: String, host: String, url: URL) -> HostChoice {
-        let name = registry.record(for: app)?.displayName ?? app
-        let a = NSAlert()
-        a.alertStyle = .warning
-        a.messageText = "Send \(name)'s button action to \(host)?"
-        a.informativeText = "\(name) wants Herald to POST this button's action and payload to \(url.absoluteString). That address is not on this Mac."
-        a.addButton(withTitle: "Send Once")
-        a.addButton(withTitle: "Always Allow \(host)")
-        a.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        switch a.runModal() {
-        case .alertFirstButtonReturn: return .once
-        case .alertSecondButtonReturn: return .always
-        default: return .cancel
-        }
-    }
-
     // MARK: Code-running actions
 
     /// The rules for actions that run code. An issuer's command (or script, or shortcut) needs the app's
     /// `allowCommands` AND the user's agreement, asked for the first time such a button is pressed with the
     /// exact command in front of the user. A command, script or Shortcut from the template is confirmed once
-    /// per template and again whenever one of them changes (the script's SHA-256 included). False means
-    /// "do not run": a failure line was shown, or the user said cancel.
+    /// per template and again whenever one of them changes (the script's SHA-256 included). The question is an
+    /// inline row in the banner (DESIGN 8), never an alert: `proceed` runs at once when nothing needs asking and
+    /// otherwise from the answer (Run once or Always allow). It never runs when the user cancels, when a failure
+    /// line was shown, or when the banner goes away first.
     private func authorize(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
-                           template: HeraldTemplate?, manifest: HeraldManifest?) -> Bool {
+                           template: HeraldTemplate?, manifest: HeraldManifest?, proceed: @escaping () -> Void) {
         switch ActionRunner.gate(for: action, origin: origin) {
         case .open:
-            return true
+            proceed()
         case .appPermission:
             let record = registry.record(for: item.app)
             let name = record?.displayName ?? item.app
@@ -514,22 +557,24 @@ final class AppController {
             case .denied(let why):
                 log("\(action.kind.rawValue) action \(action.label) ignored for \(item.app): \(why)")
                 flashFailure(app: item.app, id: item.id, reason: "commands are not allowed for \(name)")
-                return false
             case .needsConfirmation:
-                return confirmCommand(app: item.app, displayName: name, action: action)
+                confirmations.askCommand(app: item.app, id: item.id, name: name, kind: action.kind,
+                                         text: ActionRunner.describe(action), run: proceed)
             case .allowed:
-                return true
+                proceed()
             }
         case .templateConfirmation:
             // The approval key binds to the command text, the script file's hash or the Shortcut's name and input.
-            guard let key = actionRunner.approvalKey(for: action) else { return true }
+            guard let key = actionRunner.approvalKey(for: action) else { proceed(); return }
             let templateName = template?.name ?? item.notification.template ?? ""
-            if commandApprovals.isApproved(app: item.app, template: templateName, command: key) { return true }
+            if commandApprovals.isApproved(app: item.app, template: templateName, command: key) { proceed(); return }
             let all = template.map { actionRunner.templateApprovalKeys(of: $0) } ?? [key]
             let replaced = ActionRunner.replacedIssuerLabel(for: action, notification: item.notification,
                                                             manifest: manifest, template: template)
-            return confirmTemplateCommands(app: item.app, template: templateName, action: action, key: key,
-                                           all: all, replacedIssuerLabel: replaced)
+            let name = registry.record(for: item.app)?.displayName ?? item.app
+            confirmations.askTemplateCommand(app: item.app, id: item.id, template: templateName, name: name,
+                                             kind: action.kind, pressedText: actionRunner.confirmationText(for: action),
+                                             approvalKey: key, all: all, replacedIssuerLabel: replaced, run: proceed)
         }
     }
 
@@ -547,97 +592,6 @@ final class AppController {
                 flashFailure(app: item.app, id: item.id, reason: actionRunner.failureReason(result))
             }
         }
-    }
-
-    /// "Run Once" is the default button on purpose: the lasting permission is one click further away than
-    /// the safe choice, so pressing Return by habit cannot grant it.
-    private func confirmCommand(app: String, displayName: String, action: HeraldAction) -> Bool {
-        let a = NSAlert()
-        a.alertStyle = .warning
-        switch action.kind {
-        case .script:
-            a.messageText = "Run this script for \(displayName)?"
-            a.informativeText = "A notification sent as \(displayName) asks Herald to run a script from your Herald scripts folder with your user permissions. Herald cannot verify who sent it."
-        case .shortcut:
-            a.messageText = "Run this Shortcut for \(displayName)?"
-            a.informativeText = "A notification sent as \(displayName) asks Herald to run the Shortcut below. Shortcuts can do anything you can. Herald cannot verify who sent it."
-        default:
-            a.messageText = "Run this command for \(displayName)?"
-            a.informativeText = "A notification sent as \(displayName) asks Herald to run the command below with your user permissions (/bin/zsh -lc). Herald cannot verify who sent it."
-        }
-        a.accessoryView = Self.commandView(ActionRunner.describe(action))
-        a.addButton(withTitle: "Run Once")
-        a.addButton(withTitle: "Always Allow \(displayName)")
-        a.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        switch a.runModal() {
-        case .alertFirstButtonReturn:
-            return true
-        case .alertSecondButtonReturn:
-            registry.update(app) { $0.commandsConfirmed = true }
-            changed()
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// One confirmation per template: the alert shows exactly what is about to run (the command, the script
-    /// and its hash, or the Shortcut and its input) and everything else the template carries, and "Always Allow
-    /// This Template" approves exactly what was shown. When the action took the place of one of the issuer's
-    /// own buttons, the alert says which, since the issuer will not hear about that press.
-    private func confirmTemplateCommands(app: String, template: String, action: HeraldAction, key: String,
-                                         all: [String], replacedIssuerLabel: String?) -> Bool {
-        let name = registry.record(for: app)?.displayName ?? app
-        let others = all.filter { $0 != key }
-        let a = NSAlert()
-        a.alertStyle = .warning
-        let what: String
-        switch action.kind {
-        case .script: what = "script"
-        case .shortcut: what = "Shortcut"
-        default: what = "command"
-        }
-        a.messageText = "Run a \(what) from the \"\(template)\" template?"
-        var info = "This template for \(name) runs code with your user permissions: shell commands (/bin/zsh -lc), scripts and Shortcuts."
-        if let r = replacedIssuerLabel {
-            info += " It replaces \(name)'s own \"\(r)\" button, so \(name) will not be told when you press it."
-        }
-        if !others.isEmpty { info += " Always Allow covers everything listed." }
-        info += " If any of it changes, Herald asks again."
-        a.informativeText = info
-        let pressed = actionRunner.confirmationText(for: action)
-        let shown = others.isEmpty ? pressed : "Running now:\n\(pressed)\n\nAlso in this template:\n" + others.joined(separator: "\n")
-        a.accessoryView = Self.commandView(shown)
-        a.addButton(withTitle: "Run Once")
-        a.addButton(withTitle: "Always Allow This Template")
-        a.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        switch a.runModal() {
-        case .alertFirstButtonReturn:
-            return true
-        case .alertSecondButtonReturn:
-            commandApprovals.approve(app: app, template: template, commands: [key] + others)
-            changed()
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// The command verbatim, selectable and scrollable, so a long one is neither truncated nor reflowed.
-    private static func commandView(_ command: String) -> NSView {
-        let scroll = NSTextView.scrollableTextView()
-        scroll.frame = NSRect(x: 0, y: 0, width: 420, height: 90)
-        scroll.borderType = .bezelBorder
-        if let text = scroll.documentView as? NSTextView {
-            text.isEditable = false
-            text.isSelectable = true
-            text.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
-            text.textContainerInset = NSSize(width: 4, height: 4)
-            text.string = command
-        }
-        return scroll
     }
 
     // MARK: Failure line
@@ -669,7 +623,7 @@ final class AppController {
 
     private func showInPlace(_ item: HeraldHistoryItem) {
         let record = registry.ensure(item.app)
-        banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record)
+        banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record, keepPlace: true)
     }
 
     // MARK: Sound
@@ -686,6 +640,14 @@ final class AppController {
 
     func userSnoozed(app: String, id: String, option: SnoozeOption) {
         snooze(app: app, id: id, until: option.fireDate(from: Date()))
+    }
+
+    /// The snooze menu of a stack's card: the whole group goes away and comes back together as the same stack.
+    /// `members` are oldest first, and each wakes a few milliseconds after the one before, so they fold back in the
+    /// order they arrived (the newest ends up on top).
+    func userSnoozedGroup(members: [(app: String, id: String)], option: SnoozeOption) {
+        let until = option.fireDate(from: Date())
+        for (i, m) in members.enumerated() { snooze(app: m.app, id: m.id, until: until.addingTimeInterval(Double(i) * 0.05)) }
     }
 
     /// `POST /v1/snooze`: the same as the banner's menu, for an arbitrary number of minutes.
@@ -726,9 +688,14 @@ final class AppController {
         let record = registry.ensure(app)
         let eff = EffectiveSettings.resolve(item.notification, record)
         banners.show(item, settings: eff, record: record)
-        if playSound { self.playSound(eff, record: record) }
+        // A snoozed stack wakes as several banners at once; one chime is enough.
+        if playSound, Date().timeIntervalSince(lastSnoozeChime) > 1 {
+            lastSnoozeChime = Date()
+            self.playSound(eff, record: record)
+        }
         changed()
     }
+    private var lastSnoozeChime = Date.distantPast
 
     /// Arms a timer for every pending snooze and fires the ones that are already due. Runs at launch and
     /// again after sleep or a clock change, when a timer set for a wall-clock time may have been missed.
@@ -759,7 +726,7 @@ final class AppController {
                 banners.setReminderState(app: app, id: id, .added)
             } catch {
                 banners.setReminderState(app: app, id: id, .failed(error.localizedDescription))
-                presentReminderError(error)
+                presentReminderError(error, app: app, id: id)
             }
         }
     }
@@ -775,17 +742,14 @@ final class AppController {
         showInPlace(item)   // resets the reminder state to idle; the caller sets .added right after
     }
 
-    private func presentReminderError(_ error: Error) {
-        let a = NSAlert()
-        a.alertStyle = .warning
-        a.messageText = "Couldn't add to Reminders"
-        a.informativeText = error.localizedDescription
-        a.addButton(withTitle: "OK")
-        var offerSettings = false
-        if case ReminderError.denied = error { offerSettings = true }
-        if offerSettings { a.addButton(withTitle: "Open Privacy Settings") }
-        NSApp.activate(ignoringOtherApps: true)
-        if a.runModal() == .alertSecondButtonReturn { ReminderService.openPrivacySettings() }
+    /// "Couldn't add to Reminders" is asked as an inline row on the banner (OK, and Open Privacy Settings when the
+    /// permission was denied), not as a modal alert (DESIGN 8).
+    private func presentReminderError(_ error: Error, app: String, id: String) {
+        var denied = false
+        if case ReminderError.denied = error { denied = true }
+        confirmations.showReminderError(app: app, id: id, message: error.localizedDescription, canOpenSettings: denied) {
+            ReminderService.openPrivacySettings()
+        }
     }
 
     // MARK: Relaunch

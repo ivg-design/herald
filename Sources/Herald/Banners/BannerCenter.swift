@@ -14,9 +14,21 @@ final class BannerPanel: NSPanel {
 final class BannerEntry {
     let key: String
     let panel: BannerPanel
-    let host: BannerHostingView<BannerView>
+    let host: BannerHostingView<StackRootView>
     let model: BannerModel
-    let seq: Int
+    /// Arrival order (larger is newer): the order of the stack on screen, kept by `StackBook`. A banner that is
+    /// delivered again inside a stack moves to the top of it, so it can change.
+    var seq: Int
+    /// The stack this banner is in (DESIGN section 9); nil when its issuer does not stack. `StackCenter` owns the plan.
+    var stackKey: String?
+    /// What the panel draws about its stack: the count, whether this card is the top, the open list.
+    let stack: StackModel
+    /// Under a newer card of its stack (the card on top stands for it).
+    var folded = false
+    /// Not on screen because the card on top of its stack is.
+    var hidden = false
+    /// The key of the card on top of this banner's stack (its own when it is alone).
+    var topKey: String?
     var corner: HeraldCorner
     /// The display the app chose: `BannerDisplay.main` or a display id. Resolved against the connected displays
     /// whenever the stack is laid out, so a monitor that comes or goes moves its banners.
@@ -25,13 +37,15 @@ final class BannerEntry {
     /// The banner's width: a v2 template sets its own (`BannerModel.bannerWidth`), so it is per banner.
     var width: CGFloat = BannerView.width
     var remaining: Double?
+    /// The full timeout, so the countdown starts over once an inline question has been answered.
+    var timeout: Double?
     var shown = false
     var measured = false
     /// Hidden because the banners above it already fill the screen (see `BannerStackPlan`).
     var overflowed = false
-    init(key: String, panel: BannerPanel, host: BannerHostingView<BannerView>, model: BannerModel, seq: Int,
+    init(key: String, panel: BannerPanel, host: BannerHostingView<StackRootView>, model: BannerModel, stack: StackModel, seq: Int,
          corner: HeraldCorner, screen: String = BannerDisplay.main) {
-        self.key = key; self.panel = panel; self.host = host; self.model = model; self.seq = seq
+        self.key = key; self.panel = panel; self.host = host; self.model = model; self.stack = stack; self.seq = seq
         self.corner = corner; self.screen = screen
     }
 }
@@ -47,7 +61,8 @@ final class BannerCenter {
     private unowned let controller: AppController
     private var entries: [String: BannerEntry] = [:]
     private var snoozeTimers: [String: Timer] = [:]
-    private var seqCounter = 0
+    /// Which banners fold together, who is on top, what is open (DESIGN section 9).
+    let stacks: StackCenter
     private var ticker: Timer?
     private var screenObserver: NSObjectProtocol?
     private var relayoutScheduled = false
@@ -67,6 +82,12 @@ final class BannerCenter {
 
     init(controller: AppController) {
         self.controller = controller
+        // The level is the issuer's own override, else the global default; the family is its manifest's.
+        stacks = StackCenter(
+            level: { [unowned controller] app in
+                StackKeying.level(override: controller.registry.record(for: app)?.stacking, default: controller.settings.stacking)
+            },
+            family: { [unowned controller] app in controller.manifests.get(app: app)?.family })
         // A monitor that comes or goes changes the visible frame; banners would otherwise stay where the old
         // frame put them, possibly off the screen.
         let reflow: @Sendable (Notification) -> Void = { [weak self] _ in
@@ -79,21 +100,24 @@ final class BannerCenter {
             forName: .heraldChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refreshPlacement(animated: true) }
         }
+        stacks.installEscapeMonitor { [weak self] in self?.collapseAllStacks() }
         ticker = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(ticker!, forMode: .common)
     }
 
-    static func key(_ app: String, _ id: String) -> String { app + "\u{1}" + id }
+    static func key(_ app: String, _ id: String) -> String { BannerKey.make(app, id) }
     var visibleCount: Int { entries.count }
 
     // MARK: Show / update
 
     /// `promoted` puts the banner at the bottom of its stack (lazy promotion of a deferred banner: it is older
-    /// than the ones on screen) instead of the top.
+    /// than the ones on screen) instead of the top. `keepPlace` is for a banner that is only redrawn (a failure
+    /// line, an "Open Reminders" button): inside a group stack it does not move to the top as a new delivery would.
     func show(_ item: HeraldHistoryItem, settings: EffectiveSettings, record: AppRecord?,
-              template: HeraldTemplate? = nil, manifest: HeraldManifest? = nil, promoted: Bool = false) {
+              template: HeraldTemplate? = nil, manifest: HeraldManifest? = nil, promoted: Bool = false,
+              keepPlace: Bool = false) {
         let key = Self.key(item.app, item.id)
         // The user turned this app's banners off (issue #28): no panel. The notification is already in History,
         // unread; a banner of the same id that is up (it was muted while showing) goes away without being dismissed.
@@ -112,8 +136,14 @@ final class BannerCenter {
         let image = item.imagePath.flatMap { NSImage(contentsOfFile: $0) }
         let icon = AppIcons.icon(for: record, app: item.app)
         let name = record?.displayName ?? item.app
+        // The stack it joins (DESIGN section 9): a banner for a key that is already up folds into that stack as its
+        // top card; the same id again is replaced in place and never counts twice.
+        let stackKey = stacks.stackKey(for: item)
 
         if let e = entries[key] {
+            stacks.deliver(key, stackKey: stackKey, keepPlace: keepPlace)
+            e.seq = stacks.order(of: key) ?? e.seq
+            e.stackKey = stackKey
             // Template and manifest first, so the item change below redraws once with everything in place.
             e.model.template = template
             e.model.manifest = manifest
@@ -123,22 +153,36 @@ final class BannerCenter {
             e.model.appName = name
             e.model.reminderState = .idle
             e.model.failureLine = nil
+            // The question was about the content that is being replaced: it is cancelled, not carried over.
+            controller.confirmations.drop(app: item.app, id: item.id)
             e.remaining = settings.timeout
+            e.timeout = settings.timeout
             e.corner = settings.corner
             e.screen = settings.screen
             e.width = e.model.bannerWidth
+            applyStacks()
             relayout(animated: true)
             return
         }
 
         let model = BannerModel(item: item, appName: name, icon: icon, image: image, template: template, manifest: manifest)
-        model.onClose = { [weak self] in self?.controller.userClosed(app: item.app, id: item.id) }
-        model.onOpen = { [weak self] in self?.controller.userOpened(app: item.app, id: item.id) }
+        // On a closed stack's top card the close button, the snooze menu and a body click act on the whole group;
+        // on a lone banner and on a row of the open list, on that notification alone.
+        model.onClose = { [weak self] in self?.closePressed(app: item.app, id: item.id) }
+        model.onOpen = { [weak self] in self?.openPressed(app: item.app, id: item.id) }
         model.onAction = { [weak self] action, origin in self?.route(action, origin: origin, app: item.app, id: item.id) }
-        model.onSnooze = { [weak self] o in self?.controller.userSnoozed(app: item.app, id: item.id, option: o) }
+        model.onSnooze = { [weak self] o in self?.snoozePressed(app: item.app, id: item.id, option: o) }
+        model.onExpandStack = { [weak self] in self?.setStackOpen(key: key, true) }
         model.onReminder = { [weak self] in self?.controller.userAddedReminder(app: item.app, id: item.id) }
+        model.onConfirmationAnswer = { [weak self] confirmation, choice in
+            self?.controller.confirmations.answer(app: item.app, id: item.id, confirmation: confirmation, choice)
+        }
 
-        let host = BannerHostingView(rootView: BannerView(model: model, isLive: true))
+        let stackModel = StackModel()
+        stackModel.onExpand = { [weak self] in self?.setStackOpen(key: key, true) }
+        stackModel.onCollapse = { [weak self] in self?.setStackOpen(key: key, false) }
+        stackModel.onDismissAll = { [weak self] in self?.dismissStack(of: key) }
+        let host = BannerHostingView(rootView: StackRootView(model: model, stack: stackModel))
         let panel = BannerPanel(contentRect: NSRect(x: 0, y: 0, width: model.bannerWidth, height: 80),
                                 styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
@@ -153,16 +197,19 @@ final class BannerCenter {
         panel.contentView = host
 
         // New banners go on top of their stack; a promoted one is older than everything on screen, so it goes below.
-        let seq: Int
-        if promoted { seq = (entries.values.map(\.seq).min() ?? 1) - 1 } else { seqCounter += 1; seq = seqCounter }
-        let e = BannerEntry(key: key, panel: panel, host: host, model: model, seq: seq, corner: settings.corner,
-                            screen: settings.screen)
+        stacks.deliver(key, stackKey: stackKey, promoted: promoted)
+        let e = BannerEntry(key: key, panel: panel, host: host, model: model, stack: stackModel,
+                            seq: stacks.order(of: key) ?? 0, corner: settings.corner, screen: settings.screen)
+        e.stackKey = stackKey
         e.remaining = settings.timeout
+        e.timeout = settings.timeout
         // Templates differ a lot in height (a one-line banner ~44 pt, a hero ~260 pt); start from an estimate and
         // let the SwiftUI measurement below replace it. The view is the single source of truth for height.
         e.width = model.bannerWidth
         e.height = BannerView.estimatedHeight(for: model)
         entries[key] = e
+        // Before the first measurement, so the card is measured with its stack's edges and counter.
+        applyStacks()
         model.onHeight = { [weak self, weak e] h in
             MainActor.assumeIsolated {
                 guard let self, let e, h > 1 else { return }
@@ -215,12 +262,16 @@ final class BannerCenter {
         split(key).flatMap { controller.registry.record(for: $0.0) }?.mutedBanners == true
     }
 
-    private func targetOrigin(slot: BannerSlot, offset: CGFloat, width: CGFloat, height: CGFloat) -> NSPoint {
+    /// `keepBottomInside` (an open stack's list panel, whose Collapse and Dismiss all sit at its bottom edge): on a top
+    /// corner the bottom edge never falls below the visible frame, even if the panel is taller than it.
+    private func targetOrigin(slot: BannerSlot, offset: CGFloat, width: CGFloat, height: CGFloat,
+                              keepBottomInside: Bool = false) -> NSPoint {
         let vf = BannerDisplays.visibleFrame(of: slot.screen)
         let right = slot.corner == .topRight || slot.corner == .bottomRight
         let top = slot.corner == .topRight || slot.corner == .topLeft
         let x = right ? vf.maxX - Self.margin - width : vf.minX + Self.margin
-        let y = top ? vf.maxY - Self.margin - offset - height : vf.minY + Self.margin + offset
+        var y = top ? vf.maxY - Self.margin - offset - height : vf.minY + Self.margin + offset
+        if keepBottomInside { y = max(y, vf.minY + Self.margin) }
         return NSPoint(x: x, y: y)
     }
 
@@ -242,7 +293,9 @@ final class BannerCenter {
     /// are connected, moves what moved and lays out again. Cheap when nothing changed.
     func refreshPlacement(animated: Bool) {
         let connected = BannerDisplays.connectedIDs
-        var dirty = false
+        // The stacking level (the bell menu, Settings > Apps) or an issuer's family may have changed: re-key the
+        // banners that are up, so they fold or unfold under the new rule.
+        var dirty = regroupStacks()
         for e in Array(entries.values) {
             guard let (app, id) = split(e.key) else { continue }
             let rec = controller.registry.record(for: app)
@@ -259,14 +312,16 @@ final class BannerCenter {
 
     func relayout(animated: Bool) {
         let connected = BannerDisplays.connectedIDs
-        var slots = Set(entries.values.map { slot(of: $0, connected: connected) })
+        // Who is on top of which stack, and which cards another one stands for (hidden ones take no room).
+        applyStacks()
+        var slots = Set(entries.values.filter { !$0.hidden }.map { slot(of: $0, connected: connected) })
         slots.formUnion(deferred.slots)
         slots.formUnion(stubs.keys)
         slots.formUnion(freed.keys)
         for slotKey in slots {
             let vf = BannerDisplays.visibleFrame(of: slotKey.screen)
             let available = max(0, vf.height - 2 * Self.margin)
-            let onStack = entries.values.filter { slot(of: $0, connected: connected) == slotKey }
+            let onStack = entries.values.filter { !$0.hidden && slot(of: $0, connected: connected) == slotKey }
             let group = onStack.filter(\.measured).sorted { $0.seq > $1.seq }
             var deferredHere = deferred.count(in: slotKey)
             let plan = BannerStackPlan.make(heights: group.map(\.height), available: available, gap: Self.gap,
@@ -282,7 +337,8 @@ final class BannerCenter {
                     continue
                 }
                 e.overflowed = false
-                let origin = targetOrigin(slot: slotKey, offset: plan.offsets[index], width: e.width, height: e.height)
+                let origin = targetOrigin(slot: slotKey, offset: plan.offsets[index], width: e.width, height: e.height,
+                                          keepBottomInside: e.stack.expanded)
                 let frame = NSRect(origin: origin, size: NSSize(width: e.width, height: e.height))
                 if !e.shown {
                     e.shown = true
@@ -395,17 +451,23 @@ final class BannerCenter {
     /// Removes the banner (animated) and cancels any pending snooze. Does not touch history.
     func close(app: String, id: String) {
         let key = Self.key(app, id)
+        // A question open on a banner that goes away is cancelled (nothing runs, nothing is remembered). Last, so
+        // the entry is already gone and clearing the row does not lay the stack out a second time.
+        defer { controller.confirmations.drop(app: app, id: id) }
         cancelSnooze(key)
         let wasDeferred = deferred.remove(key)
         guard let e = entries.removeValue(forKey: key) else {
             if wasDeferred { requestRelayout() }
             return
         }
+        // The stack it was in loses a member; the card under it comes up if it was the top.
+        let removal = stacks.remove(key)
         // A banner that was on screen leaves a place on its stack; the oldest deferred banner of that stack takes it
-        // (unless banners that did not fit are still waiting: they are older and come first).
+        // (unless banners that did not fit are still waiting: they are older and come first). A card whose stack
+        // still has other members leaves no place: the next one takes its spot.
         let connected = BannerDisplays.connectedIDs
         let freedSlot = slot(of: e, connected: connected)
-        if e.shown, !e.overflowed, deferred.count(in: freedSlot) > 0,
+        if e.shown, !e.overflowed, (removal?.remaining ?? 0) == 0, deferred.count(in: freedSlot) > 0,
            !entries.values.contains(where: { slot(of: $0, connected: connected) == freedSlot && $0.overflowed }) {
             freed[freedSlot, default: 0] += 1
         }
@@ -419,6 +481,7 @@ final class BannerCenter {
         }, completionHandler: {
             MainActor.assumeIsolated { e.panel.orderOut(nil) }
         })
+        applyStacks()
         requestRelayout()
     }
 
@@ -445,6 +508,171 @@ final class BannerCenter {
         e.model.failureLine = text
         relayout(animated: true)
         return true
+    }
+
+    // MARK: Inline confirmations
+
+    /// Puts a question on a banner (or takes it off with nil) and lays the stack out again: the row replaces the
+    /// actions row and is usually taller. False when no such banner is up. Never touches the panel's key state.
+    @discardableResult
+    func setConfirmation(app: String, id: String, _ confirmation: BannerConfirmation?) -> Bool {
+        guard let e = entries[Self.key(app, id)] else { return false }
+        let wasAsking = e.model.confirmation != nil
+        e.model.confirmation = confirmation
+        // A banner that is asking does not count down (see `tick`); the countdown starts over once it is answered.
+        if wasAsking && confirmation == nil { e.remaining = e.timeout }
+        relayout(animated: true)
+        return true
+    }
+
+    // MARK: Stacks (DESIGN section 9)
+
+    /// Pushes the stack plan onto the banners: which card is on top, how many it stands for, what is open and which
+    /// cards are hidden under another. Cheap; it runs whenever a banner comes or goes, a stack opens or closes, and at
+    /// the start of every layout. A banner only changes what it publishes when the value changed, so a view is not
+    /// redrawn for nothing.
+    private func applyStacks() {
+        let plan = stacks.book.plan()
+        let connected = BannerDisplays.connectedIDs
+        // The tallest an open list may be on each display: what its slot leaves under the margins, the footer and the gap.
+        var listCaps: [String: CGFloat] = [:]
+        for e in entries.values {
+            let stack = plan.stack(containing: e.key)
+            let count = stack?.count ?? 1
+            let top = stack?.top ?? e.key
+            let isTop = top == e.key
+            let open = isTop && count > 1 && stacks.isExpanded(stackKey: e.stackKey)
+            e.topKey = top
+            e.folded = count > 1 && !isTop
+            // A card under another waits for the one on top to be measured, so it can slide in, before it leaves the
+            // screen: a stack never blinks off.
+            e.hidden = e.folded && (entries[top]?.measured ?? true)
+            if e.hidden {
+                if e.shown || e.panel.isVisible { e.panel.orderOut(nil) }
+                e.shown = false
+            }
+            // A card that is only a row of the open list, or under another card, is a plain banner.
+            let cardCount = (isTop && !open) ? count : 1
+            if e.model.stackCount != cardCount { e.model.stackCount = cardCount }
+            if e.stack.count != count { e.stack.count = count }
+            if e.stack.isTop != isTop { e.stack.isTop = isTop }
+            if e.stack.expanded != open { e.stack.expanded = open }
+            let right = e.corner == .topRight || e.corner == .bottomRight
+            if e.stack.trailing != right { e.stack.trailing = right }
+            let screen = slot(of: e, connected: connected).screen
+            let cap = listCaps[screen] ?? StackListLayout.cap(
+                available: max(0, BannerDisplays.visibleFrame(of: screen).height - 2 * Self.margin))
+            listCaps[screen] = cap
+            if e.stack.maxListHeight != cap { e.stack.maxListHeight = cap }
+            var members: [StackListMember] = []
+            if isTop, count > 1, let stack {
+                members = stack.members.compactMap { k in entries[k].map { StackListMember(id: k, model: $0.model) } }
+            }
+            if !Self.same(e.stack.members, members) { e.stack.members = members }
+            if open {
+                let width = members.map(\.model.bannerWidth).max() ?? e.model.bannerWidth
+                if e.stack.width != width { e.stack.width = width }
+                e.width = width
+            } else {
+                e.width = e.model.bannerWidth
+            }
+        }
+    }
+
+    private static func same(_ a: [StackListMember], _ b: [StackListMember]) -> Bool {
+        a.count == b.count && zip(a, b).allSatisfy { $0.id == $1.id && $0.model === $1.model }
+    }
+
+    /// A stack's countdown is held while its card is hovered or its list is open (hidden members follow the card).
+    private func stackHeld(_ e: BannerEntry, mouse: NSPoint) -> Bool {
+        if stacks.isExpanded(stackKey: e.stackKey) { return true }
+        guard e.hidden, let top = e.topKey, let t = entries[top] else { return false }
+        return t.shown && t.panel.frame.contains(mouse)
+    }
+
+    /// Re-keys the banners that are up under the level and family that apply now. True when any changed stack.
+    private func regroupStacks() -> Bool {
+        let moved = stacks.regroup { [unowned self] key in self.entries[key].flatMap { self.stacks.stackKey(for: $0.model.item) } }
+        if moved { for e in entries.values { e.stackKey = stacks.book.stackKey(of: e.key) } }
+        return moved
+    }
+
+    /// Opens or closes the stack `key` is in, in place: the top card's panel grows into the list or shrinks back.
+    /// Nothing here activates Herald or makes a panel key (DESIGN section 8).
+    func setStackOpen(key: String, _ open: Bool) {
+        guard let stackKey = entries[key]?.stackKey else { return }
+        stacks.setExpanded(stackKey: stackKey, open)
+        applyStacks()
+        relayout(animated: true)
+    }
+
+    /// Esc, while a Herald window has the key: every open stack closes.
+    func collapseAllStacks() {
+        let open = stacks.book.expandedStacks
+        guard !open.isEmpty else { return }
+        for k in open { stacks.setExpanded(stackKey: k, false) }
+        applyStacks()
+        relayout(animated: true)
+    }
+
+    /// "Dismiss all" of an open stack: every member of the stack `key` is in.
+    private func dismissStack(of key: String) {
+        guard let stackKey = entries[key]?.stackKey else { return }
+        controller.dismissMembers(stacks.book.members(ofStack: stackKey).compactMap(BannerKey.split))
+    }
+
+    /// The card's close button. On a closed stack's top card it dismisses the whole group (each member goes to
+    /// History as dismissed); anywhere else, the one notification.
+    private func closePressed(app: String, id: String) {
+        if let group = stacks.closedGroup(topKey: Self.key(app, id)) {
+            controller.dismissMembers(group.compactMap(BannerKey.split))
+        } else {
+            controller.userClosed(app: app, id: id)
+        }
+    }
+
+    /// A click on a banner's body. A closed stack's top card that has no link of its own opens the stack instead of
+    /// going nowhere; everything else opens the notification's url.
+    private func openPressed(app: String, id: String) {
+        let key = Self.key(app, id)
+        if stacks.closedGroup(topKey: key) != nil, controller.history.item(app: app, id: id)?.notification.url?.isEmpty != false {
+            setStackOpen(key: key, true)
+            return
+        }
+        controller.userOpened(app: app, id: id)
+    }
+
+    /// The snooze menu. On a closed stack's top card it snoozes the group, which comes back as the same stack.
+    private func snoozePressed(app: String, id: String, option: SnoozeOption) {
+        let key = Self.key(app, id)
+        if stacks.closedGroup(topKey: key) != nil {
+            controller.userSnoozedGroup(members: stacks.restoreOrder(of: key).compactMap(BannerKey.split), option: option)
+        } else {
+            controller.userSnoozed(app: app, id: id, option: option)
+        }
+    }
+
+    /// The live stacks, for `GET /v1/stacks`: every group of banners that is up, newest member first.
+    func stackInfos(app: String?) -> [HeraldStackInfo] {
+        stacks.infos(app: app, item: { [weak self] key in self?.entries[key]?.model.item }, frame: { [weak self] key in
+            guard let e = self?.entries[key], e.shown else { return nil }
+            let f = e.panel.frame
+            return HeraldStackInfo.Frame(x: f.minX, y: f.minY, width: f.width, height: f.height)
+        })
+    }
+
+    /// `POST /v1/stacks/expand`: opens or closes the stack that holds a notification of `app` sent with `group`, the
+    /// same as the badge and the Collapse button do (no UI to drive for a test or an agent). False when no such
+    /// stack with two or more notifications is up.
+    func setStackOpen(app: String, group: String, _ open: Bool) -> Bool {
+        for stack in stacks.book.plan().stacks where stack.count > 1 {
+            let match = stack.members.contains { key in
+                guard let item = entries[key]?.model.item else { return false }
+                return item.app == app && StackKeying.effectiveGroup(app: item.app, group: item.notification.group) == group
+            }
+            if match { setStackOpen(key: stack.top, open); return true }
+        }
+        return false
     }
 
     // MARK: Snooze
@@ -474,10 +702,21 @@ final class BannerCenter {
         for e in entries.values {
             let hovered = e.shown && e.panel.frame.contains(mouse)
             if e.model.hovering != hovered { e.model.hovering = hovered }
-            guard let rem = e.remaining, !hovered else { continue }
+            // A stack counts down as one: hovering its card or having it open holds every member, hidden ones too.
+            guard let rem = e.remaining, !hovered, !stackHeld(e, mouse: mouse), e.model.confirmation == nil else { continue }
             e.remaining = rem - 0.25
             if e.remaining! <= 0, let pair = split(e.key) { expired.append(pair) }
         }
         for (app, id) in expired { controller.bannerExpired(app: app, id: id) }
+    }
+}
+
+extension BannerCenter: ConfirmationSurface {
+    func presentConfirmation(_ confirmation: BannerConfirmation, app: String, id: String) -> Bool {
+        setConfirmation(app: app, id: id, confirmation)
+    }
+
+    func clearConfirmation(app: String, id: String) {
+        setConfirmation(app: app, id: id, nil)
     }
 }

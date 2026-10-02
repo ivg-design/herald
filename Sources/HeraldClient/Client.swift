@@ -106,6 +106,21 @@ public final class HeraldClient: @unchecked Sendable {
         let _: Ack = try await send("POST", "/v1/dismissAll", body: ["app": app])
     }
 
+    /// Dismisses every banner of `app` that was sent with this `group` (a stack, when stacking is by sender).
+    public func dismissAll(app: String, group: String) async throws {
+        let _: Ack = try await send("POST", "/v1/dismissAll", body: ["app": app, "group": group])
+    }
+
+    /// The stacks currently on screen (`GET /v1/stacks`), newest member first in each. `app` keeps only the
+    /// stacks that hold a notification of that app.
+    public func stacks(app: String? = nil) async throws -> [HeraldStackInfo] {
+        struct R: Decodable { var stacks: [HeraldStackInfo] }
+        var q: [URLQueryItem] = []
+        if let app { q.append(URLQueryItem(name: "app", value: app)) }
+        let r: R = try await send("GET", "/v1/stacks", query: q)
+        return r.stacks
+    }
+
     public func history(app: String? = nil, limit: Int = 50) async throws -> [HeraldHistoryItem] {
         struct R: Decodable { var items: [HeraldHistoryItem] }
         var q = [URLQueryItem(name: "limit", value: String(limit))]

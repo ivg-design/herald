@@ -78,7 +78,9 @@ struct GridRenderState {
             perform: { [weak model] a, o in model?.perform(a, origin: o) },
             snooze: { [weak model] in model?.onSnooze($0) },
             addReminder: { [weak model] in model?.onReminder() },
-            dismiss: { [weak model] in model?.onClose() })
+            dismiss: { [weak model] in model?.onClose() },
+            stackCount: model.stackCount,
+            expandStack: { [weak model] in model?.onExpandStack() })
         self.ctx = ctx
 
         var empty = t.emptyCellIDs(fields: ctx.fields, actions: ctx.actions)
@@ -97,7 +99,26 @@ struct GridRenderState {
                 break
             }
         }
-        let plan = t.plan(emptyCells: empty)
+        // A pending inline confirmation takes the place of the actions row: every action and button cell goes, and
+        // its row with it (whatever the cell's own emptyBehavior says), so the question has nothing to fight with.
+        // Icon buttons (close, snooze) stay: the user can always dismiss the banner, which cancels the question.
+        var planTemplate = t
+        if model.confirmation != nil {
+            for i in planTemplate.cells.indices {
+                switch planTemplate.cells[i].component {
+                case .actions(var a):
+                    a.emptyBehavior = .collapse
+                    planTemplate.cells[i].component = .actions(a)
+                case .button(var b):
+                    b.emptyBehavior = .collapse
+                    planTemplate.cells[i].component = .button(b)
+                default:
+                    continue
+                }
+                empty.insert(planTemplate.cells[i].id)
+            }
+        }
+        let plan = planTemplate.plan(emptyCells: empty)
         self.plan = plan
         liveIndices = t.cells.indices.filter { !plan.isCollapsed(cell: t.cells[$0].id) }
     }
@@ -160,6 +181,7 @@ struct GridBannerView: View {
         case .actions(let c): ActionsComponentView(component: c, ctx: ctx)
         case .iconButton(let c): IconButtonComponentView(component: c, ctx: ctx)
         case .badge(let c): BadgeComponentView(component: c, ctx: ctx)
+        case .stackBadge(let c): StackBadgeComponentView(component: c, ctx: ctx)
         case .progress(let c): ProgressComponentView(component: c, ctx: ctx)
         case .rive(let c): RiveSlotView(component: c, ctx: ctx)
         case .spacer: Color.clear.frame(width: 0, height: 0)
@@ -169,7 +191,7 @@ struct GridBannerView: View {
     /// A click on a button row's empty space does nothing (v1 behaviour); everywhere else it opens the banner.
     private static func isInteractive(_ c: HeraldComponent) -> Bool {
         switch c {
-        case .actions, .button, .iconButton: return true
+        case .actions, .button, .iconButton, .stackBadge: return true
         default: return false
         }
     }
@@ -192,6 +214,8 @@ struct GridBannerView: View {
     private func bannerTapped() {
         DispatchQueue.main.async {
             if Date().timeIntervalSince(linkClickedAt) < 0.5 { return }
+            // A stray click on the card must not open it (and dismiss it, cancelling the question) while it is asking.
+            if model.confirmation != nil { return }
             model.onOpen()
         }
     }
@@ -264,14 +288,14 @@ enum GridEstimator {
                 let size = c.fontSize ?? (c.style == .caption ? 10 : c.style == .title ? 13 : 12)
                 return (len, size, max(c.maxLines ?? GridStyle.defaultLines(c.style, body: ctx.maxBodyLines), 1))
             case .timestamp(let c): return (8, c.fontSize ?? 10, 1)
-            case .badge: return (3, 10.5, 1)
+            case .badge, .stackBadge: return (3, 10.5, 1)
             default: return (0, 12, 1)
             }
         }
         let measure = GridMeasure(
             idealWidth: { i in
                 switch cells[i].component {
-                case .text, .timestamp, .badge: let t = text(i); return Double(t.len) * t.size * 0.55
+                case .text, .timestamp, .badge, .stackBadge: let t = text(i); return Double(t.len) * t.size * 0.55
                 case .issuerIcon(let c): return c.size
                 case .iconButton(let c): return c.size ?? 18
                 case .image(let c): return (c.height ?? 48) * (c.aspectRatio ?? 1)
@@ -281,7 +305,7 @@ enum GridEstimator {
             },
             height: { i, w in
                 switch cells[i].component {
-                case .text, .timestamp, .badge:
+                case .text, .timestamp, .badge, .stackBadge:
                     let t = text(i)
                     let perLine = max(w / (t.size * 0.55), 1)
                     let lines = min(max(Int((Double(t.len) / perLine).rounded(.up)), 1), t.lines)

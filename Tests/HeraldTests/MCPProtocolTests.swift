@@ -382,7 +382,7 @@ final class MCPProtocolTests: XCTestCase {
     static let expectedTools = [
         "herald_status", "list_manifests", "get_manifest", "put_manifest", "list_templates", "get_template", "put_template",
         "delete_template", "validate_template", "component_schema", "render_preview", "send_notification", "send_test",
-        "list_shortcuts", "add_action_rule", "list_history", "dismiss", "speak", "get_quiet_hours", "set_quiet_hours",
+        "list_shortcuts", "add_action_rule", "list_history", "dismiss", "list_stacks", "speak", "get_quiet_hours", "set_quiet_hours",
     ]
 
     func testToolsListHasEveryDesignedTool() async throws {

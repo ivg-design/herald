@@ -52,6 +52,9 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
     public var snooze: Bool?
     public var reminder: HeraldReminder?
     public var metadata: JSONValue?
+    /// The stacking key for `bySender` stacking (DESIGN section 9): an email sender, a watched site, a bid id.
+    /// Notifications of one app with the same `group` fold into one stacked banner. Absent: the issuer id.
+    public var group: String?
 
     // Presentation (DESIGN section 6). All optional: a notification that sets none of them renders
     // with the app-wide look, and a named `template` supplies defaults for whatever it leaves out
@@ -80,12 +83,12 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
                 reminder: HeraldReminder? = nil, metadata: JSONValue? = nil,
                 template: String? = nil, layout: HeraldLayout? = nil, accentColor: String? = nil,
                 showSubtitle: Bool? = nil, showBody: Bool? = nil, showTimestamp: Bool? = nil,
-                maxBodyLines: Int? = nil, actionIds: [String]? = nil) {
+                maxBodyLines: Int? = nil, actionIds: [String]? = nil, group: String? = nil) {
         self.app = app; self.id = id; self.title = title; self.subtitle = subtitle
         self.body = body; self.image = image; self.url = url; self.sound = sound
         self.persistent = persistent; self.timeout = timeout; self.priority = priority
         self.buttons = buttons; self.actionIds = actionIds; self.snooze = snooze; self.reminder = reminder
-        self.metadata = metadata
+        self.metadata = metadata; self.group = group
         self.template = template; self.layout = layout; self.accentColor = accentColor
         self.showSubtitle = showSubtitle; self.showBody = showBody
         self.showTimestamp = showTimestamp; self.maxBodyLines = maxBodyLines

@@ -312,6 +312,45 @@ public struct HeraldBadgeComponent: Codable, Equatable, Sendable {
     }
 }
 
+/// The stack counter (DESIGN section 9): a pill showing `{stack.count}`, the number of notifications folded into
+/// this banner's stack. It has no content (so it collapses, or keeps its blank cell, like any empty component)
+/// while the banner is alone, and clicking it expands the stack. A template without one gets the counter at the
+/// top right of the stacked card: `{"type":"stackBadge","color":"#FF3B30"}`.
+public struct HeraldStackBadgeComponent: Codable, Equatable, Sendable {
+    /// What the pill binds to.
+    public static let binding = "{stack.count}"
+    /// Pill colour: hex or `accent`. nil uses the accent.
+    public var color: String?
+    /// Text colour: hex or `primary`. nil picks a legible colour for `color`.
+    public var textColor: String?
+    public var emptyBehavior: HeraldEmptyBehavior?
+
+    public init(color: String? = nil, textColor: String? = nil, emptyBehavior: HeraldEmptyBehavior? = nil) {
+        self.color = color; self.textColor = textColor; self.emptyBehavior = emptyBehavior
+    }
+
+    private enum CodingKeys: String, CodingKey { case color, textColor, emptyBehavior }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(color: try c.decodeIfPresent(String.self, forKey: .color),
+                  textColor: try c.decodeIfPresent(String.self, forKey: .textColor),
+                  emptyBehavior: try c.decodeIfPresent(HeraldEmptyBehavior.self, forKey: .emptyBehavior))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(color, forKey: .color)
+        try c.encodeIfPresent(textColor, forKey: .textColor)
+        try c.encodeIfPresent(emptyBehavior, forKey: .emptyBehavior)
+    }
+
+    /// The pill as a plain badge, which is how it is drawn.
+    public var asBadge: HeraldBadgeComponent {
+        HeraldBadgeComponent(binding: Self.binding, color: color, textColor: textColor, emptyBehavior: emptyBehavior)
+    }
+}
+
 /// A progress bar: `{"type":"progress","binding":"{percent}"}`. The bound value is a fraction 0...1, or a
 /// percentage when it is greater than 1.
 public struct HeraldProgressComponent: Codable, Equatable, Sendable {
@@ -435,13 +474,14 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
     case actions(HeraldActionsComponent)
     case iconButton(HeraldIconButtonComponent)
     case badge(HeraldBadgeComponent)
+    case stackBadge(HeraldStackBadgeComponent)
     case progress(HeraldProgressComponent)
     case rive(HeraldRiveComponent)
     case spacer
 
     /// Every `type` string, in the order the schema lists them.
     public static let typeNames = ["text", "image", "issuerIcon", "timestamp", "button", "actions",
-                                   "iconButton", "badge", "progress", "rive", "spacer"]
+                                   "iconButton", "badge", "stackBadge", "progress", "rive", "spacer"]
 
     private enum Discriminator: String, CodingKey { case type }
 
@@ -457,6 +497,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case "actions": self = .actions(try HeraldActionsComponent(from: decoder))
         case "iconButton": self = .iconButton(try HeraldIconButtonComponent(from: decoder))
         case "badge": self = .badge(try HeraldBadgeComponent(from: decoder))
+        case "stackBadge": self = .stackBadge(try HeraldStackBadgeComponent(from: decoder))
         case "progress": self = .progress(try HeraldProgressComponent(from: decoder))
         case "rive": self = .rive(try HeraldRiveComponent(from: decoder))
         case "spacer": self = .spacer
@@ -479,6 +520,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .actions(let p): try p.encode(to: encoder)
         case .iconButton(let p): try p.encode(to: encoder)
         case .badge(let p): try p.encode(to: encoder)
+        case .stackBadge(let p): try p.encode(to: encoder)
         case .progress(let p): try p.encode(to: encoder)
         case .rive(let p): try p.encode(to: encoder)
         case .spacer: break
@@ -496,6 +538,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .actions: return "actions"
         case .iconButton: return "iconButton"
         case .badge: return "badge"
+        case .stackBadge: return "stackBadge"
         case .progress: return "progress"
         case .rive: return "rive"
         case .spacer: return "spacer"
@@ -513,6 +556,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .actions(let p): return p.emptyBehavior
         case .iconButton(let p): return p.emptyBehavior
         case .badge(let p): return p.emptyBehavior
+        case .stackBadge(let p): return p.emptyBehavior
         case .progress(let p): return p.emptyBehavior
         case .rive(let p): return p.emptyBehavior
         case .spacer: return nil
@@ -526,6 +570,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .image(let p): return [p.binding]
         case .timestamp(let p): return p.binding.map { [$0] } ?? []
         case .badge(let p): return [p.binding]
+        case .stackBadge: return [HeraldStackBadgeComponent.binding]
         case .progress(let p): return [p.binding]
         case .rive(let p): return p.inputBindings.keys.sorted().compactMap { p.inputBindings[$0] }
             .filter { !HeraldRiveComponent.pointerKeywords.contains($0) }
@@ -579,6 +624,7 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .text(let p): return bound(p.binding)
         case .image(let p): return bound(p.binding)
         case .badge(let p): return bound(p.binding)
+        case .stackBadge: return bound(HeraldStackBadgeComponent.binding)
         case .progress(let p): return bound(p.binding)
         case .timestamp(let p):
             guard let b = p.binding, !b.trimmingCharacters(in: .whitespaces).isEmpty else { return true }

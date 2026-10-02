@@ -75,7 +75,8 @@ public enum CLIArguments {
       snooze        Snooze a banner (--app, --id, --minutes N)
       unsnooze      Bring a snoozed banner back now (--app, --id)
       dismiss       Dismiss one banner (--app, --id)
-      dismiss-all   Dismiss all banners of an app (--app)
+      dismiss-all   Dismiss all banners of an app (--app), or of one stack (--app --group G)
+      stacks        List the stacks of banners on screen ([--app ID])
       history       Show an app's history (--app [--limit N] [--clear])
       template      Share a template with its animations: template export | template import
       apps          List registered apps
@@ -94,6 +95,7 @@ public enum CLIArguments {
     notify OPTIONS
       --app ID  --title T  --subtitle T  --body T  --image PATH|URL|data:  --url URL
       --id ID               Replace an existing banner with this id
+      --group G             Stack key: banners of this app with the same group fold into one stack (DESIGN 9)
       --sound NAME|PATH|none
       --timeout SECONDS     0 = until dismissed
       --persistent | --no-persistent
@@ -143,7 +145,7 @@ public enum CLIArguments {
 
     static let valueFlagsNotify: Set<String> = ["--app", "--id", "--title", "--subtitle", "--body", "--image", "--url",
         "--sound", "--timeout", "--priority", "--button", "--reminder", "--icon", "--callback-url", "--metadata", "--json",
-        "--template", "--layout", "--accent", "--max-body-lines",
+        "--template", "--layout", "--accent", "--max-body-lines", "--group",
         "--speak-text", "--voice", "--speed", "--lang", "--audio", "--presentation"]
     static let boolFlagsNotify: Set<String> = ["--persistent", "--no-persistent", "--snooze", "--no-snooze",
         "--no-subtitle", "--no-body", "--no-time", "--speak"]
@@ -228,10 +230,18 @@ public enum CLIArguments {
             try o.finish()
             return inv(.request(CLIRequest(method: "POST", path: "/v1/dismiss", body: ["app": app, "id": id])))
         case "dismiss-all":
-            let o = try Options(rest, values: ["--app"], bools: [])
+            let o = try Options(rest, values: ["--app", "--group"], bools: [])
             let app = try o.require("--app")
+            let group = o.value("--group")
             try o.finish()
-            return inv(.request(CLIRequest(method: "POST", path: "/v1/dismissAll", body: ["app": app])))
+            var body = ["app": app]
+            if let group, !group.isEmpty { body["group"] = group }
+            return inv(.request(CLIRequest(method: "POST", path: "/v1/dismissAll", body: body)))
+        case "stacks":
+            let o = try Options(rest, values: ["--app"], bools: [])
+            let app = o.value("--app")
+            try o.finish()
+            return inv(.request(CLIRequest(method: "GET", path: "/v1/stacks", query: app.map { [("app", $0)] } ?? [])))
         case "history":
             let o = try Options(rest, values: ["--app", "--limit"], bools: ["--clear"])
             let app = try o.require("--app")
@@ -321,6 +331,7 @@ public enum CLIArguments {
             body["layout"] = v
         }
         if let v = o.value("--accent") { body["accentColor"] = v }
+        if let v = o.value("--group"), !v.isEmpty { body["group"] = v }
         if o.flag("--no-subtitle") { body["showSubtitle"] = false }
         if o.flag("--no-body") { body["showBody"] = false }
         if o.flag("--no-time") { body["showTimestamp"] = false }

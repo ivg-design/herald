@@ -69,6 +69,7 @@ public enum ComponentSchema {
         Text-like components bind to fields with `{token}`: `"{title} - {count}"`. Tokens are the manifest's field keys, the standard fields
         (\(TemplateResolver.standardTokens.joined(separator: ", "))), `{extra.key}` for the template's own `extra` values, and dotted names into metadata (`{customer.name}`).
         A component whose tokens are all absent is **empty**.
+        `{stack.count}` is the number of notifications folded into the banner's stack (DESIGN section 9); it is absent, so empty, while the banner is alone.
 
         ## Empty components
         `collapseEmpty` (template) and `emptyBehavior` (component, `collapse` or `keep`) decide: collapse removes the component and a row or column with nothing live collapses to zero (no gap); keep leaves the space blank.
@@ -240,6 +241,7 @@ public enum ComponentSchema {
                 "Top-level payload keys (title, subtitle, body, image, url, app, id, priority, sound), then the manifest's appName, then metadata keys (nested objects as dotted names: {customer.name}); earlier sources win.",
                 "{extra.key} reads the template's own `extra` values.",
                 "{deliveredAt} is the delivery time (ISO 8601). A timestamp component with no binding shows the delivery time.",
+                "{stack.count} is the number of notifications folded into the banner's stack: present only while 2 or more are stacked, so it is empty (and its component collapses) for a lone banner. The stackBadge component binds it for you.",
                 "Manifest fields (get_manifest) list the tokens an issuer sends, their types and sample values (used by render_preview with data: \"sample\").",
             ]),
             "valueFormatting": s("Numbers print without a trailing .0, booleans as true/false, lists joined with \", \". Blank values count as absent."),
@@ -321,6 +323,11 @@ public enum ComponentSchema {
                 "color": prop("string", "Pill colour: hex or accent. Default accent."),
                 "textColor": prop("string", "Text colour: hex or primary. Default: legible on the pill."),
             ], example: ##"{"type":"badge","binding":"{count}","color":"#FF3B30"}"##),
+            comp("stackBadge", "The stack counter: a pill showing {stack.count}, the number of notifications folded into this banner's stack (empty while the banner is alone). Click it to expand the stack. A template without one gets the counter at the top right of the stacked card.",
+                 emptyWhen: "the banner is not stacked ({stack.count} is absent below 2)", [
+                "color": prop("string", "Pill colour: hex or accent. Default accent."),
+                "textColor": prop("string", "Text colour: hex or primary. Default: legible on the pill."),
+            ], example: ##"{"type":"stackBadge","color":"#FF3B30"}"##),
             comp("progress", "A progress bar. The bound value is 0...1, or a percentage when greater than 1.",
                  required: ["binding"], emptyWhen: "every {token} in binding is absent", [
                 "binding": prop("string", "e.g. \"{percent}\"."),

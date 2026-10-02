@@ -294,6 +294,7 @@ enum DesignerComponent {
         case .actions(let p): ActionsComponentView(component: p, ctx: ctx)
         case .iconButton(let p): IconButtonComponentView(component: p, ctx: ctx)
         case .badge(let p): BadgeComponentView(component: p, ctx: ctx)
+        case .stackBadge(let p): StackBadgeComponentView(component: p, ctx: ctx)
         case .progress(let p): ProgressComponentView(component: p, ctx: ctx)
         case .rive(let p): RiveSlotView(component: p, ctx: ctx)
         case .spacer: Color.clear.frame(width: 0, height: 0)

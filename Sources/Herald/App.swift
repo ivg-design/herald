@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             menu.addItem(item("Quiet for 1 Hour", #selector(quietOneHour), ""))
         }
+        menu.addItem(stackingItem())
         menu.addItem(item("Dismiss All", #selector(dismissAll), ""))
         menu.addItem(.separator())
         menu.addItem(item("Settings\u{2026}", #selector(openSettings), ","))
@@ -95,6 +96,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let i = NSMenuItem(title: title, action: action, keyEquivalent: key)
         i.target = self
         return i
+    }
+
+    /// "Stack Notifications": the quick switch for how banners fold together (DESIGN section 9). It sets the global
+    /// default; an issuer's own choice in Settings > Apps still wins.
+    private func stackingItem() -> NSMenuItem {
+        let parent = NSMenuItem(title: "Stack Notifications", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for level in StackingLevel.allCases {
+            let i = NSMenuItem(title: level.title, action: #selector(setStacking(_:)), keyEquivalent: "")
+            i.target = self
+            i.representedObject = level.rawValue
+            i.state = controller.settings.stacking == level ? .on : .off
+            i.toolTip = level.detail
+            sub.addItem(i)
+        }
+        parent.submenu = sub
+        return parent
+    }
+
+    @objc private func setStacking(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let level = StackingLevel(rawValue: raw) { controller.settings.stacking = level }
     }
 
     @objc private func toggleMute() { controller.muted.toggle() }

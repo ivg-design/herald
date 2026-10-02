@@ -76,7 +76,7 @@ enum MCPToolCatalog {
             authored in templates (add_action_rule). Invalid manifests are rejected with the field path.
             """,
             inputSchema: Schema.input(["manifest": Schema.object(
-                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], actions: [{id?, label, kind: url|callback|command|dismiss, style?, url?, command?, callback?}], assets?, defaultTemplate?}")],
+                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], actions: [{id?, label, kind: url|callback|command|dismiss, style?, url?, command?, callback?}], assets?, defaultTemplate?, family?: the product family byApp stacking groups issuers by, e.g. \"webwatcher\"}")],
                                       required: ["manifest"]),
             destructive: true, idempotent: true),
 
@@ -273,13 +273,28 @@ enum MCPToolCatalog {
 
         MCPToolDefinition(
             name: "dismiss", title: "Dismiss banner",
-            description: "Dismiss one banner by app and id, or every banner of an app with all: true. It only closes the banner; the history keeps the notification.",
+            description: "Dismiss one banner by app and id, every banner of an app sent with one group (a stack: see list_stacks), or every banner of an app with all: true. It only closes the banner; the history keeps the notification.",
             inputSchema: Schema.input([
                 "app": Schema.string("The app id."),
                 "id": Schema.string("The notification id (see list_history)."),
+                "group": Schema.string("Dismiss every banner of the app that was sent with this group (use instead of id)."),
                 "all": Schema.boolean("Dismiss every banner of the app (use instead of id)."),
             ], required: ["app"]),
             destructive: true, idempotent: true),
+
+        MCPToolDefinition(
+            name: "list_stacks", title: "List stacks",
+            description: """
+            The stacks of banners on the user's screen: notifications Herald folded into one banner with a counter because \
+            they share a stacking key. The user's stacking level decides the key: byApp (an issuer family such as every \
+            WebWatcher), byIssuer (one app) or bySender (the payload's `group`, an email sender or a watched site; the app id \
+            when a notification sent none). Each stack lists its level, app, group, count, whether it is open and its \
+            notifications newest first. dismiss with {app, group} clears one.
+            """,
+            inputSchema: Schema.input([
+                "app": Schema.string("Only stacks that hold a notification of this app. Omit for all."),
+            ]),
+            readOnly: true, idempotent: true),
 
         MCPToolDefinition(
             name: "speak", title: "Speak aloud",

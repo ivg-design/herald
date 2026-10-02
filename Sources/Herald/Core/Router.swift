@@ -32,6 +32,15 @@ public protocol HeraldBackend: AnyObject, Sendable {
     /// `GET/PUT /v1/settings/quiet-hours` (DESIGN section 7.9.1).
     func quietHours() async throws -> HeraldQuietReply
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply
+    /// `POST /v1/dismissAll {app, group}`: every banner of `app` sent with this `group` (DESIGN section 9).
+    func dismissGroup(app: String, group: String) async throws
+    /// `GET /v1/stacks?app=`: the stacks that are up (DESIGN section 9).
+    func stacks(app: String?) async throws -> [HeraldStackInfo]
+    /// `POST /v1/stacks/expand {app, group, expanded}`: open or close a stack in place.
+    func expandStack(app: String, group: String, expanded: Bool) async throws
+    /// `GET/PUT /v1/settings/stacking`: the global default stacking level (the bell menu's choice).
+    func stackingLevel() async throws -> StackingLevel
+    func setStackingLevel(_ level: StackingLevel) async throws -> StackingLevel
 }
 
 /// Which template a preview draws: one stored for the app (or a `builtin.*` one) by name, or one sent inline.
@@ -58,11 +67,22 @@ public struct PreviewSpec: Sendable, Equatable {
     public var data: HeraldNotification?
     public var appearance: PreviewAppearance
     public var scale: Double
+    /// An inline confirmation to draw on the banner, replacing its actions row (DESIGN 8), so a pending
+    /// "Run this command?" can be checked without driving the UI. nil draws the banner as usual.
+    public var confirmation: BannerConfirmation?
+    /// Draws the banner as the top card of a stack of this many notifications (DESIGN section 9): the stacked-card
+    /// edges, the count badge and `{stack.count}`. 1 draws the banner as usual.
+    public var stackCount: Int
+    public static let stackCountRange: ClosedRange<Int> = 1...99
+    /// With `stackCount` above 1: draw the stack open, as the list of its banners with Collapse and Dismiss all.
+    public var stackExpanded: Bool
 
     public init(template: PreviewTemplateChoice? = nil, app: String, data: HeraldNotification? = nil,
-                appearance: PreviewAppearance = .light, scale: Double = PreviewSpec.defaultScale) {
+                appearance: PreviewAppearance = .light, scale: Double = PreviewSpec.defaultScale,
+                confirmation: BannerConfirmation? = nil, stackCount: Int = 1, stackExpanded: Bool = false) {
         self.template = template; self.app = app; self.data = data
-        self.appearance = appearance; self.scale = scale
+        self.appearance = appearance; self.scale = scale; self.confirmation = confirmation
+        self.stackCount = stackCount; self.stackExpanded = stackExpanded
     }
 }
 
@@ -81,6 +101,11 @@ public extension HeraldBackend {
     func preview(_ request: PreviewSpec) async throws -> Data { throw BackendError(501, "previews are not supported") }
     func quietHours() async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
+    func dismissGroup(app: String, group: String) async throws { throw BackendError(501, "stacks are not supported") }
+    func stacks(app: String?) async throws -> [HeraldStackInfo] { throw BackendError(501, "stacks are not supported") }
+    func expandStack(app: String, group: String, expanded: Bool) async throws { throw BackendError(501, "stacks are not supported") }
+    func stackingLevel() async throws -> StackingLevel { throw BackendError(501, "stacking is not supported") }
+    func setStackingLevel(_ level: StackingLevel) async throws -> StackingLevel { throw BackendError(501, "stacking is not supported") }
 }
 
 /// Routes the DESIGN section 2 endpoints. Only /v1/health is unauthenticated.
@@ -135,7 +160,30 @@ public final class Router: @unchecked Sendable {
                 return .json(200, ["ok": true])
             case ("POST", "/v1/dismissAll"):
                 let b = req.body.isEmpty ? DismissBody() : try decode(DismissBody.self, req)
-                try await backend.dismissAll(app: b.app)
+                // With a group: the banners of that app sent with it (a stack), not the whole app.
+                if let group = b.group, !group.isEmpty {
+                    guard let app = b.app, !app.isEmpty else { throw BackendError(400, "app is required with group") }
+                    try await backend.dismissGroup(app: app, group: group)
+                } else {
+                    try await backend.dismissAll(app: b.app)
+                }
+                return .json(200, ["ok": true])
+            case ("GET", "/v1/stacks"):
+                let app = req.query["app"].flatMap { $0.isEmpty ? nil : $0 }
+                return .json(200, StacksReply(stacks: try await backend.stacks(app: app)))
+            case ("GET", "/v1/settings/stacking"):
+                return .json(200, StackingReply(level: try await backend.stackingLevel()))
+            case ("PUT", "/v1/settings/stacking"):
+                let b = try decode(StackingBody.self, req)
+                guard let raw = b.level, let level = StackingLevel(rawValue: raw) else {
+                    throw BackendError(400, "level must be one of " + StackingLevel.allCases.map(\.rawValue).joined(separator: ", "))
+                }
+                return .json(200, StackingReply(level: try await backend.setStackingLevel(level)))
+            case ("POST", "/v1/stacks/expand"):
+                let b = try decode(ExpandBody.self, req)
+                guard let app = b.app, !app.isEmpty else { throw BackendError(400, "app is required") }
+                // The group of a notification that sent none is its issuer id, so that is the default here too.
+                try await backend.expandStack(app: app, group: b.group.flatMap { $0.isEmpty ? nil : $0 } ?? app, expanded: b.expanded ?? true)
                 return .json(200, ["ok": true])
             case ("GET", "/v1/history"):
                 let limit = req.query["limit"].flatMap(Int.init) ?? 50
@@ -199,7 +247,7 @@ public final class Router: @unchecked Sendable {
                 return .png(try await backend.preview(try decodePreview(req)))
             case ("GET", "/v1/preview"):
                 return .png(try await backend.preview(try previewRequest(query: req.query)))
-            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"),
+            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/settings/stacking"),
                  (_, "/v1/history"), (_, "/v1/apps"), (_, "/v1/templates"),
                  (_, "/v1/manifests"), (_, "/v1/manifest"), (_, "/v1/components"), (_, "/v1/shortcuts"),
                  (_, "/v1/preview"):
@@ -227,7 +275,15 @@ public final class Router: @unchecked Sendable {
     private struct TemplatesReply: Encodable { var items: [HeraldTemplate] }
     private struct ManifestsReply: Encodable { var items: [HeraldManifest] }
     private struct ShortcutsReply: Encodable { var items: [String] }
-    private struct DismissBody: Decodable { var app: String?; var id: String? }
+    private struct DismissBody: Decodable { var app: String?; var id: String?; var group: String? }
+    private struct StacksReply: Encodable { var stacks: [HeraldStackInfo] }
+    private struct ExpandBody: Decodable { var app: String?; var group: String?; var expanded: Bool? }
+    private struct StackingBody: Decodable { var level: String? }
+    private struct StackingReply: Encodable {
+        var level: String
+        var levels: [String] = StackingLevel.allCases.map(\.rawValue)
+        init(level: StackingLevel) { self.level = level.rawValue }
+    }
 
     private func authorized(_ req: HTTPRequest) -> Bool { BearerAuth.isAuthorized(req, token: token) }
 
@@ -306,13 +362,35 @@ public final class Router: @unchecked Sendable {
         if let name = query["template"], !name.isEmpty { template = .named(name) }
         let appearance = try Self.previewAppearance(query["appearance"])
         let scale = try Self.previewScale(query["scale"].map { .string($0) })
-        return PreviewSpec(template: template, app: app, data: nil, appearance: appearance, scale: scale)
+        let stackCount = try Self.previewStackCount(query["stackCount"].map { .string($0) })
+        let expanded = ["true", "1", "yes"].contains((query["stackExpanded"] ?? "").lowercased())
+        return PreviewSpec(template: template, app: app, data: nil, appearance: appearance, scale: scale,
+                           stackCount: stackCount, stackExpanded: expanded)
     }
 
-    /// `POST /v1/preview` `{template, app, data, appearance, scale}`. `template` is a name or an inline template
+    /// `stackCount` of a preview: a whole number from 1 to 99 (number or text), default 1.
+    private static func previewStackCount(_ raw: ScaleInput?) throws -> Int {
+        guard let raw else { return 1 }
+        let value: Double?
+        switch raw {
+        case .number(let d): value = d
+        case .string(let s): value = Double(s.trimmingCharacters(in: .whitespaces))
+        case .invalid: value = nil
+        }
+        // Range-check as a Double first: `Int(v)` traps for any finite value outside the Int range (1e20).
+        guard let v = value, v.isFinite, v == v.rounded(),
+              v >= Double(PreviewSpec.stackCountRange.lowerBound), v <= Double(PreviewSpec.stackCountRange.upperBound) else {
+            throw BackendError(400, "invalid field: stackCount (a whole number from 1 to 99)")
+        }
+        return Int(v)
+    }
+
+    /// `POST /v1/preview` `{template, app, data, appearance, scale, confirmation}`. `template` is a name or an inline template
     /// object (checked against the grid schema, so an agent gets the offending cell back); `data` is an object of
     /// field values or the string "sample" (the default); `appearance` is light (default) or dark; `scale` 1 to 3
-    /// (default 2).
+    /// (default 2); `confirmation` (optional) draws a pending inline confirmation (`BannerConfirmation.fromPreview`);
+    /// `stackCount` (optional, 1 to 99) draws the banner as the top card of a stack of that many (DESIGN section 9),
+    /// `stackExpanded: true` as the open list of them.
     private func decodePreview(_ req: HTTPRequest) throws -> PreviewSpec {
         guard let obj = (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any] else {
             throw BackendError(400, req.body.isEmpty ? "a JSON body is required" : "invalid JSON")
@@ -359,7 +437,20 @@ public final class Router: @unchecked Sendable {
         }
         let appearance = try Self.previewAppearance(obj["appearance"])
         let scale = try Self.previewScale(Self.previewScaleValue(obj["scale"]))
-        return PreviewSpec(template: template, app: app, data: data, appearance: appearance, scale: scale)
+        var confirmation: BannerConfirmation?
+        switch obj["confirmation"] {
+        case nil, is NSNull: break
+        case let raw?: confirmation = try BannerConfirmation.fromPreview(raw, defaultName: app)
+        }
+        let stackCount = try Self.previewStackCount(Self.previewScaleValue(obj["stackCount"]))
+        var stackExpanded = false
+        switch obj["stackExpanded"] {
+        case nil, is NSNull: break
+        case let b as Bool: stackExpanded = b
+        default: throw BackendError(400, "invalid field: stackExpanded (true or false)")
+        }
+        return PreviewSpec(template: template, app: app, data: data, appearance: appearance, scale: scale,
+                           confirmation: confirmation, stackCount: stackCount, stackExpanded: stackExpanded)
     }
 
     /// The `data` object as a notification, by the same rules as `/v1/notify`: its notification keys are

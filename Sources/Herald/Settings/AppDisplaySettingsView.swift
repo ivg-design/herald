@@ -38,6 +38,10 @@ struct AppDisplaySettingsView: View {
             Toggle("Mute banners", isOn: Binding(get: { record?.mutedBanners ?? false }, set: { v in
                 edit { $0.mutedBanners = v }
             }))
+            Picker("Stack notifications", selection: Binding(get: { record?.stacking }, set: { v in edit { $0.stacking = v } })) {
+                Text("Default (\(AppSettings.shared.stacking.title))").tag(StackingLevel?.none)
+                ForEach(StackingLevel.allCases, id: \.self) { Text($0.title).tag(StackingLevel?.some($0)) }
+            }
         } header: { Text("Banners") } footer: {
             Text(footer)
         }

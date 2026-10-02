@@ -302,4 +302,54 @@ final class BannerStackTests: XCTestCase {
             }
         }
     }
+
+    // MARK: Open stack list height (DESIGN section 9)
+
+    func testListCapLeavesRoomForTheFooter() {
+        // A ~780 pt visible height less 12 pt margins either side leaves 756 pt for the panel.
+        XCTAssertEqual(StackListLayout.cap(available: 756),
+                       756 - StackListLayout.footerHeight - StackListLayout.gap)
+        XCTAssertEqual(StackListLayout.cap(available: 10), 0)
+        XCTAssertEqual(StackListLayout.cap(available: 0), 0)
+    }
+
+    func testListHeightIsTheFirstSixRowsWhenTheyFit() {
+        let gap = StackListLayout.gap
+        let rows = [CGFloat](repeating: 60, count: 9)
+        let r = StackListLayout.height(rows: rows, cap: .infinity)
+        XCTAssertEqual(r.height, 6 * 60 + 5 * gap)
+        XCTAssertFalse(r.capped)
+        let two = StackListLayout.height(rows: [50, 70], cap: 1000)
+        XCTAssertEqual(two.height, 50 + 70 + gap)
+        XCTAssertFalse(two.capped)
+        XCTAssertEqual(StackListLayout.height(rows: [], cap: 100).height, 0)
+        XCTAssertFalse(StackListLayout.height(rows: [], cap: 100).capped)
+    }
+
+    func testTallRowsAreCappedSoTheFooterStaysOnScreen() {
+        // Six ~110 pt rows with one of them open on an inline question (+225 pt), on a 756 pt panel budget.
+        let available: CGFloat = 756
+        let cap = StackListLayout.cap(available: available)
+        let rows: [CGFloat] = [335, 110, 110, 110, 110, 110]
+        let r = StackListLayout.height(rows: rows, cap: cap)
+        XCTAssertTrue(r.capped)
+        XCTAssertEqual(r.height, cap)
+        // List, gap and footer together stay inside the panel budget.
+        XCTAssertLessThanOrEqual(r.height + StackListLayout.gap + StackListLayout.footerHeight, available)
+        // Tall templates (builtin.hero ~260 pt a row) cap too, whatever the row count.
+        let hero = StackListLayout.height(rows: [CGFloat](repeating: 260, count: 4), cap: cap)
+        XCTAssertTrue(hero.capped)
+        XCTAssertEqual(hero.height, cap)
+    }
+
+    func testTheCapNeverCutsBelowTheNewestRow() {
+        // A short screen: the newest banner stays usable, the list scrolls for the rest.
+        let r = StackListLayout.height(rows: [400, 90, 90], cap: 120)
+        XCTAssertEqual(r.height, 400)
+        XCTAssertTrue(r.capped)
+        // An exactly fitting list is not "capped".
+        let exact = StackListLayout.height(rows: [100, 100], cap: 100 + 100 + StackListLayout.gap)
+        XCTAssertEqual(exact.height, 208)
+        XCTAssertFalse(exact.capped)
+    }
 }

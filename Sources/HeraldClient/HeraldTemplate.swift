@@ -643,6 +643,8 @@ public extension HeraldTemplate {
         case .badge(let b):
             binding("binding", b.binding)
             color("color", b.color); color("textColor", b.textColor)
+        case .stackBadge(let b):
+            color("color", b.color); color("textColor", b.textColor)
         case .progress(let b):
             binding("binding", b.binding)
             color("color", b.color); positive("height", b.height)
@@ -751,6 +753,7 @@ public enum TemplateResolver {
             if let s = n.subtitle { f["subtitle"] = s }
             if let b = n.body { f["body"] = b }
             if let i = n.id { f["id"] = i }
+            if let g = n.group { f["group"] = g }
             fields = f
         }
 
@@ -852,7 +855,12 @@ public enum TemplateResolver {
 public extension TemplateResolver {
     /// Tokens every notification can provide without a manifest declaring them.
     static let standardTokens = ["title", "subtitle", "body", "image", "url", "app", "appName", "id",
-                                 "priority", "sound", "deliveredAt"]
+                                 "priority", "sound", "group", "deliveredAt", stackCountToken]
+
+    /// The number of notifications folded into the banner's stack (DESIGN section 9). Not a payload field: the
+    /// banner supplies it while it is drawn, and only while the count is above 1 (it is absent, so empty, for a
+    /// banner that is alone). Templates read it as `{stack.count}`, or with a `stackBadge` component.
+    static let stackCountToken = "stack.count"
 
     /// A field value as display text: numbers without a trailing ".0", booleans as true/false, lists joined
     /// with ", ".
@@ -905,7 +913,7 @@ public extension TemplateResolver {
         }
         put("title", n.title); put("subtitle", n.subtitle); put("body", n.body)
         put("image", n.image); put("url", n.url); put("app", n.app); put("id", n.id)
-        put("priority", n.priority); put("sound", n.sound)
+        put("priority", n.priority); put("sound", n.sound); put("group", n.group)
         if let m = manifest { put("appName", m.appName) }
         if let d = deliveredAt { out["deliveredAt"] = .text(ISODate.string(from: d)) }
 

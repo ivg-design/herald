@@ -152,6 +152,7 @@ enum GridEditing {
         switch c {
         case .text, .image, .timestamp, .actions: return .topLeading
         case .issuerIcon, .button, .iconButton, .badge, .progress, .rive, .spacer: return .center
+        case .stackBadge: return .topTrailing   // the stack counter sits at the top right of the card
         }
     }
 
@@ -456,6 +457,7 @@ enum DesignerPalette {
         .init(type: "actions", title: "Actions", symbol: "rectangle.split.3x1"),
         .init(type: "iconButton", title: "Icon btn", symbol: "xmark.circle"),
         .init(type: "badge", title: "Badge", symbol: "number.circle"),
+        .init(type: "stackBadge", title: "Stack count", symbol: "square.stack"),
         .init(type: "progress", title: "Progress", symbol: "slider.horizontal.3"),
         .init(type: "rive", title: "Rive", symbol: "play.rectangle"),
         .init(type: "spacer", title: "Spacer", symbol: "rectangle.dashed"),
@@ -486,6 +488,7 @@ enum DesignerPalette {
         case "badge":
             let key = manifest?.fields.first { $0.type == .number }?.key ?? "count"
             return .badge(HeraldBadgeComponent(binding: "{\(key)}"))
+        case "stackBadge": return .stackBadge(HeraldStackBadgeComponent())
         case "progress":
             let key = manifest?.fields.first { $0.type == .number && $0.key != "count" }?.key ?? "progress"
             return .progress(HeraldProgressComponent(binding: "{\(key)}"))
@@ -664,6 +667,7 @@ extension HeraldComponent {
         case .actions(var p): p.emptyBehavior = b; return .actions(p)
         case .iconButton(var p): p.emptyBehavior = b; return .iconButton(p)
         case .badge(var p): p.emptyBehavior = b; return .badge(p)
+        case .stackBadge(var p): p.emptyBehavior = b; return .stackBadge(p)
         case .progress(var p): p.emptyBehavior = b; return .progress(p)
         case .rive(var p): p.emptyBehavior = b; return .rive(p)
         case .spacer: return self
@@ -1665,6 +1669,10 @@ final class DesignerModel: ObservableObject {
         }
         for (k, v) in draft.extra where !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { f["extra.\(k)"] = .text(v) }
         if f["deliveredAt"] == nil { f["deliveredAt"] = .text(ISODate.string(from: lastItem?.deliveredAt ?? Date())) }
+        // A stack counter shows a sample of 3, so the badge can be placed and styled on a banner that is alone.
+        if f[TemplateResolver.stackCountToken] == nil, draft.referencedTokens.contains(TemplateResolver.stackCountToken) {
+            f[TemplateResolver.stackCountToken] = .number(3)
+        }
         for token in absentTokens { f[token] = nil }
         return f
     }

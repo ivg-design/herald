@@ -37,6 +37,7 @@ final class MCPTools: @unchecked Sendable {
             case "add_action_rule": return try await addActionRule(args)
             case "list_history": return try await listHistory(args)
             case "dismiss": return try await dismiss(args)
+            case "list_stacks": return try await listStacks(args)
             case "speak": return try await speak(args)
             case "get_quiet_hours": return try await getQuietHours()
             case "set_quiet_hours": return try await setQuietHours(args)
@@ -620,9 +621,29 @@ final class MCPTools: @unchecked Sendable {
             try await client.dismiss(app: app, id: id)
             return .json(.object(["dismissed": .string(id), "app": .string(app)]))
         }
-        guard try args.bool("all") == true else { throw ToolFailure("Give the banner's 'id', or all: true to dismiss every banner of '\(app)'.") }
+        if let group = try args.string("group"), !group.isEmpty {
+            try await client.dismissAll(app: app, group: group)
+            return .json(.object(["dismissedGroup": .string(group), "app": .string(app)]))
+        }
+        guard try args.bool("all") == true else { throw ToolFailure("Give the banner's 'id', a 'group' (a stack, see list_stacks), or all: true to dismiss every banner of '\(app)'.") }
         try await client.dismissAll(app: app)
         return .json(.object(["dismissedAll": .bool(true), "app": .string(app)]))
+    }
+
+    private func listStacks(_ args: MCPArgs) async throws -> MCPToolResult {
+        let app = try args.string("app").flatMap { $0.isEmpty ? nil : $0 }
+        let stacks = try await client.stacks(app: app)
+        let rows: [JSONValue] = stacks.map { s in
+            objectOf([
+                "level": .string(s.level), "app": .string(s.app), "group": s.group.map { .string($0) },
+                "count": .number(Double(s.count)), "expanded": .bool(s.expanded),
+                "notifications": .array(s.members.map { m in
+                    objectOf(["app": .string(m.app), "id": .string(m.id), "title": .string(m.title),
+                              "group": m.group.map { .string($0) }, "deliveredAt": .string(ISODate.string(from: m.deliveredAt))])
+                }),
+            ])
+        }
+        return .json(.object(["count": .number(Double(rows.count)), "stacks": .array(rows)]))
     }
 
     private func speak(_ args: MCPArgs) async throws -> MCPToolResult {

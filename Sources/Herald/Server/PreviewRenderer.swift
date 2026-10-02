@@ -24,7 +24,8 @@ enum PreviewRenderer {
 
     /// The PNG for a plan. `icon` is the issuer's icon; `image` the picture bound to `{image}`, if any.
     static func png(plan: PreviewPlan, appName: String, icon: NSImage, image: NSImage?,
-                    appearance: PreviewAppearance, scale: Double) throws -> Data {
+                    appearance: PreviewAppearance, scale: Double, confirmation: BannerConfirmation? = nil,
+                    stackCount: Int = 1, stackExpanded: Bool = false) throws -> Data {
         let item = HeraldHistoryItem(id: plan.notification.id ?? "preview", app: plan.notification.app,
                                      notification: plan.notification, deliveredAt: plan.deliveredAt,
                                      fields: plan.fields)
@@ -35,6 +36,31 @@ enum PreviewRenderer {
                                 template: plan.template, manifest: plan.manifest, fields: plan.fields)
         // ImageRenderer cannot draw an NSViewRepresentable, so a Rive component shows its static placeholder.
         model.liveAnimations = false
+        // A pending inline confirmation replaces the actions row, as in a live banner (DESIGN 8).
+        model.confirmation = confirmation
+        // The top card of a stack (DESIGN section 9): the stacked-card edges and the count badge, `{stack.count}` filled.
+        if stackCount > 1, stackExpanded {
+            // The open stack: the banner repeated, newest first, so the list, its scrolling cap and its footer can be seen.
+            let stack = StackModel()
+            stack.count = stackCount; stack.expanded = true
+            stack.members = (0..<stackCount).map { i in
+                var n = plan.notification
+                n.title = "\(n.title) #\(stackCount - i)"
+                let member = BannerModel(item: HeraldHistoryItem(id: "preview-\(i)", app: n.app, notification: n, deliveredAt: plan.deliveredAt,
+                                                                  fields: plan.fields.merging(["title": .text(n.title)]) { _, new in new }),
+                                         appName: appName, icon: icon, image: image, template: plan.template, manifest: plan.manifest,
+                                         fields: plan.fields.merging(["title": .text(n.title)]) { _, new in new })
+                member.liveAnimations = false
+                return StackListMember(id: "preview-\(i)", model: member)
+            }
+            stack.width = model.bannerWidth
+            return try png(of: StackListView(model: model, stack: stack, scrolls: false), appearance: appearance, scale: scale)
+        }
+        if stackCount > 1 {
+            model.stackCount = stackCount
+            return try png(of: StackedCardView(model: model, count: stackCount, reportsHeight: false),
+                           appearance: appearance, scale: scale)
+        }
         return try png(of: BannerView(model: model), appearance: appearance, scale: scale)
     }
 
