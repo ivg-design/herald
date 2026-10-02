@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: "./wrangler.toml" },
-      miniflare: { bindings: { RELAY_SECRET: "test-relay-secret", MAX_DEVICES: "10000", PAIR_STARTS_PER_HOUR: "10000" } },
+      miniflare: { bindings: { RELAY_SECRET: "test-relay-secret", MAX_DEVICES: "10000", PAIR_STARTS_PER_HOUR: "10000", REGISTER_PER_HOUR: "40" } },
     }),
   ],
   test: { include: ["test/**/*.test.ts"] },

@@ -1,7 +1,7 @@
 import { SELF } from "cloudflare:test";
 
 export const BASE = "https://relay.test";
-export const f = (path: string, init: RequestInit = {}) => SELF.fetch(BASE + path, init);
+export const f = (path: string, init: RequestInit = {}) => SELF.fetch(BASE + path, { redirect: "manual", ...init });
 export const auth = (t: string, extra: Record<string, string> = {}) => ({ authorization: "Bearer " + t, "content-type": "application/json", ...extra });
 
 export async function pair(): Promise<{ deviceId: string; token: string }> {

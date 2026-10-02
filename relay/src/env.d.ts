@@ -3,4 +3,5 @@ interface Env {
   RELAY_SECRET: string;
   PAIRING_SECRET?: string;
   PAIR_STARTS_PER_HOUR?: string;
+  REGISTER_PER_HOUR?: string;
 }

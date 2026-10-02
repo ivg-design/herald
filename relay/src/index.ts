@@ -1,5 +1,6 @@
 import { deviceIdValid, parseToken } from "./ids";
 import { handleMcp } from "./mcp";
+import { challenge, handleOAuth } from "./oauth";
 import { err, bearer, json, hmacHex, safeEqual } from "./util";
 
 export { Mailbox } from "./mailbox";
@@ -22,6 +23,9 @@ export default {
     const path = url.pathname;
 
     if (path === "/" || path === "/healthz") return json(200, { service: "herald-relay", ok: true });
+
+    const oauth = await handleOAuth(req, env, url);
+    if (oauth) return oauth;
 
     // Pairing: the only unauthenticated routes. The Registry rate-limits them.
     if (req.method === "POST" && (path === "/v1/pair/start" || path === "/v1/pair")) {
@@ -46,11 +50,18 @@ export default {
     }
 
     if (path === "/mcp") {
+      // Unauthenticated or bad credentials: 401 with the discovery pointer, so an OAuth client knows where to start.
+      const unauthorized = (r: Response) => {
+        if (r.status !== 401) return r;
+        const h = new Headers(r.headers);
+        h.set("www-authenticate", challenge(url.origin, !!bearer(req)));
+        return new Response(r.body, { status: 401, headers: h });
+      };
       const m = await mailboxFor(env, req);
-      if (m instanceof Response) return m;
+      if (m instanceof Response) return unauthorized(m);
       const auth = "Bearer " + m.token;
-      return handleMcp(req, (p, init) =>
-        m.stub.fetch(new Request(url.origin + p, { ...init, headers: { authorization: auth, "content-type": "application/json" } })));
+      return unauthorized(await handleMcp(req, (p, init) =>
+        m.stub.fetch(new Request(url.origin + p, { ...init, headers: { authorization: auth, "content-type": "application/json" } }))));
     }
 
     const isDevice = path === "/v1/device" || path.startsWith("/v1/device/");

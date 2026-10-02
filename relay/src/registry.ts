@@ -22,6 +22,7 @@ export class Registry extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, name TEXT);
       CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS events (kind TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, secret_hash TEXT, created_at INTEGER NOT NULL);
     `);
   }
 
@@ -44,6 +45,27 @@ export class Registry extends DurableObject<Env> {
 
     let body: Record<string, unknown> = {};
     try { body = (await req.json()) as Record<string, unknown>; } catch { /* empty body is fine for start */ }
+
+    // OAuth: dynamically registered clients (RFC 7591) and the device list the consent page chooses from.
+    if (path === "/client/register") {
+      const perHour = Number(this.env.REGISTER_PER_HOUR ?? "30") || 30;
+      if (this.q<{ n: number }>("SELECT COUNT(*) AS n FROM events WHERE kind = 'register'")[0].n >= perHour) {
+        return err(429, "rate_limited", "too many client registrations; try again later", { retryAfterSeconds: 3600 });
+      }
+      const c = body as { id: string; name: string; redirectUris: string[]; secretHash?: string | null };
+      this.q("INSERT INTO events (kind, at) VALUES ('register', ?)", now);
+      this.q("INSERT INTO clients (id, name, redirect_uris, secret_hash, created_at) VALUES (?, ?, ?, ?, ?)", c.id, c.name, JSON.stringify(c.redirectUris), c.secretHash ?? null, now);
+      this.q("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY created_at DESC, rowid DESC LIMIT 200)");
+      return json(201, { ok: true });
+    }
+    if (path === "/client/get") {
+      const row = this.q<{ id: string; name: string; redirect_uris: string; secret_hash: string | null }>("SELECT id, name, redirect_uris, secret_hash FROM clients WHERE id = ?", String(body.id ?? ""))[0];
+      if (!row) return err(404, "not_found", "unknown client");
+      return json(200, { id: row.id, name: row.name, redirectUris: JSON.parse(row.redirect_uris), secretHash: row.secret_hash });
+    }
+    if (path === "/devices") {
+      return json(200, { devices: this.q<{ id: string; name: string | null }>("SELECT id, name FROM devices ORDER BY created_at, rowid") });
+    }
 
     if (path === "/pair/start") {
       const secret = this.env.PAIRING_SECRET;

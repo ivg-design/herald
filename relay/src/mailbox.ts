@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { agentKey, parseToken, type Principal } from "./ids";
+import { agentKey, oauthToken, parseOAuthSecret, parseToken, type Principal } from "./ids";
 import { DAY_MS, bearer, err, hmacHex, json, randomHex, safeEqual, sha256Hex } from "./util";
 import { MAX_BODY_BYTES, validateNotification } from "./validate";
 
@@ -20,13 +20,36 @@ export const READ_LIMIT = 600;          // receipt / reply reads per 10 min per 
 export const SOFT_REQUEST_LIMIT = 90_000; // of the free plan's 100,000 DO requests per UTC day
 export const DAILY_POLL_SECONDS = 6000;   // long-poll time per day (the DO is awake while it waits)
 
-type KeyRow = { id: string; name: string; client: string; scope: string; hash: string; created_at: number; revoked_at: number | null; last_used_at: number | null }
+type KeyRow = {
+  id: string; name: string; client: string; scope: string; hash: string; created_at: number; revoked_at: number | null; last_used_at: number | null;
+  kind: string | null; client_name: string | null; oauth_client: string | null;
+}
+type OAuthReq = {
+  id: string; client_id: string; client_name: string; redirect_uri: string; challenge: string; state: string | null; scope: string; resource: string;
+  user_code: string; status: string; attempts: number; code: string | null; code_hash: string | null; key_id: string | null;
+  created_at: number; expires_at: number; decided_at: number | null; redeemed_at: number | null;
+}
+type OAuthTok = { hash: string; kind: string; key_id: string; client_id: string; resource: string; family: string; expires_at: number; created_at: number; used_at: number | null }
+
+export const OAUTH_REQUEST_TTL_MS = 10 * 60_000;
+export const OAUTH_CODE_TTL_MS = 5 * 60_000;
+export const OAUTH_ACCESS_TTL_S = 3600;
+export const OAUTH_REFRESH_TTL_S = 30 * 86400;
+const OAUTH_MAX_PENDING = 3;
+const OAUTH_BEGINS_PER_HOUR = 12;
+const OAUTH_CODE_ATTEMPTS = 5;
 type NoteRow = {
   rid: string; key_id: string; nid: string; payload: string; expect_reply: number; created_at: number;
   sent_at: number | null; acked_at: number | null; displayed_at: number | null; spoken_at: number | null;
   replied_at: number | null; reply: string | null; transcript: string | null; audio_key: string | null;
   audio_seconds: number | null; audio_bytes: number | null; suppressed_reason: string | null; suppressed_scope: string | null;
 }
+
+async function s256(v: string): Promise<string> {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  return btoa(String.fromCharCode(...d)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+const sameResource = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
 
 const iso = (t: number | null) => (t == null ? undefined : new Date(t).toISOString());
 
@@ -53,7 +76,16 @@ export class Mailbox extends DurableObject<Env> {
         suppressed_reason TEXT, suppressed_scope TEXT);
       CREATE UNIQUE INDEX IF NOT EXISTS notes_key_nid ON notes (key_id, nid);
       CREATE TABLE IF NOT EXISTS rate (key_id TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_name TEXT NOT NULL, redirect_uri TEXT NOT NULL,
+        challenge TEXT NOT NULL, state TEXT, scope TEXT NOT NULL, resource TEXT NOT NULL, user_code TEXT NOT NULL, status TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0, code TEXT, code_hash TEXT, key_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+        decided_at INTEGER, redeemed_at INTEGER);
+      CREATE TABLE IF NOT EXISTS oauth_tokens (hash TEXT PRIMARY KEY, kind TEXT NOT NULL, key_id TEXT NOT NULL, client_id TEXT NOT NULL, resource TEXT NOT NULL,
+        family TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, used_at INTEGER);
     `);
+    for (const col of ["kind TEXT", "client_name TEXT", "oauth_client TEXT"]) {
+      try { this.ctx.storage.sql.exec(`ALTER TABLE keys ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
   }
 
 
@@ -79,7 +111,8 @@ export class Mailbox extends DurableObject<Env> {
     const token = bearer(req);
     const p = token ? parseToken(token) : null;
     if (!token || !p) return err(401, "unauthorized", "missing or malformed bearer token");
-    if (p.kind !== want) {
+    const have = p.kind === "oauth" ? "agent" : p.kind;
+    if (have !== want) {
       return err(403, "wrong_credential", want === "device"
         ? "agent keys cannot use device endpoints"
         : "the device token cannot be used on agent endpoints; use an agent key");
@@ -89,9 +122,17 @@ export class Mailbox extends DurableObject<Env> {
       if (!hash || !safeEqual(hash, await sha256Hex(p.secret))) return err(401, "unauthorized", "invalid device token");
       return { p };
     }
-    const row = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
-    const good = row && !row.revoked_at && safeEqual(row.hash, await sha256Hex(p.secret));
-    if (!good) return err(401, "unauthorized", "invalid or revoked agent key");
+    let row: KeyRow | undefined;
+    let good: boolean;
+    if (p.kind === "oauth") {
+      const t = this.sql<OAuthTok>("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'access'", await sha256Hex(p.secret))[0];
+      row = t && t.expires_at > Date.now() ? this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", t.key_id)[0] : undefined;
+      good = !!row && !row.revoked_at;
+    } else {
+      row = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
+      good = !!row && !row.revoked_at && row.kind !== "oauth" && safeEqual(row.hash, await sha256Hex(p.secret));
+    }
+    if (!good || !row) return err(401, "unauthorized", p.kind === "oauth" ? "invalid, expired or revoked access token" : "invalid or revoked agent key");
     if (row.scope !== "notify") return err(403, "scope", "this key has no notify scope");
     if (!row.last_used_at || Date.now() - row.last_used_at > 10 * 60_000) this.sql("UPDATE keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
     return { p, key: row };
@@ -106,6 +147,7 @@ export class Mailbox extends DurableObject<Env> {
     try {
       if (path === "/internal/init" && m === "POST") return this.internalInit(req);
       if (path === "/internal/wipe" && m === "POST") return this.internalWipe();
+      if (path.startsWith("/internal/oauth/") && m === "POST") return this.oauthInternal(path.slice("/internal/oauth/".length), req);
 
       if (path.startsWith("/v1/device")) {
         const a = await this.authenticate(req, "device");
@@ -119,6 +161,8 @@ export class Mailbox extends DurableObject<Env> {
         if (path === "/v1/device/reply" && m === "POST") return this.httpReceipt(req, "replied");
         const am = /^\/v1\/device\/reply\/(r_[0-9a-f]{24})\/audio$/.exec(path);
         if (am && m === "PUT") return this.putAudio(req, am[1]);
+        if (path === "/v1/device/consents" && m === "GET") return json(200, { consents: this.consentList() });
+        if (path === "/v1/device/consent" && m === "POST") return this.deviceConsent(req);
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a.p as Extract<Principal, { kind: "device" }>);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
@@ -177,7 +221,7 @@ export class Mailbox extends DurableObject<Env> {
 
   private listKeys() {
     return this.sql<KeyRow>("SELECT * FROM keys ORDER BY created_at").map((k) => ({
-      id: k.id, name: k.name, client: k.client, scope: k.scope, createdAt: iso(k.created_at),
+      id: k.id, name: k.name, client: k.client, scope: k.scope, kind: k.kind ?? "static", ...(k.client_name ? { displayName: k.client_name } : {}), createdAt: iso(k.created_at),
       lastUsedAt: iso(k.last_used_at), revokedAt: iso(k.revoked_at),
     }));
   }
@@ -197,14 +241,15 @@ export class Mailbox extends DurableObject<Env> {
     if (rows.some((k) => k.name === name)) return err(409, "name_taken", `a key named ${name} already exists`);
     if (rows.length >= MAX_KEYS) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys`);
     const id = randomHex(4), secret = randomHex(32), now = Date.now();
-    this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at) VALUES (?, ?, ?, 'notify', ?, ?)", id, name, client, await sha256Hex(secret), now);
-    return json(201, { id, name, client, scope: "notify", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
+    this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at, kind) VALUES (?, ?, ?, 'notify', ?, ?, 'static')", id, name, client, await sha256Hex(secret), now);
+    return json(201, { id, name, client, scope: "notify", kind: "static", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
   }
 
   private revokeKey(id: string): Response {
     const row = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", id)[0];
     if (!row) return err(404, "not_found", "no such key");
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
+    this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id); // a revoked connector's tokens die with its key
     return json(200, { revoked: true, id });
   }
 
@@ -451,6 +496,7 @@ export class Mailbox extends DurableObject<Env> {
     pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: TTL_MS / 1000 }));
     this.expireSweep(Date.now());
     this.flush(true);
+    for (const r of this.pendingRequests()) this.sendConsent(r);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -481,6 +527,220 @@ export class Mailbox extends DurableObject<Env> {
   }
 
   async webSocketError(): Promise<void> { this.setMeta("last_seen", String(Date.now())); }
+
+  // ---------- OAuth (connector approvals). Reached only through the Worker's /authorize and /token routes.
+
+  private pendingRequests(): OAuthReq[] {
+    return this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE status = 'pending' AND expires_at > ? ORDER BY created_at", Date.now());
+  }
+
+  private redirectHost(uri: string): string {
+    try { const u = new URL(uri); return u.host || u.protocol; } catch { return ""; }
+  }
+
+  private consentView(r: OAuthReq) {
+    return {
+      id: r.id, clientId: r.client_id, clientName: r.client_name, redirectHost: this.redirectHost(r.redirect_uri), scope: r.scope,
+      code: r.user_code, status: r.status === "pending" && r.expires_at <= Date.now() ? "expired" : r.status,
+      createdAt: iso(r.created_at), expiresAt: iso(r.expires_at),
+    };
+  }
+
+  private sendConsent(r: OAuthReq) {
+    const ws = this.sockets()[0];
+    if (!ws) return;
+    try { ws.send(JSON.stringify({ type: "consent", ...this.consentView(r) })); } catch { /* socket gone: Herald lists consents on reconnect */ }
+  }
+
+  private sendResolved(r: OAuthReq) {
+    const ws = this.sockets()[0];
+    if (!ws) return;
+    try { ws.send(JSON.stringify({ type: "consent_resolved", id: r.id, status: r.status })); } catch { /* gone */ }
+  }
+
+  /** Requests of the last day, newest first (Herald shows them under Connector approvals). */
+  private consentList() {
+    return this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE created_at > ? ORDER BY created_at DESC LIMIT 20", Date.now() - DAY_MS).map((r) => this.consentView(r));
+  }
+
+  private oauthSweep(now: number) {
+    this.sql("DELETE FROM oauth_requests WHERE created_at < ?", now - DAY_MS);
+    this.sql("DELETE FROM oauth_tokens WHERE expires_at < ?", now - DAY_MS);
+  }
+
+  private async oauthInternal(op: string, req: Request): Promise<Response> {
+    const b = (await req.json().catch(() => ({}))) as Record<string, string | undefined>;
+    const now = Date.now();
+    this.oauthSweep(now);
+    switch (op) {
+      case "begin": return this.oauthBegin(b, now);
+      case "status": return this.oauthStatus(b.id ?? "", now);
+      case "code": return this.oauthCode(b.id ?? "", b.code ?? "", now);
+      case "deny": return this.oauthDecide(b.id ?? "", "deny", now);
+      case "token": return this.oauthTokenEndpoint(b, now);
+      case "revoke": return this.oauthRevoke(b);
+    }
+    return err(404, "not_found", "no such oauth operation");
+  }
+
+  private async oauthBegin(b: Record<string, string | undefined>, now: number): Promise<Response> {
+    if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
+    if (this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 3_600_000)[0].n >= OAUTH_BEGINS_PER_HOUR) {
+      return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
+    }
+    const deviceId = this.getMeta("device_id");
+    if (!deviceId) return err(404, "not_paired", "this relay has no paired Herald");
+    const id = deviceId + randomHex(12);
+    const userCode = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+    this.sql("INSERT INTO oauth_requests (id, client_id, client_name, redirect_uri, challenge, state, scope, resource, user_code, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+      id, b.clientId ?? "", (b.clientName ?? "").slice(0, 60), b.redirectUri ?? "", b.challenge ?? "", b.state ?? null, b.scope ?? "notify", b.resource ?? "", userCode, now, now + OAUTH_REQUEST_TTL_MS);
+    this.sendConsent(this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    return json(201, { id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online() });
+  }
+
+  private redirectFor(r: OAuthReq): string {
+    const u = new URL(r.redirect_uri);
+    if (r.status === "approved" && r.code) u.searchParams.set("code", r.code);
+    else u.searchParams.set("error", "access_denied");
+    if (r.state) u.searchParams.set("state", r.state);
+    return u.toString();
+  }
+
+  private oauthStatus(id: string, now: number): Response {
+    const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r) return json(404, { status: "unknown" });
+    if (r.status === "pending") return json(200, { status: r.expires_at <= now ? "expired" : "pending" });
+    if (r.status === "approved" && (!r.code || r.expires_at <= now)) return json(200, { status: "expired" });
+    return json(200, { status: r.status, redirect: this.redirectFor(r) });
+  }
+
+  private async oauthCode(id: string, code: string, now: number): Promise<Response> {
+    const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r || r.status !== "pending" || r.expires_at <= now) return this.oauthStatus(id, now);
+    const attempts = r.attempts + 1;
+    this.sql("UPDATE oauth_requests SET attempts = ? WHERE id = ?", attempts, id);
+    if (safeEqual(r.user_code, code.replace(/\D/g, ""))) return this.oauthDecide(id, "approve", now);
+    if (attempts >= OAUTH_CODE_ATTEMPTS) return this.oauthDecide(id, "deny", now);
+    return json(200, { status: "wrong_code", attemptsLeft: OAUTH_CODE_ATTEMPTS - attempts });
+  }
+
+  private async oauthDecide(id: string, decision: "approve" | "deny", now: number): Promise<Response> {
+    const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r) return err(404, "not_found", "no such request");
+    if (r.status !== "pending") return err(409, "already_decided", `this request is already ${r.status}`, { status: r.status });
+    if (r.expires_at <= now) return err(410, "expired", "this request has expired");
+    if (decision === "deny") {
+      this.sql("UPDATE oauth_requests SET status = 'denied', decided_at = ? WHERE id = ?", now, id);
+    } else {
+      const keyId = await this.createOAuthKey(r.client_id, r.client_name, now);
+      if (!keyId) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys; revoke one first`);
+      const code = oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
+      this.sql("UPDATE oauth_requests SET status = 'approved', decided_at = ?, key_id = ?, code = ?, code_hash = ?, expires_at = ? WHERE id = ?",
+        now, keyId, code, await sha256Hex(code), now + OAUTH_CODE_TTL_MS, id);
+    }
+    const done = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    this.sendResolved(done);
+    return json(200, { status: done.status, redirect: this.redirectFor(done) });
+  }
+
+  /** One key per connector, kind "oauth". Re-authorizing the same client replaces its earlier key. */
+  private async createOAuthKey(clientId: string, clientName: string, now: number): Promise<string | null> {
+    for (const old of this.sql<KeyRow>("SELECT * FROM keys WHERE kind = 'oauth' AND oauth_client = ? AND revoked_at IS NULL", clientId)) {
+      this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", now, old.id);
+      this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", old.id);
+    }
+    const active = this.sql<KeyRow>("SELECT * FROM keys WHERE revoked_at IS NULL");
+    if (active.length >= MAX_KEYS) return null;
+    const base = clientName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "") || "connector";
+    let name = base;
+    for (let i = 2; active.some((k) => k.name === name); i++) name = `${base}-${i}`;
+    const id = randomHex(4);
+    this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at, kind, client_name, oauth_client) VALUES (?, ?, 'other', 'notify', ?, ?, 'oauth', ?, ?)",
+      id, name, await sha256Hex(randomHex(32)), now, clientName, clientId);
+    return id;
+  }
+
+  /** Herald approves or denies from its banner. */
+  private async deviceConsent(req: Request): Promise<Response> {
+    const b = (await req.json().catch(() => null)) as { id?: unknown; decision?: unknown } | null;
+    if (!b || typeof b.id !== "string" || (b.decision !== "approve" && b.decision !== "deny")) return err(400, "invalid_request", "id and decision (approve|deny) are required");
+    this.touch();
+    return this.oauthDecide(b.id, b.decision, Date.now());
+  }
+
+  private async issueTokens(keyId: string, clientId: string, resource: string, family: string, now: number) {
+    const deviceId = this.getMeta("device_id") ?? "";
+    const access = randomHex(32), refresh = randomHex(32);
+    this.sql("INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'access', ?, ?, ?, ?, ?, ?)",
+      await sha256Hex(access), keyId, clientId, resource, family, now + OAUTH_ACCESS_TTL_S * 1000, now);
+    this.sql("INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'refresh', ?, ?, ?, ?, ?, ?)",
+      await sha256Hex(refresh), keyId, clientId, resource, family, now + OAUTH_REFRESH_TTL_S * 1000, now);
+    return json(200, {
+      access_token: oauthToken("hra", deviceId, access), token_type: "Bearer", expires_in: OAUTH_ACCESS_TTL_S,
+      refresh_token: oauthToken("hrr", deviceId, refresh), scope: "notify",
+    });
+  }
+
+  private oerr(error: string, description: string): Response {
+    return json(400, { error, error_description: description });
+  }
+
+  private async oauthTokenEndpoint(b: Record<string, string | undefined>, now: number): Promise<Response> {
+    const clientId = b.client_id ?? "";
+    if (b.grant_type === "authorization_code") {
+      const code = b.code ?? "";
+      if (!parseOAuthSecret(code, "hrc")) return this.oerr("invalid_grant", "malformed authorization code");
+      const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE code_hash = ?", await sha256Hex(code))[0];
+      if (!r) return this.oerr("invalid_grant", "unknown or already used authorization code");
+      if (r.redeemed_at) {
+        // A code used twice is treated as stolen: what it produced is revoked (OAuth 2.1, section 4.1.3).
+        if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id);
+        return this.oerr("invalid_grant", "authorization code already used");
+      }
+      if (r.status !== "approved" || r.expires_at <= now) return this.oerr("invalid_grant", "authorization code expired");
+      if (r.client_id !== clientId) return this.oerr("invalid_grant", "code was issued to another client");
+      if (r.redirect_uri !== (b.redirect_uri ?? "")) return this.oerr("invalid_grant", "redirect_uri does not match the authorization request");
+      const v = b.code_verifier ?? "";
+      if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(v)) return this.oerr("invalid_grant", "code_verifier is missing or malformed");
+      if (!safeEqual(await s256(v), r.challenge)) return this.oerr("invalid_grant", "PKCE verification failed");
+      if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
+      this.sql("UPDATE oauth_requests SET redeemed_at = ?, code = NULL WHERE id = ?", now, r.id);
+      const key = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
+      if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+      return this.issueTokens(key.id, clientId, r.resource, randomHex(8), now);
+    }
+    if (b.grant_type === "refresh_token") {
+      const rt = b.refresh_token ?? "";
+      if (!parseOAuthSecret(rt, "hrr")) return this.oerr("invalid_grant", "malformed refresh token");
+      const t = this.sql<OAuthTok>("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'refresh'", await sha256Hex(rt.split("_")[2]))[0];
+      if (!t || t.client_id !== clientId) return this.oerr("invalid_grant", "unknown refresh token");
+      if (t.used_at) {
+        this.sql("DELETE FROM oauth_tokens WHERE family = ?", t.family); // replayed: the whole family is burned
+        return this.oerr("invalid_grant", "refresh token already used; authorize the connector again");
+      }
+      if (t.expires_at <= now) return this.oerr("invalid_grant", "refresh token expired");
+      const key = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", t.key_id)[0];
+      if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+      if (b.resource && !sameResource(b.resource, t.resource)) return this.oerr("invalid_target", "resource does not match the original grant");
+      if (b.scope && b.scope.split(/\s+/).some((x) => x !== "notify")) return this.oerr("invalid_scope", "the only scope is notify");
+      this.sql("UPDATE oauth_tokens SET used_at = ? WHERE hash = ?", now, t.hash);
+      return this.issueTokens(key.id, clientId, t.resource, t.family, now);
+    }
+    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+  }
+
+  /** RFC 7009: an unknown token is not an error. A refresh token takes its whole family with it. */
+  private async oauthRevoke(b: Record<string, string | undefined>): Promise<Response> {
+    const tok = b.token ?? "";
+    if (parseOAuthSecret(tok, "hrr") || parseOAuthSecret(tok, "hra")) {
+      const t = this.sql<OAuthTok>("SELECT * FROM oauth_tokens WHERE hash = ?", await sha256Hex(tok.split("_")[2]))[0];
+      if (t && t.client_id === b.client_id) {
+        if (t.kind === "refresh") this.sql("DELETE FROM oauth_tokens WHERE family = ?", t.family);
+        else this.sql("DELETE FROM oauth_tokens WHERE hash = ?", t.hash);
+      }
+    }
+    return json(200, {});
+  }
 
   // ---------- receipts from Herald
 
