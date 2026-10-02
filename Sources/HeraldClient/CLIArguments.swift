@@ -77,9 +77,16 @@ public enum CLIArguments {
       dismiss       Dismiss one banner (--app, --id)
       dismiss-all   Dismiss all banners of an app (--app), or of one stack (--app --group G)
       stacks        List the stacks of banners on screen ([--app ID])
-      history       Show an app's history (--app [--limit N] [--clear])
-      template      Share a template with its animations: template export | template import
-      apps          List registered apps
+      history       Show an app's history (--app [--limit N] [--clear]); search | reshow | delete | export
+      template      export | import | list | put | delete | duplicate | rename | default
+      apps          List registered apps; apps settings | apps set (per-app settings)
+      settings      Show or change Herald's settings: settings | settings set KEY=VALUE ...
+      assets        An app's Rive files and images: assets list | add | rm
+      symbols       Search SF Symbol names: symbols [WORDS] [--category C] [--limit N]
+      voice         Kokoro voice: voice status | install | cancel | use-existing
+      mcp           Install the MCP server in a client: mcp status | mcp install CLIENT
+      approvals     List template command approvals, or approvals revoke --app ID --template NAME
+      manifest      manifest delete --app ID
       speak         Say text aloud (no banner)
       quiet         Quiet hours: --until HH:MM | --for MINUTES | off | status
       health        Check that Herald is running
@@ -131,6 +138,17 @@ public enum CLIArguments {
                             Add a bundle's template and animations. --app imports it for another
                             app. When the name is taken: --keep-both (default) saves it as
                             "NAME 2", --replace overwrites, --fail stops.
+
+    parity commands (docs/reference/parity.md)
+      settings set muteAllSounds=true stacking=bySender voiceSpeed=1.2      (values are JSON: true, 3, null, "text")
+      apps settings [--app ID]
+      apps set --app ID muteBanners=true corner=bottomLeft sound=Ping timeout=8
+      assets list --app ID | assets add --app ID --file PATH [--name N] | assets rm --app ID --file NAME
+      history search WORDS [--app ID] [--limit N] | history reshow --app ID --id ID | history delete --app ID --id ID
+      history export [--app ID] [--out FILE.json]
+      template list [--app ID] | template put FILE|- | template delete --app ID --name N
+      template duplicate --app ID --name N [--new-name M] [--to-app ID] | template rename --app ID --name N --new-name M
+      template default --app ID (--name N | --clear)
 
     register OPTIONS
       --app ID  --name NAME  --icon PATH|data:  --bundle-id ID  --callback-url URL
@@ -209,7 +227,7 @@ public enum CLIArguments {
             try o.finish()
             return inv(.request(CLIRequest(method: "POST", path: "/v1/compose", body: [:])))
         case "template":
-            return inv(try parseTemplate(rest))
+            return inv(try parseTemplate(rest, readInput: readInput))
         case "snooze":
             let o = try Options(rest, values: ["--app", "--id", "--minutes"], bools: [])
             let app = try o.require("--app"); let id = try o.require("--id")
@@ -243,6 +261,7 @@ public enum CLIArguments {
             try o.finish()
             return inv(.request(CLIRequest(method: "GET", path: "/v1/stacks", query: app.map { [("app", $0)] } ?? [])))
         case "history":
+            if let a = try parseHistoryParity(rest) { return inv(a) }
             let o = try Options(rest, values: ["--app", "--limit"], bools: ["--clear"])
             let app = try o.require("--app")
             if o.flag("--clear") {
@@ -257,6 +276,7 @@ public enum CLIArguments {
             try o.finish()
             return inv(.request(CLIRequest(method: "GET", path: "/v1/history", query: q)))
         case "apps":
+            if let a = try parseAppsParity(rest) { return inv(a) }
             let o = try Options(rest, values: [], bools: [])
             try o.finish()
             return inv(.request(CLIRequest(method: "GET", path: "/v1/apps")))
@@ -265,14 +285,15 @@ public enum CLIArguments {
             try o.finish()
             return inv(.request(CLIRequest(method: "GET", path: "/v1/health", needsAuth: false)))
         default:
+            if let a = try parseParity(command, rest, readInput: readInput) { return inv(a) }
             throw CLIParseError("unknown command '\(command)'")
         }
     }
 
     // MARK: template
 
-    static func parseTemplate(_ rest: [String]) throws -> CLIAction {
-        guard let sub = rest.first else { throw CLIParseError("template needs export or import") }
+    static func parseTemplate(_ rest: [String], readInput: (String) throws -> Data = { _ in Data() }) throws -> CLIAction {
+        guard let sub = rest.first else { throw CLIParseError("template needs export, import, list, put, delete, duplicate, rename or default") }
         var args = Array(rest.dropFirst())
         switch sub {
         case "export":
@@ -297,7 +318,8 @@ public enum CLIArguments {
             guard app?.isEmpty != true else { throw CLIParseError("--app needs an app id") }
             return .templateImport(CLITemplateImport(file: file, app: app, conflict: conflict))
         default:
-            throw CLIParseError("unknown template command '\(sub)' (use export or import)")
+            if let a = try parseTemplateParity(sub, args, readInput: readInput) { return a }
+            throw CLIParseError("unknown template command '\(sub)' (use export, import, list, put, delete, duplicate, rename or default)")
         }
     }
 
