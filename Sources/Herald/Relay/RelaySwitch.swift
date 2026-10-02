@@ -134,3 +134,43 @@ public enum RelaySwitchMessages {
         return "\(seconds) seconds"
     }
 }
+
+// MARK: - Pairing again after a deploy
+
+@MainActor
+public protocol RelayRepairBackend: RelaySwitchBackend {
+    /// Does the relay still accept the stored device token? (A 401 is "no"; an unreachable relay is not a token problem.)
+    func deviceTokenWorks() async -> Bool
+    /// Forgets the pairing here without needing the relay's agreement (the relay already refuses this Mac's token).
+    func forgetPairing() async
+}
+
+/// A deploy that changes the relay's signing secret voids every device token. Without this the Mac stays "offline" with a 401 until
+/// the user unpairs and pairs by hand (issue #79). After any deploy: if this Mac is paired and the relay refuses its token, pair again.
+public enum RelayRepair {
+    public static let note = "The relay's signing secret changed, so this Mac was paired with it again. Agent keys and connectors made before need to be created again."
+
+    /// Returns true when it paired again. `log` receives the "Pair this Mac again" step.
+    @MainActor
+    @discardableResult
+    public static func repairIfNeeded(backend: RelayRepairBackend, switch sw: RelaySwitch, log: (DeployEvent) -> Void = { _ in }) async -> Bool {
+        guard backend.isPaired, !(await backend.deviceTokenWorks()) else { return false }
+        log(DeployEvent(step: .repair, phase: .started, detail: ""))
+        await backend.forgetPairing()
+        await sw.turnOn()
+        if case .failed(let m) = sw.state, !backend.isPaired {
+            log(DeployEvent(step: .repair, phase: .failed, detail: m))
+        } else {
+            log(DeployEvent(step: .repair, phase: .done, detail: "paired again automatically: the relay refused the old device token"))
+        }
+        return true
+    }
+}
+
+/// The one line the setup screen shows under the state: a failure the user must act on, never a stale one.
+public enum RelaySetupMessage {
+    /// A deploy failure or relay error is only worth showing while the connection is down; once the socket is online it is stale.
+    public static func pick(online: Bool, deployFailure: String?, lastError: String?) -> String? {
+        online ? nil : (deployFailure ?? lastError)
+    }
+}

@@ -13,6 +13,8 @@ public struct RelayStatusReply: Codable, Equatable, Sendable {
     public var log: [RelayLogEntry]
     /// The setup state machine (token-needed ... online), present when Herald serves the setup routes.
     public var setup: RelaySetupStatus?
+    /// The Macs on this relay (this one marked), when the relay could be asked. An agent uses it to tell the user which Mac will show a banner.
+    public var devices: [RelayDeviceEntry]? = nil
 }
 
 public struct RelayKeyCreated: Codable, Equatable, Sendable {

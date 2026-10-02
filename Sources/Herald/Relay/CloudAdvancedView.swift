@@ -41,6 +41,7 @@ struct CloudAdvancedView: View {
             VStack(alignment: .leading, spacing: 10) {
                 CloudCustomDomainView(controller: controller)
                 Divider()
+                if relay.isPaired { devicesSection; Divider() }
                 row("Relay URL", help: "The relay this Mac connects to: yours on Cloudflare, or any other relay", error: nil) {
                     TextField("https://\u{2026}", text: $urlText).textFieldStyle(.roundedBorder)
                 }
@@ -82,6 +83,37 @@ struct CloudAdvancedView: View {
         } message: {
             Text("This removes the relay, every mailbox, agent key and connector from your Cloudflare account. Agents lose access for good.")
         }
+    }
+
+    /// Every Mac paired with this relay. An approval goes to the connected one, so a stale entry (an old install, a Mac that paired
+    /// again under the same name) is worth removing; the relay lets this Mac remove only those.
+    @ViewBuilder private var devicesSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Devices on this relay").font(.headline)
+            if relay.devices.isEmpty {
+                Text("Not loaded yet.").font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(relay.devices) { d in
+                HStack {
+                    Image(systemName: d.online ? "circle.fill" : "circle").font(.system(size: 7)).foregroundStyle(d.online ? Color.green : Color.secondary)
+                    Text(d.title + (d.thisDevice ? " (this Mac)" : ""))
+                    Text(Self.lastSeen(d)).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    if d.removable {
+                        Button("Remove") { run { try await relay.removeDevice(id: d.id); message = "Removed \(d.title)." } }
+                            .disabled(busy).heraldHelp(name: "Remove", detail: "Removes this entry from the relay: it has the same name as this Mac, its credentials were replaced, or it has not connected for a week")
+                    }
+                }
+            }
+            Text("Agents without a chosen Mac reach the one that is connected right now.").font(.caption).foregroundStyle(.secondary)
+        }
+        .task { await relay.refreshDevices() }
+    }
+
+    static func lastSeen(_ d: RelayDeviceEntry) -> String {
+        if d.online { return "connected" }
+        guard let s = d.lastSeenAt, let t = ISO8601DateFormatter.fractional.date(from: s) ?? ISO8601DateFormatter().date(from: s) else { return "never connected" }
+        return "last seen " + RelativeDateTimeFormatter().localizedString(for: t, relativeTo: Date())
     }
 
     @ViewBuilder private func field(_ f: Field) -> some View {
@@ -140,4 +172,8 @@ struct CloudAdvancedView: View {
             do { try await work() } catch { message = error.localizedDescription }
         }
     }
+}
+
+private extension ISO8601DateFormatter {
+    static let fractional: ISO8601DateFormatter = { let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f }()
 }

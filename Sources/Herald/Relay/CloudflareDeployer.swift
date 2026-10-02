@@ -101,6 +101,8 @@ public struct CloudflareError: Error, LocalizedError, Equatable, Sendable {
 
 public enum DeployStep: String, CaseIterable, Sendable {
     case verifyToken, account, subdomain, bucket, lifecycle, upload, route, health, delete
+    /// After a deploy that changed the relay's signing secret: this Mac pairs again (see `RelayRepair`).
+    case repair
     // The custom domain (only when one is set): see docs/CLOUD.md "Custom domain".
     case zone, domain, configRule, wafSkip, botMode, domainHealth
 
@@ -115,6 +117,7 @@ public enum DeployStep: String, CaseIterable, Sendable {
         case .route: return "Switch on the workers.dev address"
         case .health: return "Wait for the relay to answer"
         case .delete: return "Delete the relay"
+        case .repair: return "Pair this Mac again"
         case .zone: return "Find the zone"
         case .domain: return "Attach the custom domain"
         case .configRule: return "Switch off Browser Integrity Check for it"
@@ -142,6 +145,11 @@ public struct DeployResult: Equatable, Sendable {
     public var customURL: String? = nil
     /// Not fatal, but the user must know (Bot Fight Mode on the zone, a rule that could not be written).
     public var warnings: [String] = []
+    /// The secrets this deploy had to make because Herald did not hold them ("pairing secret", "signing secret").
+    public var generatedSecrets: [String] = []
+    /// True when the Worker now signs with a secret that is not the one it had: every device token issued before is void and this
+    /// Mac must pair again. Only a first deploy (a new Worker has no devices anyway) can do this; an upgrade never rotates it.
+    public var signingSecretChanged: Bool = false
 }
 
 public struct CloudflareZoneInfo: Equatable, Sendable { public var id: String; public var name: String; public var status: String }
@@ -285,13 +293,17 @@ public struct CloudflareDeployer: Sendable {
         }
 
         // 6. The Worker. First deploy: new Durable Object classes and the signing secret; later: same bindings, secrets kept.
+        var generated: [String] = []
+        var rotated = false
         let upgraded: Bool = try await run(.upload) { () -> (Bool, String) in
             let exists = try await call("GET", "/accounts/\(accountId)/workers/scripts/\(config.workerName)/settings", token: token)
             let isUpgrade = exists.ok
             if !isUpgrade, exists.status != 404, !exists.errors.contains(where: { $0.code == 10007 }) { throw fail(.upload, exists) }
 
+            // Reuse what Herald holds. `get` reads the new store and, when it is empty, migrates the legacy keychain item first, so a
+            // secret that only lives there is found instead of "missing" (issue #79: a regenerated secret voids every paired device).
             var pairing = secrets.get(.pairingSecret)
-            if pairing == nil { let p = Self.randomHex(16); secrets.set(.pairingSecret, p); pairing = p }
+            if pairing == nil { let p = Self.randomHex(16); secrets.set(.pairingSecret, p); pairing = p; generated.append("pairing secret") }
             var bindings: [[String: Any]] = [
                 ["type": "durable_object_namespace", "name": "MAILBOX", "class_name": "Mailbox"],
                 ["type": "durable_object_namespace", "name": "REGISTRY", "class_name": "Registry"],
@@ -306,11 +318,14 @@ public struct CloudflareDeployer: Sendable {
                 "observability": ["enabled": true],
             ]
             if isUpgrade {
+                // An upgrade never rotates the signing secret. Herald's copy is sent unchanged; when Herald has none (this Mac did not
+                // deploy the relay, or the secret store was cleared) the Worker keeps the one it has, so paired devices stay valid.
                 metadata["keep_bindings"] = ["secret_text"]
                 if let own = secrets.get(.relaySecret) { bindings.append(["type": "secret_text", "name": "RELAY_SECRET", "text": own]) }
             } else {
                 var signing = secrets.get(.relaySecret)
-                if signing == nil { let s = Self.randomHex(32); secrets.set(.relaySecret, s); signing = s }
+                if signing == nil { let s = Self.randomHex(32); secrets.set(.relaySecret, s); signing = s; generated.append("signing secret") }
+                rotated = true
                 bindings.append(["type": "secret_text", "name": "RELAY_SECRET", "text": signing ?? ""])
                 metadata["migrations"] = ["new_tag": "v1", "new_sqlite_classes": ["Mailbox", "Registry"]]
             }
@@ -322,7 +337,8 @@ public struct CloudflareDeployer: Sendable {
             let r = try await call("PUT", "/accounts/\(accountId)/workers/scripts/\(config.workerName)", token: token,
                                    body: form.data, contentType: form.contentType)
             guard r.ok else { throw fail(.upload, r) }
-            return (isUpgrade, isUpgrade ? "upgraded in place" : "created \(config.workerName)")
+            let made = generated.isEmpty ? ", secrets kept" : ", made a new " + generated.joined(separator: " and a new ")
+            return (isUpgrade, isUpgrade ? "upgraded in place" + made : "created \(config.workerName)")
         }
 
         // 7. The workers.dev route.
@@ -412,7 +428,8 @@ public struct CloudflareDeployer: Sendable {
             }
             customURL = host
         }
-        return DeployResult(accountId: accountId, subdomain: subdomain, workerURL: url, bundleHash: bundle.sourceHash, upgraded: upgraded, customURL: customURL, warnings: warnings)
+        return DeployResult(accountId: accountId, subdomain: subdomain, workerURL: url, bundleHash: bundle.sourceHash, upgraded: upgraded, customURL: customURL, warnings: warnings,
+                            generatedSecrets: generated, signingSecretChanged: rotated)
     }
 
     // MARK: Custom domain helpers

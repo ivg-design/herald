@@ -23,6 +23,12 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
     var failHealthAfter: Int?
     private var healthAnswered = 0
     private var uploadedHash: String?
+    /// The secrets the Worker holds, as Cloudflare would keep them: an upload with `keep_bindings: ["secret_text"]` keeps what it does not
+    /// name, a first upload starts empty. A device token is "tok-<RELAY_SECRET>", so it stays valid exactly while the signing secret does.
+    private(set) var deployedRelaySecret: String?
+    private(set) var deployedPairingSecret: String?
+    func mintDeviceToken() -> String { "tok-" + (deployedRelaySecret ?? "") }
+    func relayAccepts(_ deviceToken: String) -> Bool { deployedRelaySecret != nil && deviceToken == mintDeviceToken() }
     // Custom domain
     var zones: [[String: Any]] = [["id": "zone1", "name": "example.com", "status": "active"], ["id": "zone2", "name": "other.org", "status": "active"]]
     var zonePermissionsMissing = false       // every /zones call answers 403
@@ -67,14 +73,21 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
             case ("GET", _) where p.hasSuffix("/settings"):
                 return scriptExists ? ok("{}") : reply(404, #"{"success":false,"errors":[{"code":10007,"message":"This Worker does not exist"}]}"#)
             case ("PUT", _) where p.contains("/workers/scripts/"):
-                scriptExists = true
                 let s = String(decoding: r.httpBody ?? Data(), as: UTF8.self)
+                if !s.contains("\"keep_bindings\"") { deployedRelaySecret = nil; deployedPairingSecret = nil }
+                func secret(_ n: String) -> String? {
+                    guard let m = s.range(of: "\"name\":\"\(n)\",\"text\":\"([^\"]*)\"", options: .regularExpression) else { return nil }
+                    return String(s[m]).components(separatedBy: "\"")[7]
+                }
+                if let v = secret("RELAY_SECRET") { deployedRelaySecret = v }
+                if let v = secret("PAIRING_SECRET") { deployedPairingSecret = v }
+                scriptExists = true
                 if let m = s.range(of: #"BUNDLE_HASH","text":"([0-9a-f]+)"#, options: .regularExpression) {
                     uploadedHash = String(s[m]).components(separatedBy: "\"").last
                 }
                 return ok(#"{"id":"herald-relay"}"#)
             case ("POST", _) where p.hasSuffix("/subdomain"): return ok(#"{"enabled":true}"#)
-            case ("DELETE", _) where p.contains("/workers/scripts/"): scriptExists = false; return ok("null")
+            case ("DELETE", _) where p.contains("/workers/scripts/"): scriptExists = false; deployedRelaySecret = nil; deployedPairingSecret = nil; return ok("null")
             case ("DELETE", _) where p.contains("/r2/buckets/"): bucketExists = false; return ok("null")
             default: return reply(404, #"{"success":false,"errors":[{"code":7003,"message":"No route for \#(method) \#(p)"}]}"#)
             }
@@ -183,6 +196,74 @@ final class CloudflareDeployerTests: XCTestCase {
         XCTAssertTrue(body.contains("export default {v:2}"))
         // the bucket already existed: not an error
         XCTAssertEqual(http.paths("POST").filter { $0.hasSuffix("/r2/buckets") }.count, 2)
+    }
+
+
+    // MARK: Issue #79: an upgrade must not invalidate the pairing
+
+    private let newer = WorkerBundle(script: Data("export default {v:2}".utf8), sourceHash: String(repeating: "d", count: 64), compatibilityDate: "2026-08-01")
+
+    func testConformanceDeployUpgradeSameDeviceTokenStillWorks() async throws {
+        let http = FakeCloudflare(); let (d, _) = make(http)
+        let first = try await d.deploy(config: RelayCloudConfig(), bundle: bundle)
+        XCTAssertTrue(first.signingSecretChanged)               // a new Worker: nothing was paired with it before
+        let token = http.mintDeviceToken()                       // this Mac pairs
+        XCTAssertTrue(http.relayAccepts(token))
+        let up = try await d.deploy(config: RelayCloudConfig(), bundle: newer)
+        XCTAssertTrue(up.upgraded); XCTAssertFalse(up.signingSecretChanged); XCTAssertEqual(up.generatedSecrets, [])
+        XCTAssertTrue(http.relayAccepts(token), "the same device token must still work after an upgrade")
+        _ = try await d.deploy(config: RelayCloudConfig(), bundle: bundle)   // and again
+        XCTAssertTrue(http.relayAccepts(token))
+    }
+
+    func testUpgradeWithAnEmptySecretStoreKeepsTheDeployedSigningSecret() async throws {
+        let http = FakeCloudflare(); let (d1, _) = make(http)
+        _ = try await d1.deploy(config: RelayCloudConfig(), bundle: bundle)
+        let token = http.mintDeviceToken(), pairingBefore = http.deployedPairingSecret
+        // Herald's store does not have the two relay secrets (not migrated yet, or cleared): only the API token.
+        let (d2, store) = make(http)
+        let log = Log()
+        let r = try await d2.deploy(config: RelayCloudConfig(), bundle: newer, progress: log.add)
+        XCTAssertTrue(r.upgraded); XCTAssertFalse(r.signingSecretChanged)
+        XCTAssertTrue(http.relayAccepts(token), "an upgrade must never regenerate RELAY_SECRET")
+        XCTAssertNil(store.get(.relaySecret))
+        let body = String(decoding: http.calls.filter { $0.method == "PUT" && $0.path.contains("/workers/scripts/herald-relay") }.last!.body, as: UTF8.self)
+        XCTAssertFalse(body.contains("\"name\":\"RELAY_SECRET\""))
+        XCTAssertTrue(body.contains("\"keep_bindings\":[\"secret_text\"]"))
+        // the pairing secret did not exist here, so a new one was made, said so in the step log, and kept
+        XCTAssertEqual(r.generatedSecrets, ["pairing secret"])
+        XCTAssertNotEqual(http.deployedPairingSecret, pairingBefore); XCTAssertEqual(store.get(.pairingSecret), http.deployedPairingSecret)
+        XCTAssertTrue(log.events.contains { $0.step == .upload && $0.phase == .done && $0.detail.contains("made a new pairing secret") })
+    }
+
+    func testSecretsOnlyInTheLegacyKeychainAreMigratedAndReusedNotRegenerated() async throws {
+        let http = FakeCloudflare()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("herald-migrate-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let service = "com.ivg.herald.cloudflare.test.\(UUID().uuidString)"
+        let layer = FakeSecItems()
+        for (name, value) in [("relay-signing-secret", "legacy-signing"), ("relay-pairing-secret", "legacy-pairing"), ("cloudflare-api-token", "tok")] {
+            layer.legacy["\(service)/\(name)"] = Data(value.utf8)
+        }
+        let store = KeychainCloudflareSecrets(service: service, directory: dir, layer: layer)
+        let d = CloudflareDeployer(http: http, secrets: store, sleep: { _ in })
+        _ = try await d.deploy(config: RelayCloudConfig(), bundle: bundle)   // a first deploy that must reuse the legacy values
+        XCTAssertEqual(http.deployedRelaySecret, "legacy-signing"); XCTAssertEqual(http.deployedPairingSecret, "legacy-pairing")
+        let up = try await d.deploy(config: RelayCloudConfig(), bundle: newer)
+        XCTAssertEqual(up.generatedSecrets, []); XCTAssertEqual(http.deployedRelaySecret, "legacy-signing")
+        CloudflareSecretName.allCases.forEach { store.remove($0) }
+    }
+
+    func testANewWorkerWithoutTheSigningSecretVoidsOldTokensAndSaysSo() async throws {
+        let http = FakeCloudflare(); let (d, store) = make(http)
+        _ = try await d.deploy(config: RelayCloudConfig(), bundle: bundle)
+        let token = http.mintDeviceToken()
+        var c = RelayCloudConfig(); c.accountId = account
+        _ = try await d.deleteRelay(config: c)
+        store.remove(.relaySecret)
+        let r = try await d.deploy(config: RelayCloudConfig(), bundle: bundle)
+        XCTAssertTrue(r.signingSecretChanged); XCTAssertEqual(r.generatedSecrets, ["signing secret"])
+        XCTAssertFalse(http.relayAccepts(token))
     }
 
     func testCreatesTheSubdomainWhenTheAccountHasNone() async throws {
@@ -739,4 +820,74 @@ final class RelaySetupRoutesTests: XCTestCase {
         XCTAssertThrowsError(try RelayCloudConfig().applying(["maxQueue": .string("7")]))
         XCTAssertThrowsError(try RelayCloudConfig().applying(["maxQueue": .number(7.5)]))
     }
+}
+
+
+// MARK: - Pairing again after a deploy (issue #79)
+
+@MainActor
+final class FakeRepairBackend: RelayRepairBackend {
+    var isPaired = true
+    var isOnline = false
+    var tokenWorks = false
+    var forgot = 0, pairs = 0
+    func pair() async throws { pairs += 1; isPaired = true; tokenWorks = true }
+    func unpair() async throws { isPaired = false }
+    func connect(timeout seconds: Double) async -> Bool { isOnline = true; return true }
+    func deviceTokenWorks() async -> Bool { tokenWorks }
+    func forgetPairing() async { forgot += 1; isPaired = false; isOnline = false }
+}
+
+@MainActor
+final class RelayRepairTests: XCTestCase {
+    func testARefusedTokenAfterADeployPairsAgainAndSaysSo() async {
+        let b = FakeRepairBackend(); let sw = RelaySwitch(backend: b)
+        var events: [DeployEvent] = []
+        let did = await RelayRepair.repairIfNeeded(backend: b, switch: sw) { events.append($0) }
+        XCTAssertTrue(did)
+        XCTAssertEqual(b.forgot, 1); XCTAssertEqual(b.pairs, 1)
+        XCTAssertTrue(b.isPaired); XCTAssertEqual(sw.state, .online)
+        XCTAssertEqual(events.map(\.phase), [.started, .done]); XCTAssertEqual(events.last?.step, .repair)
+        XCTAssertTrue(events.last!.detail.contains("paired again automatically"))
+    }
+
+    func testAWorkingTokenIsLeftAlone() async {
+        let b = FakeRepairBackend(); b.tokenWorks = true; let sw = RelaySwitch(backend: b)
+        let did = await RelayRepair.repairIfNeeded(backend: b, switch: sw)
+        XCTAssertFalse(did); XCTAssertEqual(b.forgot, 0); XCTAssertEqual(b.pairs, 0)
+    }
+
+    func testNotPairedMeansNothingToRepair() async {
+        let b = FakeRepairBackend(); b.isPaired = false; let sw = RelaySwitch(backend: b)
+        let did = await RelayRepair.repairIfNeeded(backend: b, switch: sw)
+        XCTAssertFalse(did); XCTAssertEqual(b.pairs, 0)
+    }
+
+    func testAFailedRepairIsReportedAsFailed() async {
+        let b = FakeRepairBackend(); let sw = RelaySwitch(backend: b)
+        // pairing fails: the step is reported failed, with the readable reason
+        let f = FailingPairBackend()
+        let sw2 = RelaySwitch(backend: f)
+        var events: [DeployEvent] = []
+        _ = await RelayRepair.repairIfNeeded(backend: f, switch: sw2) { events.append($0) }
+        XCTAssertEqual(events.last?.phase, .failed)
+    }
+
+    func testTheStaleNotAnsweringMessageGoesAwayOnceOnline() {
+        let stale = RelaySwitchMessages.paired_but_silent
+        XCTAssertEqual(RelaySetupMessage.pick(online: false, deployFailure: stale, lastError: nil), stale)
+        XCTAssertEqual(RelaySetupMessage.pick(online: false, deployFailure: nil, lastError: "x"), "x")
+        XCTAssertNil(RelaySetupMessage.pick(online: true, deployFailure: stale, lastError: "x"))
+    }
+}
+
+@MainActor
+final class FailingPairBackend: RelayRepairBackend {
+    var isPaired = true
+    var isOnline = false
+    func pair() async throws { throw RelayError.transport("offline") }
+    func unpair() async throws {}
+    func connect(timeout seconds: Double) async -> Bool { false }
+    func deviceTokenWorks() async -> Bool { false }
+    func forgetPairing() async { isPaired = false }
 }

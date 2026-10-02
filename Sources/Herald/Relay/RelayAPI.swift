@@ -112,6 +112,25 @@ public struct RelayAPI: Sendable {
     public func info() async throws -> RelayDeviceInfo { try await run(try request("GET", "/v1/device/info"), as: RelayDeviceInfo.self) }
     public func usage() async throws -> RelayUsage { try await run(try request("GET", "/v1/device/usage"), as: RelayUsage.self) }
 
+    // MARK: Devices on the relay
+
+    /// Drops this Mac's same-name and stale siblings. Called after every pairing, so a Mac that paired again does not leave its old
+    /// entry first in the relay's list.
+    @discardableResult
+    public func prune() async throws -> (removed: [String], devices: [RelayDeviceEntry]) {
+        struct R: Decodable { var removed: [String]; var devices: [RelayDeviceEntry] }
+        let v = try await run(try request("POST", "/v1/device/prune", body: Data("{}".utf8)), as: R.self)
+        return (v.removed, v.devices)
+    }
+
+    public func devices() async throws -> [RelayDeviceEntry] {
+        struct R: Decodable { var devices: [RelayDeviceEntry] }
+        return try await run(try request("GET", "/v1/device/devices"), as: R.self).devices
+    }
+
+    /// 403 `not_removable` for an active different Mac.
+    public func removeDevice(id: String) async throws { try await perform(try request("DELETE", "/v1/device/devices/\(id)")) }
+
     // MARK: Connector approvals (OAuth)
 
     public func consents() async throws -> [RelayConsent] {

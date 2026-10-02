@@ -18,7 +18,7 @@ final class DeployLog: @unchecked Sendable {
 
 /// Enable relay: deploy the relay to the user's Cloudflare account, pair with it, keep it up to date, and everything the Advanced
 /// section and the local API/MCP tools do with it.
-extension RelayController: RelaySwitchBackend, RelaySetupBackend {
+extension RelayController: RelaySwitchBackend, RelayRepairBackend, RelaySetupBackend {
     // MARK: Switch backend
 
     var isOnline: Bool { client.state == .online }
@@ -117,8 +117,13 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
                     relayURL = target
                 }
             }
+            // A deploy that changed the signing secret voids the device token: pair again now instead of sitting offline (issue #79).
+            if await RelayRepair.repairIfNeeded(backend: self, switch: relaySwitch, log: { log.add($0) }) {
+                warnings.append(RelayRepair.note)
+            }
             await relaySwitch.turnOn()
             if case .failed(let m) = relaySwitch.state { deployFailure = m; throw BackendError(502, m) }
+            deployFailure = nil
             await refreshKeys()
             lastDeployWarnings = warnings
             return RelayDeployReply(deployed: true, upgraded: r.upgraded, relayURL: target, paired: isPaired, online: isOnline,
@@ -128,8 +133,10 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
         catch { deployFailure = error.localizedDescription; throw error }
     }
 
+    func forgetPairing() async { try? await relayUnpair(force: true) }
+
     /// Does the relay at the current URL accept this Mac's device token? (A 401 means pair again.)
-    private func deviceTokenWorks() async -> Bool {
+    func deviceTokenWorks() async -> Bool {
         guard let api = client.api else { return false }
         do { _ = try await api.listKeys(); return true }
         catch RelayError.http(let code, _) where code == 401 { return false }
@@ -213,7 +220,7 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
             mcpURL: url.isEmpty ? "" : ConnectorConfig.mcpURL(relay: url),
             workersDevURL: cloudConfig.value.workerURL, customURL: cloudConfig.value.customURL,
             customDomainRecommended: isPaired && cloudConfig.value.customDomain == nil, bundledVersion: bundledVersion, deployedVersion: deployedVersion,
-            updateAvailable: updateAvailable, message: deployFailure ?? lastError, steps: deployEvents.map(RelayStepReport.init), usage: usage)
+            updateAvailable: updateAvailable, message: RelaySetupMessage.pick(online: isOnline, deployFailure: deployFailure, lastError: lastError), steps: deployEvents.map(RelayStepReport.init), usage: usage)
     }
 
     // MARK: Test, instructions

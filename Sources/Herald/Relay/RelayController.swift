@@ -49,7 +49,11 @@ final class RelayController: RelayHost, RelayBackend {
         client.pingSeconds = TimeInterval(cloudConfig.value.pingSeconds)
         // No relay is shared by default. An earlier build pointed unpaired installs at the maintainer's own instance: forget that.
         if tokens.load() == nil, store.value.relayURL == RelayDefaults.legacyHostedURL { store.update { $0.relayURL = "" } }
-        client.onChange = { [weak self] in self?.controller.changed(); self?.relaySwitch?.sync() }
+        client.onChange = { [weak self] in
+            // Online again: a "relay is not answering" from an earlier attempt is stale and must not keep showing.
+            if self?.client.state == .online { self?.deployFailure = nil }
+            self?.controller.changed(); self?.relaySwitch?.sync()
+        }
         relaySwitch = RelaySwitch(backend: self)
         relaySwitch.onChange = { [weak self] in self?.controller.changed() }
     }
@@ -250,6 +254,9 @@ final class RelayController: RelayHost, RelayBackend {
             store.update { $0.deviceId = paired.deviceId; $0.pairedAt = Date() }
             pairingCode = nil
             client.start()
+            // This Mac may have paired before (an unpair that did not reach the relay, a redeploy that rotated its secrets): drop its
+            // same-name and stale entries so the relay never points an approval at a dead one.
+            await pruneDevices()
             await refreshKeys()
             controller.changed()
             return (started.code, paired.deviceId)
@@ -274,9 +281,32 @@ final class RelayController: RelayHost, RelayBackend {
         client.stop()
         tokens.delete()
         store.update { $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil }
-        keys = []; usage = nil; issuerKeys = []; consents = []
+        keys = []; usage = nil; issuerKeys = []; consents = []; devices = []
         client.start()
         controller.changed()
+    }
+
+    /// The Macs on the relay, as the last call saw them (Settings > Cloud > Advanced).
+    private(set) var devices: [RelayDeviceEntry] = []
+
+    /// Asks the relay to drop this Mac's same-name and stale siblings. Best effort: an older relay answers 404.
+    func pruneDevices() async {
+        guard let api = client.api, isPaired, let r = try? await api.prune() else { return }
+        devices = r.devices
+        controller.changed()
+    }
+
+    func refreshDevices() async {
+        guard let api = client.api, isPaired, let list = try? await api.devices() else { return }
+        devices = list
+        controller.changed()
+    }
+
+    /// Removes an entry the relay allows this Mac to remove (same name, rotated credentials or idle for a week).
+    func removeDevice(id: String) async throws {
+        guard let api = client.api, isPaired else { throw RelayError.notPaired }
+        try await api.removeDevice(id: id)
+        await refreshDevices()
     }
 
     func refreshKeys() async {
@@ -314,10 +344,10 @@ final class RelayController: RelayHost, RelayBackend {
     }
 
     func relayStatus() async -> RelayStatusReply {
-        if isPaired { await refreshKeys() }
+        if isPaired { await refreshKeys(); await refreshDevices() }
         let s = store.value
         return RelayStatusReply(paired: isPaired, state: client.state.label, online: client.state == .online, relayURL: s.relayURL,
                                 mcpURL: ConnectorConfig.mcpURL(relay: s.relayURL), deviceId: s.deviceId, lastSeenAt: s.lastSeenAt,
-                                keys: keys, log: s.log)
+                                keys: keys, log: s.log, devices: isPaired ? devices : nil)
     }
 }

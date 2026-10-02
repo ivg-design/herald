@@ -103,6 +103,19 @@ public struct RelayKeyInfo: Codable, Equatable, Sendable, Identifiable {
     public var title: String { isOAuth ? (displayName ?? name) : name }
 }
 
+/// One Mac on the relay, as `GET /v1/device/devices` lists it.
+public struct RelayDeviceEntry: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var name: String?
+    public var online: Bool
+    public var lastSeenAt: String?
+    public var thisDevice: Bool
+    /// True for an entry this Mac may remove: same name as this Mac, rotated credentials, or no connection for a week.
+    public var removable: Bool
+    public var removableReason: String?
+    public var title: String { name ?? "Mac" }
+}
+
 /// A connector asking to be approved (the OAuth flow, docs/CLOUD.md "Connect ChatGPT"): the relay pushes it down the socket,
 /// Herald asks on a banner, and the 6-digit `code` is the fallback the user can type on the consent page.
 public struct RelayConsent: Codable, Equatable, Sendable, Identifiable {
