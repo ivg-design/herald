@@ -49,6 +49,7 @@ struct ImageSourceControl: View {
                     }
                 } label: { Text(current).lineLimit(1) }
                     .menuStyle(.borderlessButton).fixedSize()
+                    .heraldHelp(name: "Image source", detail: "the issuer\u{2019}s image, a fixed picture you choose, or another image field")
             }
             switch choice {
             case .issuer:
@@ -85,6 +86,7 @@ struct ImageSourceControl: View {
             }
             Spacer(minLength: 0)
             Button("Choose\u{2026}") { chooseFile() }.controlSize(.small)
+                .heraldHelp(name: "Choose a picture", detail: "pick another file; Herald keeps a copy in its support folder")
         }
         Text("The same picture for every notification; it overrides the issuer\u{2019}s image.")
             .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

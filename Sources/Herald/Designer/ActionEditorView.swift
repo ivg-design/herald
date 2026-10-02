@@ -406,6 +406,7 @@ struct ActionFormView: View {
             HStack {
                 TextField("Path, e.g. /Applications/Example.app", text: optional(action.path)).font(.system(size: 12, design: .monospaced))
                 Button("Choose app\u{2026}") { chooseApp() }
+                    .heraldHelp(name: "Choose app", detail: "pick an application; its bundle id and path are filled in")
             }
             let found = HeraldOpenAppResolver.resolve(HeraldOpenAppResolver.candidates(
                 bundleId: request.action.bundleId, path: request.action.path, manifest: model.manifest))

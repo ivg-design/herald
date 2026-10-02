@@ -27,6 +27,7 @@ struct ActionStyleField: View {
                     ForEach(ActionStyleCopy.options, id: \.value) { Text($0.title).tag(String?.some($0.value)) }
                 }
                 .labelsHidden().fixedSize()
+                .heraldHelp(name: "Button style", detail: "normal, prominent, destructive or quiet look; destructive asks before running")
             }
             Text(ActionStyleCopy.caption)
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -65,6 +66,7 @@ struct WhichActionsEditor: View {
                 })) {
                     Text("All the rest").tag(Mode.rest); Text("Chosen").tag(Mode.chosen)
                 }.labelsHidden().pickerStyle(.segmented)
+                    .heraldHelp(name: "Which actions", detail: "every action no other cell asked for, or an ordered choice")
             }
             if mode == .chosen {
                 ForEach(Array(chosen.enumerated()), id: \.offset) { index, actionID in
@@ -80,14 +82,17 @@ struct WhichActionsEditor: View {
                         }
                         Spacer(minLength: 0)
                         Button { move(index, by: -1, chosen, include) } label: { Image(systemName: "chevron.up") }
-                            .buttonStyle(.borderless).disabled(index == 0).help("Move up")
+                            .buttonStyle(.borderless).disabled(index == 0)
+                            .heraldHelp(name: "Move up", detail: "show this action earlier in the row")
                         Button { move(index, by: 1, chosen, include) } label: { Image(systemName: "chevron.down") }
-                            .buttonStyle(.borderless).disabled(index == chosen.count - 1).help("Move down")
+                            .buttonStyle(.borderless).disabled(index == chosen.count - 1)
+                            .heraldHelp(name: "Move down", detail: "show this action later in the row")
                         Button {
                             var ids = chosen; ids.remove(at: index)
                             include.wrappedValue = ids.isEmpty ? nil : ids
                         } label: { Image(systemName: "minus.circle") }
-                            .buttonStyle(.borderless).help("Take it out of this cell")
+                            .buttonStyle(.borderless)
+                            .heraldHelp(name: "Remove", detail: "take this action out of this cell")
                     }
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Color.secondary.opacity(0.10)))
@@ -100,6 +105,7 @@ struct WhichActionsEditor: View {
                         }
                     } label: { Label("Add an action", systemImage: "plus.circle") }
                         .menuStyle(.borderlessButton).fixedSize().controlSize(.small)
+                        .heraldHelp(name: "Add an action", detail: "show one more action in this cell")
                 }
             }
             Text("An action is drawn in one cell only. Give a Button cell one action and an Actions cell the rest: for example a Button for Mark as Read in column 1, and an Actions cell with Archive, Delete and Spam, aligned right, across columns 2 to 4 of the same row. \u{201C}All the rest\u{201D} takes whatever no other cell has asked for.")
@@ -129,12 +135,17 @@ struct ActionsArrangementFields: View {
                 Text("Left").tag(HeraldActionsAlign.leading); Text("Centre").tag(HeraldActionsAlign.center)
                 Text("Right").tag(HeraldActionsAlign.trailing); Text("Spread").tag(HeraldActionsAlign.spaceBetween)
             }.labelsHidden().pickerStyle(.segmented)
+                .heraldHelp(name: "Align buttons", detail: "left, centre, right, or spread from edge to edge")
         }
         FieldRow("Wrap") {
             Toggle("Flow onto more lines", isOn: Binding(
                 get: { layout == .stack ? false : (b.binding(\.wrap, nil).wrappedValue ?? (layout == .wrap)) },
                 set: { b.binding(\.wrap, nil).wrappedValue = $0 })).toggleStyle(.checkbox).disabled(layout == .stack)
+                .heraldHelp(name: "Wrap", detail: "flow onto more lines when the buttons do not fit")
         }
-        FieldRow("Spacing") { OptionalNumberField(value: b.binding(\.spacing, nil), placeholder: "6") }
+        FieldRow("Spacing") {
+            OptionalNumberField(value: b.binding(\.spacing, nil), placeholder: "6")
+                .heraldHelp(name: "Button spacing", detail: "points between buttons; empty uses 6")
+        }
     }
 }
