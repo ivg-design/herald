@@ -1115,3 +1115,35 @@ final class GridTrackClampTests: XCTestCase {
         XCTAssertEqual(GridEditing.clampedPoints(5000, columns: false, index: 0, in: g), 800)
     }
 }
+
+// Position and span in the inspector (issue #49): how far a cell can grow.
+final class GridGrowRoomTests: XCTestCase {
+    private func template(_ cells: [HeraldCell], rows: Int = 3, cols: Int = 3) -> HeraldTemplate {
+        HeraldTemplate(name: "t", app: "a", grid: HeraldGrid(rows: rows, cols: cols), cells: cells)
+    }
+    private func cell(_ id: String, _ r: Int, _ c: Int, rs: Int = 1, cs: Int = 1) -> HeraldCell {
+        HeraldCell(id: id, row: r, col: c, rowSpan: rs, colSpan: cs, component: .spacer)
+    }
+
+    func testAnOnlyCellCanGrowAcrossTheWholeGrid() {
+        XCTAssertTrue(GridEditing.growRoom(cell: "a", in: template([cell("a", 0, 0)])) == (3, 3))
+        XCTAssertTrue(GridEditing.growRoom(cell: "a", in: template([cell("a", 1, 1)])) == (2, 2), "from the middle only down and right")
+    }
+
+    func testNeighboursLimitEachDirectionSeparately() {
+        let t = template([cell("a", 0, 0), cell("b", 0, 1), cell("c", 2, 0)])
+        let room = GridEditing.growRoom(cell: "a", in: t)
+        XCTAssertEqual(room.cols, 1, "b is right next to it")
+        XCTAssertEqual(room.rows, 2, "c stops it at row 2")
+    }
+
+    func testABoxedInCellCannotGrowAndKeepsItsCurrentSpan() {
+        let t = template([cell("a", 0, 0), cell("b", 0, 1), cell("c", 1, 0)], rows: 2, cols: 2)
+        XCTAssertTrue(GridEditing.growRoom(cell: "a", in: t) == (1, 1))
+        let wide = template([cell("w", 0, 0, cs: 2), cell("x", 1, 0)], rows: 2, cols: 2)
+        let room = GridEditing.growRoom(cell: "w", in: wide)
+        XCTAssertEqual(room.cols, 2, "never below what it already spans")
+        XCTAssertEqual(room.rows, 1)
+        XCTAssertTrue(GridEditing.growRoom(cell: "nope", in: wide) == (1, 1))
+    }
+}

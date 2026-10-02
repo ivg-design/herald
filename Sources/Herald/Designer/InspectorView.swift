@@ -386,15 +386,25 @@ private struct CellEditor: View {
     private var placement: some View {
         let g = model.grid
         let id = cell.id
-        return InspectorSection(title: "Position") {
+        let room = GridEditing.growRoom(cell: id, in: model.draft)
+        let canGrow = room.rows > cell.rowSpan || room.cols > cell.colSpan || cell.rowSpan > 1 || cell.colSpan > 1
+        return InspectorSection(title: "Position and span", hint: "Where the cell sits, and how much of the grid it covers") {
+            Text("Position").font(.caption.weight(.semibold))
             HStack {
                 Stepper("Row \(cell.row + 1)", value: Binding(get: { cell.row + 1 }, set: { model.setPosition(cell: id, row: $0 - 1, col: cell.col) }), in: 1...max(g.rows, 1))
-                Stepper("Col \(cell.col + 1)", value: Binding(get: { cell.col + 1 }, set: { model.setPosition(cell: id, row: cell.row, col: $0 - 1) }), in: 1...max(g.cols, 1))
+                Stepper("Column \(cell.col + 1)", value: Binding(get: { cell.col + 1 }, set: { model.setPosition(cell: id, row: cell.row, col: $0 - 1) }), in: 1...max(g.cols, 1))
             }
+            Text("Span").font(.caption.weight(.semibold))
             HStack {
-                Stepper("Rows \(cell.rowSpan)", value: Binding(get: { cell.rowSpan }, set: { model.setSpan(cell: id, rowSpan: $0, colSpan: cell.colSpan) }), in: 1...max(g.rows, 1))
-                Stepper("Cols \(cell.colSpan)", value: Binding(get: { cell.colSpan }, set: { model.setSpan(cell: id, rowSpan: cell.rowSpan, colSpan: $0) }), in: 1...max(g.cols, 1))
+                Stepper("Rows \(cell.rowSpan)", value: Binding(get: { cell.rowSpan }, set: { model.setSpan(cell: id, rowSpan: $0, colSpan: cell.colSpan) }), in: 1...max(room.rows, 1))
+                    .disabled(room.rows <= 1)
+                Stepper("Columns \(cell.colSpan)", value: Binding(get: { cell.colSpan }, set: { model.setSpan(cell: id, rowSpan: cell.rowSpan, colSpan: $0) }), in: 1...max(room.cols, 1))
+                    .disabled(room.cols <= 1)
             }
+            .opacity(canGrow ? 1 : 0.45)
+            Text(canGrow ? "Position is the cell\u{2019}s top-left slot. Span is how many rows and columns it covers; it can only grow into empty slots."
+                         : "This cell cannot grow: the slots around it are taken or it is on the grid\u{2019}s edge. Position is its top-left slot.")
+                .font(.caption2).foregroundStyle(.secondary)
             FieldRow("Align") {
                 AlignmentGrid(selection: Binding(get: { cell.align }, set: { a in model.updateCell(id) { $0.align = a } }))
             }

@@ -227,6 +227,16 @@ enum GridEditing {
         return (best.rows, best.cols)
     }
 
+    /// How many rows and columns the cell can span, each measured on its own: the largest span in that direction
+    /// that stays inside the grid and keeps clear of other cells (it never swallows one). Never below the current span.
+    static func growRoom(cell id: String, in t: HeraldTemplate) -> (rows: Int, cols: Int) {
+        guard let g = t.grid, let c = t.cell(withID: id), let r = rect(of: c, in: g) else { return (1, 1) }
+        var rows = r.rowSpan, cols = r.colSpan
+        while r.row + rows < g.rows, isFree(SlotRect(row: r.row, col: r.col, rowSpan: rows + 1, colSpan: r.colSpan), in: t, excluding: [id]) { rows += 1 }
+        while r.col + cols < g.cols, isFree(SlotRect(row: r.row, col: r.col, rowSpan: r.rowSpan, colSpan: cols + 1), in: t, excluding: [id]) { cols += 1 }
+        return (rows, cols)
+    }
+
     /// The selection grown until it holds whole cells only (a cell cut by the selection joins it).
     static func expanded(_ r: SlotRect, in t: HeraldTemplate) -> SlotRect {
         guard let g = t.grid else { return r }
