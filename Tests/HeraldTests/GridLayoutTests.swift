@@ -197,7 +197,7 @@ final class GridLayoutTests: XCTestCase {
 
     func testTextWrapsToTheColumnWidthAndTheRowGrows() {
         // A body that needs 380 pt on one line, in a 100 pt column, is four lines tall.
-        let g = grid(rows: 1, cols: 1, rowSizes: [.auto], colSizes: [.points(100)], gap: 0, padding: 0, width: 400)
+        let g = grid(rows: 1, cols: 2, rowSizes: [.auto], colSizes: [.points(100), .fill], gap: 0, padding: 0, width: 400)
         let s = solve(g, [cell("body", 0, 0)], widths: ["body": 380])
         XCTAssertEqual(s.rowHeights[0], 64)
     }

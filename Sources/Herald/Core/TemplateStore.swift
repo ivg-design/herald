@@ -126,6 +126,6 @@ public final class TemplateStore: @unchecked Sendable {
     private func read(_ url: URL) -> HeraldTemplate? {
         if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > Self.maxFileBytes { return nil }
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? HeraldJSON.decoder().decode(HeraldTemplate.self, from: data)
+        return (try? HeraldJSON.decoder().decode(HeraldTemplate.self, from: data))?.fittingGrid()
     }
 }

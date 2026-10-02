@@ -655,13 +655,7 @@ private struct TrackLabel: View {
     private var live: Bool { drag.map { $0.columns == columns && $0.index == index } ?? false }
 
     private var text: String {
-        if live, let d = drag { return "\(columns ? "W" : "H") \(Int(d.points)) pt" }
-        let now = Int(length.rounded())
-        switch size {
-        case .points(let p): return "\(Int(p.rounded())) pt"
-        case .fill: return "fill \u{00B7} \(now)"
-        case .auto: return "auto \u{00B7} \(now)"
-        }
+        GridEditing.rulerText(columns: columns, size: size, resolved: Double(length), dragging: live ? drag?.points : nil)
     }
 
     var body: some View {

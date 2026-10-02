@@ -1017,11 +1017,7 @@ struct TemplateInspector: View {
             get: { columns ? model.grid.colSize(at: i) : model.grid.rowSize(at: i) },
             set: { v in
                 model.edit { t in
-                    guard var g = t.grid else { return }
-                    GridEditing.fixSizes(&g)
-                    if columns, g.colSizes.indices.contains(i) { g.colSizes[i] = v }
-                    if !columns, g.rowSizes.indices.contains(i) { g.rowSizes[i] = v }
-                    t.grid = g
+                    _ = GridEditing.setTrack(columns: columns, index: i, size: v, in: &t)
                 }
             })
     }

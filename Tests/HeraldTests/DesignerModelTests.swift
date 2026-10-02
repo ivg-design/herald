@@ -681,7 +681,7 @@ final class DesignerTrackTests: XCTestCase {
     func testClampedPointsAreWholeAndBounded() {
         let g = HeraldGrid.standard   // 400 wide
         XCTAssertEqual(GridEditing.clampedPoints(96.4, columns: true, in: g), 96)
-        XCTAssertEqual(GridEditing.clampedPoints(-20, columns: true, in: g), GridEditing.minTrackPoints)
+        XCTAssertEqual(GridEditing.clampedPoints(-20, columns: true, in: g), GridEditing.minColumnPoints)
         XCTAssertEqual(GridEditing.clampedPoints(2000, columns: true, in: g), 348, "the inner width: 400 minus padding 14 x 2 and three gaps of 8")
         XCTAssertEqual(GridEditing.clampedPoints(2000, columns: false, in: g), 800)
         XCTAssertEqual(GridEditing.clampedPoints(.nan, columns: false, in: g), GridEditing.minTrackPoints)
@@ -1094,8 +1094,9 @@ final class GridTrackClampTests: XCTestCase {
         let g = t.grid!
         let fixed = g.colSizes.reduce(0.0) { if case .points(let p) = $1 { return $0 + p }; return $0 }
         XCTAssertLessThanOrEqual(fixed, inner(g) + 0.001, "fixed columns \(g.colSizes) fit the \(inner(g)) pt inside")
-        XCTAssertEqual(g.colSizes[1], .points(119), "171 was asked for; 328 - (94 + 55 + 60) is what is left")
+        XCTAssertEqual(g.colSizes[1], .points(150), "171 was asked for; the room left after the others (the neighbour at its 24 pt minimum) is 150")
         XCTAssertEqual(g.colSizes[3], .points(60), "and the last one stops where the room ends")
+        XCTAssertEqual(fixed, inner(g), accuracy: 0.001, "and nothing is left over")
     }
 
     func testFillAndAutoColumnsKeepTheirMinimum() {
@@ -1108,11 +1109,95 @@ final class GridTrackClampTests: XCTestCase {
 
     func testLiveDragAndNumericEntryUseTheSameClamp() {
         let g = template([.points(100), .points(100), .points(100)]).grid!
-        XCTAssertEqual(GridEditing.clampedPoints(900, columns: true, index: 2, in: g), inner(g) - 200)
+        XCTAssertEqual(GridEditing.clampedPoints(900, columns: true, index: 2, in: g), inner(g) - 100 - GridEditing.minColumnPoints, "the last column trades with the previous one")
         XCTAssertEqual(GridEditing.clampedPoints(900, columns: true, in: g), inner(g))
-        XCTAssertEqual(GridEditing.clampedPoints(1, columns: true, index: 2, in: g), GridEditing.minTrackPoints)
+        XCTAssertEqual(GridEditing.clampedPoints(1, columns: true, index: 2, in: g), GridEditing.minColumnPoints)
         // Rows are capped at 800 pt.
         XCTAssertEqual(GridEditing.clampedPoints(5000, columns: false, index: 0, in: g), 800)
+    }
+}
+
+// Columns always fill the slot the template defines (issue #50).
+extension GridTrackClampTests {
+    private func t(_ sizes: [HeraldSize], width: Double = 380) -> HeraldTemplate {
+        HeraldTemplate(name: "t", app: "a", grid: HeraldGrid(rows: 1, cols: sizes.count, rowSizes: [.auto], colSizes: sizes, gap: 8, padding: 14, width: width), cells: [])
+    }
+    private func pts(_ g: HeraldGrid) -> [Double] { g.colSizes.map { if case .points(let p) = $0 { return p }; return -1 } }
+    private func innerW(_ g: HeraldGrid) -> Double { g.innerColumnsWidth }
+    private func solved(_ g: HeraldGrid) -> GridSolution {
+        GridSolver.solve(grid: g, cells: [], plan: HeraldGridPlan(), measure: GridMeasure(idealWidth: { _ in 0 }, height: { _, _ in 0 }))
+    }
+
+    func testDragBetweenTwoFixedColumnsConservesTheSum() {
+        var x = t([.points(100), .points(100), .points(136)])   // 380 - 28 - 16 = 336 inside
+        XCTAssertEqual(innerW(x.grid!), 336)
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 0, size: .points(140), in: &x))
+        XCTAssertEqual(pts(x.grid!), [140, 60, 136], "A took 40 from B")
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 0, size: .points(90), in: &x))
+        XCTAssertEqual(pts(x.grid!), [90, 110, 136], "and gives it back")
+        XCTAssertEqual(pts(x.grid!).reduce(0, +), innerW(x.grid!))
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 0, size: .points(5000), in: &x))
+        XCTAssertEqual(pts(x.grid!), [176, 24, 136], "never past the neighbour's minimum")
+    }
+
+    func testTheLastColumnTradesWithTheNearestFillElseThePreviousColumn() {
+        var a = t([.points(100), .fill, .points(100)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 2, size: .points(150), in: &a))
+        XCTAssertEqual(a.grid!.colSizes, [.points(100), .fill, .points(150)], "the fill gives way")
+        var b = t([.points(100), .points(100), .points(136)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 2, size: .points(160), in: &b))
+        XCTAssertEqual(pts(b.grid!), [100, 76, 160])
+    }
+
+    func testNoFillGridsAlwaysSumToTheInnerWidth() {
+        var x = t([.points(100), .points(80), .points(60)]).fittingGrid()   // 240 of 336: 96 pt short
+        XCTAssertEqual(pts(x.grid!), [100, 80, 156])
+        for edit in [(0, 40.0), (1, 200.0), (2, 30.0), (0, 500.0)] {
+            XCTAssertTrue(GridEditing.setTrack(columns: true, index: edit.0, size: .points(edit.1), in: &x))
+            XCTAssertEqual(pts(x.grid!).reduce(0, +), innerW(x.grid!), accuracy: 0.001, "after \(edit): \(x.grid!.colSizes)")
+        }
+        var y = t([.points(100), .fill, .points(100)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 1, size: .points(60), in: &y))
+        XCTAssertEqual(pts(y.grid!).reduce(0, +), innerW(y.grid!), accuracy: 0.001, "the only fill turned fixed")
+        let raw = t([.points(100), .points(80), .points(60)]).grid!
+        XCTAssertEqual(solved(raw).colWidths.reduce(0, +), innerW(raw), accuracy: 0.001, "the solver agrees for an unnormalised grid")
+        let withAuto = t([.points(100), .auto, .auto]).grid!
+        XCTAssertEqual(solved(withAuto).colWidths.reduce(0, +), innerW(withAuto), accuracy: 0.001)
+    }
+
+    func testColumnsHaveA24PointMinimumEverywhere() {
+        var x = t([.points(100), .points(100), .points(136)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 1, size: .points(8), in: &x))
+        XCTAssertEqual(pts(x.grid!)[1], 24, "inspector field, context menu and drag share the clamp")
+        XCTAssertEqual(GridEditing.clampedPoints(3, columns: true, index: 0, in: x.grid!), 24)
+        XCTAssertEqual(GridEditing.clampedPoints(3, columns: false, index: 0, in: x.grid!), GridEditing.minTrackPoints, "rows keep theirs")
+        let raw = t([.points(8), .points(8), .points(8), .fill])
+        XCTAssertEqual(raw.validate().filter { !$0.isError && $0.path == "grid.colSizes" }.count, 3)
+        XCTAssertEqual(Array(pts(raw.fittingGrid().grid!).prefix(3)), [24, 24, 24])
+    }
+
+    func testAnExistingTemplateThatSumsBelowTheInnerWidthIsFixedWithAWarning() {
+        // The reported shape: 380 wide, padding 14, gap 8, columns adding up to less than 328.
+        let raw = t([.points(94), .points(150), .points(8), .points(8)])
+        let issues = raw.validate().filter { $0.path == "grid.colSizes" }
+        XCTAssertFalse(issues.isEmpty)
+        XCTAssertTrue(issues.allSatisfy { $0.severity == .warning })
+        XCTAssertTrue(issues.contains { $0.message.contains("leftover") })
+        let fixed = raw.fittingGrid()
+        XCTAssertEqual(pts(fixed.grid!), [94, 150, 24, 60], "raised to 24 first, then the last column takes the rest")
+        XCTAssertEqual(solved(fixed.grid!).colWidths.reduce(0, +), innerW(fixed.grid!), accuracy: 0.001)
+        XCTAssertTrue(fixed.validate().filter { $0.path == "grid.colSizes" }.isEmpty, "a fixed template is clean")
+        XCTAssertTrue(t([.points(94), .fill]).validate().filter { $0.path == "grid.colSizes" }.isEmpty, "a fill absorbs it already")
+    }
+
+    func testRulersReportTheResolvedWidthOfEveryColumn() {
+        XCTAssertEqual(GridEditing.rulerText(columns: true, size: .auto, resolved: 86.4), "auto \u{00B7} 86")
+        XCTAssertEqual(GridEditing.rulerText(columns: true, size: .fill, resolved: 120), "fill \u{00B7} 120")
+        XCTAssertEqual(GridEditing.rulerText(columns: true, size: .points(60), resolved: 156), "156 pt")
+        XCTAssertEqual(GridEditing.rulerText(columns: false, size: .points(40), resolved: 40), "40 pt")
+        XCTAssertEqual(GridEditing.rulerText(columns: true, size: .fill, resolved: 1, dragging: 77), "W 77 pt")
+        let g = t([.points(100), .auto, .points(60)]).grid!
+        XCTAssertEqual(solved(g).colWidths.reduce(0, +), innerW(g), accuracy: 0.001, "the labels add up to the inner width")
     }
 }
 

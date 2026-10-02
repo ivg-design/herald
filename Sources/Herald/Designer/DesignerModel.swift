@@ -413,46 +413,87 @@ enum GridEditing {
 // MARK: - Track sizes
 
 extension GridEditing {
-    /// Smallest fixed track the canvas handles produce.
+    /// Smallest fixed row the canvas handles produce.
     static let minTrackPoints = 8.0
+    /// Smallest fixed column: 8 pt slivers are not usable (issue #50).
+    static let minColumnPoints = HeraldGrid.minColumnPoints
 
-    /// A dragged size made usable: whole points, at least `minTrackPoints`, and no wider than the banner (a
-    /// column) or 800 pt (a row).
+    /// The smallest a fixed track may be.
+    static func minPoints(columns: Bool) -> Double { columns ? minColumnPoints : minTrackPoints }
+
+    /// A dragged size made usable: whole points, at least the track minimum (24 pt for a column, 8 pt for a row),
+    /// and no wider than the room left inside the grid (a column) or 800 pt (a row).
     static func clampedPoints(_ v: Double, columns: Bool, index: Int? = nil, in g: HeraldGrid) -> Double {
-        guard v.isFinite else { return minTrackPoints }
+        let lo = minPoints(columns: columns)
+        guard v.isFinite else { return lo }
         let hi = maxPoints(columns: columns, index: index, in: g)
-        return min(max(v.rounded(), minTrackPoints), hi)
+        return min(max(v.rounded(), lo), max(hi, lo))
     }
 
     /// The least a `fill` or `auto` column may be squeezed to when another column is sized.
     static let minFlexibleColumn = 24.0
 
-    /// The most column `index` can take: what is left of the grid's inner width (width minus padding and gaps) after
-    /// the other columns, fixed ones at their size and fill/auto ones at their minimum. A row is capped at 800 pt.
-    /// Without an index, the whole inner width.
-    static func maxPoints(columns: Bool, index: Int?, in g: HeraldGrid) -> Double {
-        guard columns else { return 800.0 }
-        let pad = max(g.padding, 0), gap = max(g.gap, 0)
-        let inner = GridSolver.clampedWidth(g.width) - 2 * pad - gap * Double(max(g.cols - 1, 0))
-        var others = 0.0
-        if let index {
-            for (j, size) in g.colSizes.enumerated() where j != index && j < g.cols {
-                switch size { case .points(let p): others += max(p, 0); case .fill, .auto: others += minFlexibleColumn }
-            }
-        }
-        return max(inner - others, minTrackPoints)
+    /// The column whose width column `index` trades with when it is resized: the next column when that one is
+    /// fixed; for the last column, the previous one when it is fixed and there is no `fill` to give way instead.
+    /// nil when a fill (or an auto) column absorbs the change.
+    static func partner(ofColumn index: Int, in g: HeraldGrid) -> Int? {
+        let sizes = (0..<g.cols).map { g.colSize(at: $0) }
+        guard sizes.indices.contains(index) else { return nil }
+        func isPoints(_ j: Int) -> Bool { if case .points = sizes[j] { return true }; return false }
+        if index + 1 < sizes.count { return isPoints(index + 1) ? index + 1 : nil }
+        if sizes.contains(.fill) { return nil }
+        return index > 0 && isPoints(index - 1) ? index - 1 : nil
     }
 
-    /// Gives column or row `index` a size. A fixed size is clamped (`clampedPoints`). False when there is no such track.
+    /// The most column `index` can take: what is left of the grid's inner width (width minus padding and gaps) after
+    /// the other columns, fixed ones at their size and fill/auto ones (and the column it trades with) at their
+    /// minimum. A row is capped at 800 pt. Without an index, the whole inner width.
+    static func maxPoints(columns: Bool, index: Int?, in g: HeraldGrid) -> Double {
+        guard columns else { return 800.0 }
+        let inner = g.innerColumnsWidth
+        var others = 0.0
+        if let index {
+            let p = partner(ofColumn: index, in: g)
+            for j in 0..<g.cols where j != index {
+                if j == p { others += minColumnPoints; continue }
+                switch g.colSize(at: j) { case .points(let v): others += max(v, minColumnPoints); case .fill, .auto: others += minFlexibleColumn }
+            }
+        }
+        return max(inner - others, minColumnPoints)
+    }
+
+    /// Gives column or row `index` a size. A fixed size is clamped (`clampedPoints`); resizing a fixed column
+    /// moves the difference to or from the column next to it (`partner`), so the columns keep adding up to the
+    /// grid's inner width, and a grid with only fixed columns gives any leftover to its last column. False when
+    /// there is no such track.
     @discardableResult
     static func setTrack(columns: Bool, index: Int, size: HeraldSize, in t: inout HeraldTemplate) -> Bool {
         guard var g = t.grid, index >= 0, index < (columns ? g.cols : g.rows) else { return false }
         fixSizes(&g)
         var s = size
-        if case .points(let p) = s { s = .points(clampedPoints(p, columns: columns, index: index, in: g)) }
+        if case .points(let p) = s {
+            s = .points(clampedPoints(p, columns: columns, index: index, in: g))
+            if columns, case .points(let old) = g.colSizes[index], case .points(let new) = s,
+               let q = partner(ofColumn: index, in: g), case .points(let other) = g.colSizes[q] {
+                g.colSizes[q] = .points(max(other - (new - old), minColumnPoints))
+            }
+        }
         if columns { g.colSizes[index] = s } else { g.rowSizes[index] = s }
+        if columns { g = g.fittedColumns().grid }
         t.grid = g
         return true
+    }
+
+    /// What a ruler label above a column or beside a row says: fixed tracks their size, fill and auto columns the
+    /// width they came to, while a handle is dragged the size it would have.
+    static func rulerText(columns: Bool, size: HeraldSize, resolved: Double, dragging: Double? = nil) -> String {
+        if let d = dragging { return "\(columns ? "W" : "H") \(Int(d)) pt" }
+        let now = Int(resolved.rounded())
+        switch size {
+        case .points(let p): return "\(columns ? now : Int(p.rounded())) pt"
+        case .fill: return "fill \u{00B7} \(now)"
+        case .auto: return "auto \u{00B7} \(now)"
+        }
     }
 }
 

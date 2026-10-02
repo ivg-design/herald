@@ -241,7 +241,7 @@ public final class Router: @unchecked Sendable {
                         (issue.cellId.map { "cell \($0): " } ?? "") + issue.path + ": " + issue.message
                     }.joined(separator: "; "))
                 }
-                try await backend.putTemplate(t)
+                try await backend.putTemplate(t.fittingGrid())
                 return .json(200, ["ok": true])
             case ("DELETE", "/v1/templates"):
                 guard let app = req.query["app"], !app.isEmpty else { throw BackendError(400, "app is required") }

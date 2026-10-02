@@ -119,6 +119,12 @@ public enum GridSolver {
             for c in fillCols { colW[c] = share }
         }
 
+        // The slot is always fully allocated: with no fill column, the last live column takes what is left.
+        if fillCols.isEmpty, let last = liveCols.last {
+            let left = inner - colGaps - liveCols.reduce(0.0) { $0 + colW[$1] }
+            if left > 0.001 { colW[last] += left }
+        }
+
         let colOrigins = origins(count: cols, sizes: colW, collapsed: plan.collapsedCols, gap: gap, start: pad)
 
         // Each live cell's horizontal extent, then the height its content needs at that width.
