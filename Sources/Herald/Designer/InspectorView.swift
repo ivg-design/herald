@@ -6,8 +6,8 @@ import AppKit
 // place, grid and tracks) and Actions (ActionEditorView). Also the small form widgets they share.
 
 struct InspectorView: View {
-    static let width: CGFloat = 340
     @ObservedObject var model: DesignerModel
+    var width: CGFloat = 340
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,10 +17,10 @@ struct InspectorView: View {
             .pickerStyle(.segmented).labelsHidden().padding(10)
             Divider()
             ScrollView {
-                content.padding(12).frame(width: Self.width, alignment: .leading)
+                content.padding(12).frame(width: width, alignment: .leading)
             }
         }
-        .frame(width: Self.width)
+        .frame(width: width)
         .clipped()
     }
 

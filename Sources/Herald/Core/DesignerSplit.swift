@@ -2,18 +2,17 @@ import Foundation
 
 /// Where the Designer puts its live preview (issue: the preview was a strip that was easy to miss).
 ///
-/// The preview is a first-class pane that is never smaller than half the design area (`minPreviewFraction`): to the
-/// right of the editor when the window is wide enough for both, otherwise on top of it, so on a narrow window the
-/// preview takes at least half the height. The divider can be dragged within `[minPreviewFraction, maxPreviewFraction]`
+/// The preview is a first-class pane that starts at half of the centre column (`defaultPreviewFraction`) and can be
+/// dragged anywhere from a quarter (`minPreviewFraction`) to three quarters. The divider can be dragged within `[minPreviewFraction, maxPreviewFraction]`
 /// and its position is remembered. Pure, so `DesignerSplitTests` pin the numbers.
 public struct DesignerSplit: Equatable, Sendable {
     public enum Axis: String, Equatable, Sendable { case horizontal, vertical }
 
-    public static let minPreviewFraction = 0.5
+    public static let minPreviewFraction = 0.25
     public static let maxPreviewFraction = 0.75
     public static let defaultPreviewFraction = 0.5
     /// A side-by-side split needs the editor (palette, canvas, inspector) to stay usable at half the width.
-    public static let horizontalMinWidth = 1700.0
+    public static let horizontalMinWidth = Double.infinity
     /// The divider's thickness; it comes out of the editor's share, never the preview's.
     public static let dividerThickness = 8.0
     /// The editor never gets less than this along the split axis.
@@ -72,4 +71,66 @@ public struct DesignerSplit: Equatable, Sendable {
     public static func save(_ fraction: Double, to defaults: UserDefaults = .standard) {
         defaults.set(clamped(fraction), forKey: defaultsKey)
     }
+}
+
+/// Sidebar widths and zoom of the two surfaces (editor grid, live preview), remembered per window.
+public struct DesignerPanes: Equatable, Sendable {
+    public static let leftRange: ClosedRange<Double> = 180...360
+    public static let rightRange: ClosedRange<Double> = 280...480
+    public static let defaultLeft = 226.0
+    public static let defaultRight = 340.0
+    /// The centre column never gets narrower than this: the window's minimum width must cover both sidebars plus it.
+    public static let minCenter = 460.0
+
+    public enum Pane: String, Sendable { case editor, preview }
+
+    public var left = defaultLeft
+    public var right = defaultRight
+    public var editorZoom = 1.0
+    public var previewZoom = 1.0
+
+    public init() {}
+
+    public static func clampLeft(_ v: Double, window: Double = .infinity) -> Double {
+        min(max(v.isFinite ? v : defaultLeft, leftRange.lowerBound), min(leftRange.upperBound, max(window - minCenter - leftRange.lowerBound, leftRange.lowerBound)))
+    }
+    public static func clampRight(_ v: Double, window: Double = .infinity) -> Double {
+        min(max(v.isFinite ? v : defaultRight, rightRange.lowerBound), min(rightRange.upperBound, max(window - minCenter - leftRange.lowerBound, rightRange.lowerBound)))
+    }
+
+    public func zoom(_ pane: Pane) -> Double { pane == .editor ? editorZoom : previewZoom }
+    public mutating func setZoom(_ pane: Pane, _ z: Double) {
+        let c = DesignerZoom.clamped(z)
+        if pane == .editor { editorZoom = c } else { previewZoom = c }
+    }
+
+    private static func key(_ n: String) -> String { "designer.\(n)" }
+
+    public static func load(from d: UserDefaults = .standard) -> DesignerPanes {
+        var p = DesignerPanes()
+        func num(_ k: String) -> Double? { d.object(forKey: key(k)) == nil ? nil : d.double(forKey: key(k)) }
+        if let v = num("left") { p.left = clampLeft(v) }
+        if let v = num("right") { p.right = clampRight(v) }
+        if let v = num("editorZoom") { p.editorZoom = DesignerZoom.clamped(v) }
+        if let v = num("previewZoom") { p.previewZoom = DesignerZoom.clamped(v) }
+        return p
+    }
+
+    public func save(to d: UserDefaults = .standard) {
+        d.set(left, forKey: Self.key("left")); d.set(right, forKey: Self.key("right"))
+        d.set(editorZoom, forKey: Self.key("editorZoom")); d.set(previewZoom, forKey: Self.key("previewZoom"))
+    }
+}
+
+/// Zoom of a Designer surface: 50 % to 300 %, stepped by the keyboard and the popover's buttons.
+public enum DesignerZoom {
+    public static let range: ClosedRange<Double> = 0.5...3.0
+    public static let steps: [Double] = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2, 2.5, 3]
+
+    public static func clamped(_ z: Double) -> Double { z.isFinite ? min(max(z, range.lowerBound), range.upperBound) : 1 }
+    public static func zoomIn(_ z: Double) -> Double { steps.first { $0 > z + 0.001 } ?? range.upperBound }
+    public static func zoomOut(_ z: Double) -> Double { steps.last { $0 < z - 0.001 } ?? range.lowerBound }
+    /// A pinch: the zoom at the start of the gesture times the gesture's magnification.
+    public static func pinched(from start: Double, magnification m: Double) -> Double { clamped(start * (m.isFinite && m > 0 ? m : 1)) }
+    public static func label(_ z: Double) -> String { "\(Int((clamped(z) * 100).rounded()))%" }
 }

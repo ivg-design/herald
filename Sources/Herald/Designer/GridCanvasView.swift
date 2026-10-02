@@ -80,6 +80,7 @@ struct GridCanvasView: View {
     @ObservedObject var model: DesignerModel
     let appName: String
     let icon: NSImage
+    var zoom: Double = 1
     @Environment(\.colorScheme) private var scheme
     @State private var origins: [GridSlot: CGPoint] = [:]
     @State private var extent: CGRect = .zero
@@ -91,11 +92,13 @@ struct GridCanvasView: View {
         let state = GridRenderState(model: banner, scheme: scheme)
         GeometryReader { geo in
             ScrollView([.horizontal, .vertical]) {
-                VStack(spacing: 10) {
-                    card(state)
-                    Text("\(model.grid.cols) \u{00D7} \(model.grid.rows) grid \u{00B7} \(Int(GridSolver.clampedWidth(model.grid.width))) pt wide")
-                        .font(.caption2).foregroundStyle(.white.opacity(0.85))
-                        .shadow(color: .black.opacity(0.35), radius: 2)
+                ZoomBox(zoom: zoom) {
+                    VStack(spacing: 10) {
+                        card(state)
+                        Text("\(model.grid.cols) \u{00D7} \(model.grid.rows) grid \u{00B7} \(Int(GridSolver.clampedWidth(model.grid.width))) pt wide")
+                            .font(.caption2).foregroundStyle(.white.opacity(0.85))
+                            .shadow(color: .black.opacity(0.35), radius: 2)
+                    }
                 }
                 .padding(.horizontal, 72).padding(.top, 40).padding(.bottom, 32)
                 .frame(minWidth: geo.size.width, minHeight: geo.size.height)

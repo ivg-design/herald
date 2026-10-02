@@ -263,53 +263,78 @@ struct DesignerView: View {
     }
 
     @State private var previewFraction = DesignerSplit.load()
+    @State private var panes = DesignerPanes.load()
+    /// The surface the pointer is over: the one the zoom shortcuts act on.
+    @State private var hoveredPane: DesignerPanes.Pane = .editor
 
-    /// The editor (palette, canvas, inspector) and the live preview as two panes of one split. The preview is never
-    /// below half of the design area: beside the editor in a wide window, on top of it otherwise (`DesignerSplit`).
+    /// Left sidebar | centre column (live preview over the editor grid, one centre line) | inspector. Both sidebars
+    /// run the full height; both dividers and the sidebar widths are draggable and remembered.
     private var designContent: some View {
         GeometryReader { geo in
-            let split = DesignerSplit.make(width: geo.size.width, fraction: previewFraction)
-            let total = split.axis == .horizontal ? geo.size.width : geo.size.height
-            let previewLen = split.previewLength(total: total)
-            let editorLen = split.editorLength(total: total)
-            if split.axis == .horizontal {
-                HStack(spacing: 0) {
-                    editor.frame(width: editorLen)
-                    SplitHandle(axis: .horizontal) { drag in dragDivider(drag, editor: editorLen, total: total) }
-                    DesignerPreviewPane(model: model, appName: model.issuerName, icon: iconFor(model.app), scheme: scheme)
-                        .frame(width: previewLen)
-                }
-            } else {
-                VStack(spacing: 0) {
-                    DesignerPreviewPane(model: model, appName: model.issuerName, icon: iconFor(model.app), scheme: scheme)
-                        .frame(height: previewLen)
-                    SplitHandle(axis: .vertical) { drag in dragDivider(-drag, editor: editorLen, total: total) }
-                    editor.frame(height: editorLen)
-                }
+            let left = DesignerPanes.clampLeft(panes.left, window: geo.size.width)
+            let right = DesignerPanes.clampRight(panes.right, window: geo.size.width)
+            HStack(spacing: 0) {
+                PaletteView(model: model).frame(width: left)
+                SplitHandle(axis: .horizontal) { d in panes.left = DesignerPanes.clampLeft(left + Double(d), window: geo.size.width); panes.save() }
+                centerColumn(height: geo.size.height)
+                SplitHandle(axis: .horizontal) { d in panes.right = DesignerPanes.clampRight(right - Double(d), window: geo.size.width); panes.save() }
+                InspectorView(model: model, width: CGFloat(right))
             }
+            .background(zoomShortcuts)
         }
+    }
+
+    private func centerColumn(height: Double) -> some View {
+        let split = DesignerSplit.make(width: 0, fraction: previewFraction)
+        let previewLen = split.previewLength(total: height)
+        let editorLen = split.editorLength(total: height)
+        return VStack(spacing: 0) {
+            DesignerPreviewPane(model: model, appName: model.issuerName, icon: iconFor(model.app), scheme: scheme,
+                                zoom: Binding(get: { panes.previewZoom }, set: { setZoom(.preview, $0) }))
+                .frame(height: previewLen)
+                .onHover { if $0 { hoveredPane = .preview } }
+            SplitHandle(axis: .vertical) { drag in dragDivider(-drag, editor: editorLen, total: height) }
+            VStack(spacing: 0) {
+                DesignerTopBar(model: model, zoom: Binding(get: { panes.editorZoom }, set: { setZoom(.editor, $0) }))
+                Divider()
+                GridCanvasView(model: model, appName: model.issuerName, icon: iconFor(model.app), zoom: panes.editorZoom)
+                    .environment(\.colorScheme, scheme)
+                    .frame(minHeight: 120)
+                    .gesture(pinch(.editor))
+            }
+            .frame(height: editorLen)
+            .onHover { if $0 { hoveredPane = .editor } }
+        }
+        .frame(minWidth: CGFloat(DesignerPanes.minCenter))
+    }
+
+    private func setZoom(_ pane: DesignerPanes.Pane, _ z: Double) { panes.setZoom(pane, z); panes.save() }
+
+    @State private var pinchStart: [DesignerPanes.Pane: Double] = [:]
+    func pinch(_ pane: DesignerPanes.Pane) -> some Gesture {
+        MagnificationGesture()
+            .onChanged { m in
+                let start = pinchStart[pane] ?? panes.zoom(pane)
+                pinchStart[pane] = start
+                setZoom(pane, DesignerZoom.pinched(from: start, magnification: Double(m)))
+            }
+            .onEnded { _ in pinchStart[pane] = nil }
+    }
+
+    /// Command-plus, -minus and -zero zoom the surface under the pointer.
+    private var zoomShortcuts: some View {
+        ZStack {
+            Button("") { setZoom(hoveredPane, DesignerZoom.zoomIn(panes.zoom(hoveredPane))) }.keyboardShortcut("=", modifiers: .command)
+            Button("") { setZoom(hoveredPane, DesignerZoom.zoomIn(panes.zoom(hoveredPane))) }.keyboardShortcut("+", modifiers: .command)
+            Button("") { setZoom(hoveredPane, DesignerZoom.zoomOut(panes.zoom(hoveredPane))) }.keyboardShortcut("-", modifiers: .command)
+            Button("") { setZoom(hoveredPane, 1) }.keyboardShortcut("0", modifiers: .command)
+        }
+        .opacity(0).frame(width: 0, height: 0).allowsHitTesting(false)
     }
 
     private func dragDivider(_ delta: CGFloat, editor: Double, total: Double) {
         previewFraction = DesignerSplit.fraction(forEditorLength: editor + Double(delta), total: total)
         DesignerSplit.save(previewFraction)
-    }
-
-    private var editor: some View {
-        HStack(spacing: 0) {
-            PaletteView(model: model).frame(width: 226)
-            Divider()
-            VStack(spacing: 0) {
-                DesignerTopBar(model: model)
-                Divider()
-                GridCanvasView(model: model, appName: model.issuerName, icon: iconFor(model.app))
-                    .environment(\.colorScheme, scheme)
-                    .frame(minHeight: 120)
-            }
-            .frame(minWidth: 460)
-            Divider()
-            InspectorView(model: model)
-        }
     }
 }
 
@@ -422,6 +447,7 @@ enum DesignerBundleActions {
 
 private struct DesignerTopBar: View {
     @ObservedObject var model: DesignerModel
+    @Binding var zoom: Double
 
     var body: some View {
         HStack(spacing: 8) {
@@ -450,6 +476,8 @@ private struct DesignerTopBar: View {
                     .help("Remove the selected component (Delete)")
             }
             .controlSize(.small)
+            Divider().frame(height: 16)
+            ZoomControl(zoom: $zoom)
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
     }
@@ -465,20 +493,26 @@ struct DesignerPreviewPane: View {
     let appName: String
     let icon: NSImage
     let scheme: ColorScheme
+    @Binding var zoom: Double
+    @State private var pinchStart: Double?
 
     var body: some View {
         VStack(spacing: 0) {
-            DesignerPreviewBar(model: model)
+            DesignerPreviewBar(model: model, zoom: $zoom)
             Divider()
             ZStack {
                 DesignerBackdrop()
                 let banner = DesignerPreview.bannerModel(model, appName: appName, icon: icon, live: true)
-                ScrollView([.vertical, .horizontal]) {
-                    BannerView(model: banner)
-                        .padding(28)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                GeometryReader { geo in
+                    ScrollView([.vertical, .horizontal]) {
+                        ZoomBox(zoom: zoom) { BannerView(model: banner).padding(20) }
+                            .frame(minWidth: geo.size.width, minHeight: geo.size.height)
+                    }
                 }
                 .environment(\.colorScheme, scheme)
+                .gesture(MagnificationGesture()
+                    .onChanged { m in let s0 = pinchStart ?? zoom; pinchStart = s0; zoom = DesignerZoom.pinched(from: s0, magnification: Double(m)) }
+                    .onEnded { _ in pinchStart = nil })
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
@@ -490,6 +524,7 @@ struct DesignerPreviewPane: View {
 
 private struct DesignerPreviewBar: View {
     @ObservedObject var model: DesignerModel
+    @Binding var zoom: Double
     @State private var showFields = false
     @State private var showIssues = false
 
@@ -512,6 +547,7 @@ private struct DesignerPreviewBar: View {
                     Image(systemName: "moon").tag(DesignerAppearance.dark)
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 70).help("Preview in light or dark appearance")
+                ZoomControl(zoom: $zoom)
                 Button { showFields.toggle() } label: {
                     Label(model.absentTokens.isEmpty ? "Fields" : "\(model.absentTokens.count) absent", systemImage: "eye")
                 }
@@ -593,5 +629,59 @@ private struct IssuesPopover: View {
             .padding(14)
         }
         .frame(width: 340, height: min(CGFloat(model.issues.count) * 44 + 28, 320))
+    }
+}
+
+
+// MARK: - Zoom
+
+struct ZoomSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
+}
+
+/// Scales its content around its centre and reports the scaled size to the layout, so a ScrollView around it scrolls
+/// over the zoomed area. Used by the editor grid and by the live preview.
+struct ZoomBox<Content: View>: View {
+    let zoom: Double
+    @ViewBuilder var content: () -> Content
+    @State private var size: CGSize = .zero
+
+    var body: some View {
+        content()
+            .fixedSize()
+            .background(GeometryReader { Color.clear.preference(key: ZoomSizeKey.self, value: $0.size) })
+            .onPreferenceChange(ZoomSizeKey.self) { size = $0 }
+            .scaleEffect(CGFloat(zoom), anchor: .center)
+            .frame(width: size.width > 0 ? size.width * CGFloat(zoom) : nil, height: size.height > 0 ? size.height * CGFloat(zoom) : nil)
+    }
+}
+
+/// The zoom button of a pane's toolbar: the current level, and a popover with a 50-300 % slider, steps and reset.
+struct ZoomControl: View {
+    @Binding var zoom: Double
+    @State private var open = false
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            Label(DesignerZoom.label(zoom), systemImage: "plus.magnifyingglass").monospacedDigit()
+        }
+        .controlSize(.small).fixedSize()
+        .help("Zoom (\u{2318}+  \u{2318}\u{2212}  \u{2318}0, or pinch)")
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(spacing: 8) {
+                HStack {
+                    Button { zoom = DesignerZoom.zoomOut(zoom) } label: { Image(systemName: "minus") }
+                    Slider(value: Binding(get: { zoom }, set: { zoom = DesignerZoom.clamped($0) }), in: DesignerZoom.range).frame(width: 150)
+                    Button { zoom = DesignerZoom.zoomIn(zoom) } label: { Image(systemName: "plus") }
+                }
+                HStack {
+                    Text(DesignerZoom.label(zoom)).font(.caption.monospacedDigit())
+                    Spacer()
+                    Button("Reset to 100%") { zoom = 1 }.controlSize(.small)
+                }
+            }
+            .padding(12).frame(width: 240)
+        }
     }
 }
