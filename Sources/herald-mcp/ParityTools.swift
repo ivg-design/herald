@@ -310,8 +310,8 @@ enum ParityTools {
 
         ParityTool(definition: MCPToolDefinition(
             name: "relay_instructions", title: "Instructions for connecting an agent",
-            description: "The exact text to give an agent: chatgpt (ChatGPT and OpenAI cloud agents: add the URL as a connector, choose OAuth, approve on the Mac) or claude / codex (a static key: create one with create_agent_key and paste the connector block).",
-            inputSchema: Schema.input(["client": Schema.string("chatgpt, claude or codex.")], required: ["client"]),
+            description: "The exact text to give an agent: chatgpt (ChatGPT and OpenAI cloud agents: add the URL as a connector, choose OAuth, approve on the Mac) or claude / codex (a static key: create one with create_agent_key and paste the connector block), or device (an agent with no usable browser: the OAuth device flow, register then device_authorization then tell the user the code then poll token).",
+            inputSchema: Schema.input(["client": Schema.string("chatgpt, claude, codex or device.")], required: ["client"]),
             readOnly: true, idempotent: true),
             route: { a in RouteCall(method: "GET", path: "/v1/relay/instructions", query: query(a, ["client"])) }),
 

@@ -424,14 +424,16 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `GET /v1/relay/zones` | `{zones: [{id, name, status, suggestedHostname}]}`: the Cloudflare zones the stored token can see. 403 with "Token is missing Zone permissions ..." when it lacks Zone: Read. |
 | `POST /v1/relay/delete` | `{confirm: true}` deletes the Worker, every mailbox and key, and the bucket when empty, from Cloudflare. |
 | `POST /v1/relay/test` | `/health`, then a notification through the relay with a temporary key and its receipt: `{healthy, paired, online, roundTrip, receipt, detail}`. |
-| `GET /v1/relay/instructions?client=chatgpt\|claude\|codex` | `{client, text}`: the exact instructions to give that agent. |
+| `GET /v1/relay/instructions?client=chatgpt\|claude\|codex\|device` | `{client, text}`: the exact instructions to give that agent. |
 
 Keys carry `kind` (`static`, or `oauth` for a connector approved through the relay's OAuth flow, with `displayName`).
 
 Errors: 409 when not paired, 429 when the relay reports a limit, 502 when the relay cannot be reached.
 
-The relay's own OAuth 2.1 endpoints (discovery, `/register`, `/authorize`, `/token`, `/revoke`) are documented in
-[../CLOUD.md](../CLOUD.md#connect-chatgpt-oauth); a connector's access token works wherever an `hrk_` key does on `/mcp`, `/v1/notify`,
+The relay's own OAuth 2.1 endpoints (discovery, `/register`, `/authorize`, `/device_authorization`, `/activate`, `/token`, `/revoke`) are
+documented in [../CLOUD.md](../CLOUD.md#connect-chatgpt-oauth); agents with no browser use the device flow
+([../CLOUD.md](../CLOUD.md#no-browser-use-the-device-flow)). A pending request has `flow: "device"` and a `userCode` (`BDFG-HJKM`) in
+`GET /v1/relay/connectors`; the notifications accept presentation fields ([../CLOUD.md](../CLOUD.md#presentation-fields)); a connector's access token works wherever an `hrk_` key does on `/mcp`, `/v1/notify`,
 `/v1/status`, `/v1/receipts/*` and `/v1/replies/*`, and nowhere else.
 
 **Cloudflare API calls Herald makes** (only on Deploy / Delete / settings changes; token in `Authorization: Bearer`, host `api.cloudflare.com/client/v4`):

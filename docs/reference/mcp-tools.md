@@ -359,7 +359,7 @@ argument is a tool error before any request is made. Destructive tools carry `de
 |---|---|
 | `relay_status` | Paired or not, online or not, the relay and connector URLs, the agent keys (never a secret) and the last 20 relay items with their receipt states. |
 | `relay_usage` | Today's relay traffic against the Cloudflare free plan. |
-| `list_connectors` | Connectors that signed in to the relay with OAuth (ChatGPT and clients without custom-key support) and the requests waiting for approval. Approval happens only on the Mac. Revoke a connector with `revoke_agent_key`. |
+| `list_connectors` | Connectors that signed in to the relay with OAuth (ChatGPT, clients without custom-key support, and agents with no browser through the device flow, whose pending requests carry the `userCode` the agent printed) and the requests waiting for approval. Approval happens only on the Mac. Revoke a connector with `revoke_agent_key`. |
 | `create_agent_key` | `{name, client?}`: mints a notify-only key. The reply holds the key once and a connector block (URL and Bearer) for Claude, Codex and any remote MCP client. |
 | `revoke_agent_key` | `{id}`: revokes a key or a connector. |
 | `relay_token_url` | The pre-filled Cloudflare token page, the sign-up link and the nine permissions to give the token (Zone ones are for the custom domain). The user creates the token. |

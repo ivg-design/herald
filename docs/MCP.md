@@ -127,8 +127,17 @@ image, by path or base64) and `delete_asset`, `list_symbols` (SF Symbol names an
 `list_approvals` and `revoke_approval`, and `designer_snapshot` (the Designer drawn offscreen). Each is a thin wrapper
 over one HTTP route; arguments and routes are in [reference/mcp-tools.md](reference/mcp-tools.md#parity-tools).
 The whole cloud relay setup (Settings > Cloud > Enable relay) is reachable too: `relay_token_url`, `relay_set_cloudflare_token`, `relay_deploy`,
-`relay_pair`, `relay_unpair`, `relay_settings`, `relay_zones`, `relay_delete`, `relay_instructions` and `relay_test`, with `relay_status`, `list_connectors`,
+`relay_pair`, `relay_unpair`, `relay_settings`, `relay_zones`, `relay_delete`, `relay_instructions` (`chatgpt`, `claude`, `codex`, or `device` for an agent with no browser: the OAuth device flow) and `relay_test`, with `relay_status`, `list_connectors`,
 `create_agent_key` and `revoke_agent_key`; the scripted walkthrough is in [AGENT-QUICKSTART.md](AGENT-QUICKSTART.md#set-up-the-cloud-relay-scripted-walkthrough).
+**No browser? Use the device flow.** A cloud agent that cannot open the relay's consent page (its browser says `net::ERR_BLOCKED_BY_CLIENT`)
+signs in without one: `POST /register` (grant `urn:ietf:params:oauth:grant-type:device_code`), `POST /device_authorization`, **tell the user the
+`user_code`** (like `BDFG-HJKM`; Herald shows it on a banner with Approve / Deny and in Settings > Cloud > Connector approvals), then poll
+`POST /token` every `interval` seconds until it returns the tokens. The exact sequence and error codes are in
+[CLOUD.md](CLOUD.md#no-browser-use-the-device-flow); `relay_instructions {client: "device"}` returns it as text.
+
+The relay's own `send_notification` (what a cloud agent calls) accepts presentation fields as well as text: `persistent`, `timeoutSeconds`,
+`sound`, `speak`, `voice`, `speed`, `presentation`, `priority`, `group`, `icon`, `subtitle`, `imageURL`, `tags`. The banner stays until
+dismissed by default and `expectReply` only adds Reply and Record ([CLOUD.md](CLOUD.md#presentation-fields)).
 Grid, cell, component and action-rule edits are `put_template` (the template is one document), checked by the same
 validation the Designer uses. **Not exposed on purpose:** granting an app permission to run commands or call a remote
 host, and approving a template's commands: the agent is the program that approval guards against, so only the user

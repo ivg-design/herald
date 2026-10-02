@@ -181,7 +181,7 @@ revoke itself (`POST /revoke`, RFC 7009).
 
 ### What a connector can and cannot do
 
-- **Can**: send notifications (text only), read receipts for what it sent, wait for your reply, ask whether the Mac is online. Exactly
+- **Can**: send notifications (text and presentation fields), read receipts for what it sent, wait for your reply, ask whether the Mac is online. Exactly
   the four tools above, within the same limits as a static key (60 notifications per 10 minutes, 2,000 a day, 32 KB).
 - **Cannot**: run commands, scripts or Shortcuts, set callbacks, add buttons, show images or play audio, read your history, see other
   keys' notifications, change settings or quiet hours, create or revoke keys, approve anything for itself. `/v1/device/*` answers an OAuth
@@ -201,17 +201,58 @@ revoke itself (`POST /revoke`, RFC 7009).
 | Endpoint | Purpose |
 |---|---|
 | `GET /.well-known/oauth-protected-resource` (also `.../mcp`) | RFC 9728: `resource` = the `/mcp` URL, `authorization_servers` = the relay, `scopes_supported` = `["notify"]`. |
-| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata (also served as `openid-configuration`): endpoints, `S256` only, grants `authorization_code` and `refresh_token`. |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata (also served as `openid-configuration`): endpoints (including `device_authorization_endpoint`), `S256` only, grants `authorization_code`, `refresh_token` and `urn:ietf:params:oauth:grant-type:device_code`. |
 | `POST /mcp` without credentials | `401` with `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource"`. |
-| `POST /register` | RFC 7591. `redirect_uris` (https, loopback http or a private-use scheme; no fragments), `client_name`. Public by default (`token_endpoint_auth_method: none`); `client_secret_post` / `client_secret_basic` return a secret. 30 registrations an hour. |
+| `POST /register` | RFC 7591. `redirect_uris` (not needed when `grant_types` is only the device grant; https, loopback http or a private-use scheme; no fragments), `client_name`. Public by default (`token_endpoint_auth_method: none`); `client_secret_post` / `client_secret_basic` return a secret. 30 registrations an hour. |
 | `GET /authorize` | `response_type=code`, `client_id`, exact `redirect_uri`, `state`, `code_challenge` + `code_challenge_method=S256` (required), optional `resource` (must be the `/mcp` URL) and `scope` (`notify`). Serves the consent page. Unknown client or redirect: an error page, never a redirect. |
 | `GET /authorize/status?rid=` | Polled by the consent page; returns the redirect once decided. |
 | `POST /authorize/code`, `POST /authorize/deny` | The page's 6-digit-code form and Deny button. |
-| `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`) and `refresh_token`. Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
+| `POST /device_authorization` | RFC 8628: `client_id`, optional `scope` (`notify`) and `device`. Returns `device_code`, `user_code` (`BDFG-HJKM`), `verification_uri` (`/activate`), `verification_uri_complete`, `expires_in: 600`, `interval: 5`. See [No browser?](#no-browser-use-the-device-flow). |
+| `GET /activate`, `POST /activate`, `/activate/approve`, `/activate/deny` | The optional page for a person: user code, then the Mac's 6-digit approval code. |
+| `GET /` | A small plain page: what this is, links to the `.well-known` documents and `/activate`. (`/health` is the JSON check.) |
+| `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`), `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code` (+ `device_code`). Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
 | `POST /revoke` | RFC 7009. |
 | `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
 
 With several Macs paired to one relay the consent page first asks which Mac the connector should notify.
+
+## No browser? Use the device flow
+
+Some cloud agents (OpenAI's sandbox, CI jobs, anything headless) cannot open the browser consent page; their browser reports
+`net::ERR_BLOCKED_BY_CLIENT` and no consent screen ever opens. For them the relay speaks the OAuth 2.0 Device Authorization Grant
+(RFC 8628). The approval is still yours, on the Mac; the agent only prints a code.
+
+The exact sequence for the agent (replace `$RELAY` with the relay's origin, `https://herald-relay.<your-subdomain>.workers.dev`; send a
+custom `User-Agent`, see Troubleshooting):
+
+```sh
+# 1. Register once (no redirect_uris needed for a device-only client). Keep client_id.
+curl -s $RELAY/register -H 'content-type: application/json' \
+  -d '{"client_name":"My cloud agent","grant_types":["urn:ietf:params:oauth:grant-type:device_code"]}'
+# 2. Ask for a device code.
+curl -s $RELAY/device_authorization -d client_id=hc_... -d scope=notify
+#    -> {"device_code":"hrv_...","user_code":"BDFG-HJKM","verification_uri":"$RELAY/activate",
+#        "verification_uri_complete":"$RELAY/activate?user_code=BDFG-HJKM","expires_in":600,"interval":5}
+# 3. TELL THE USER: "Approve my Herald request. The code is BDFG-HJKM." (Herald shows a banner and lists it in
+#    Settings > Cloud > Connector approvals; they press Approve if the code matches.)
+# 4. Poll every `interval` seconds until it stops answering authorization_pending.
+curl -s $RELAY/token -d grant_type=urn:ietf:params:oauth:grant-type:device_code -d client_id=hc_... -d device_code=hrv_...
+#    -> {"access_token":"hra_...","refresh_token":"hrr_...","expires_in":3600,"scope":"notify","token_type":"Bearer"}
+# 5. Use it: POST $RELAY/mcp with  Authorization: Bearer hra_...   (refresh with grant_type=refresh_token before it expires)
+```
+
+What `/token` answers while you wait (RFC 8628 section 3.5, HTTP 400 with `{"error": ...}`): `authorization_pending` (keep polling),
+`slow_down` (you polled faster than `interval`; the interval grows by 5 seconds, add it to yours), `access_denied` (the user pressed Deny:
+stop), `expired_token` (10 minutes passed: start again at step 2). On approval you get the same tokens as the browser flow and the same
+**oauth** agent key named after `client_name`, notify-only, revocable in Settings > Cloud.
+
+On the Mac the request arrives the moment step 2 returns: the banner says **"Approve <client> to send you notifications? Code BDFG-HJKM"**
+with Approve and Deny, and Settings > Cloud > Connector approvals lists it with the code in large type (match it with what the agent
+printed) and, small, the 6-digit approval code for the web page. A request nobody answers expires after 10 minutes; at most 3 wait at
+once and 12 an hour. With several Macs paired, `device=<n>` (1-based) on step 2 picks the Mac; the first is the default.
+
+`/activate` is an optional page for a person with a browser: enter the agent's code, then the 6-digit approval code Herald shows (the
+user code alone is not enough, because the agent knows it), then Approve or Deny. The root `/` is a small information page, not a 404.
 
 ## What the agent can do
 
@@ -219,13 +260,44 @@ Remote MCP at `/mcp` (Streamable HTTP, protocol 2025-06-18, one JSON response pe
 
 | Tool | Does |
 |---|---|
-| `send_notification` | `title` (required), `body`, `subtitle`, `status`, `project`, `session`, `task`, `tool`, `duration`, `link` (https), `group`, `priority` (`normal`/`urgent`), `speak` (`true` or `{text, voice, speed, lang}`), `notificationId`, `expectReply`, `allowVoiceReply`. |
+| `send_notification` | `title` (required), `body`, `subtitle`, `status`, `project`, `session`, `task`, `tool`, `duration`, `link` (https), `group`, `priority` (`low`/`normal`/`high`/`urgent`), the presentation fields below, `notificationId`, `expectReply`, `allowVoiceReply`. |
 | `get_receipt` | `{received, displayed, spoken, replied, reply?, suppressed, reason?}` with timestamps. |
 | `wait_for_reply` | Long-poll up to 55 s for the user's answer: `{replied, text?, transcript?, audioUrl?, durationSeconds?, repliedAt}` or `{replied:false, timedOut:true}`. |
 | `herald_status` | `{online, lastSeenAt, quietHours:{active, until?}}`. Nothing else about the Mac. |
 
 Plain HTTPS with the same Bearer key: `POST /v1/notify`, `GET /v1/receipts/{notificationId}`, `GET /v1/replies/{notificationId}?wait=sec`
 (long-poll, at most 60 s), `GET /v1/status`.
+
+### Presentation fields
+
+Besides the text, a cloud notification may set how it looks and sounds. All optional, none of them can run or open anything:
+
+| Field | Effect |
+|---|---|
+| `persistent` | Default **true**: the banner stays until you dismiss it. `false` gives Herald's own timeout. |
+| `timeoutSeconds` | 1 to 3600: the banner dismisses itself after that long (hover pauses). Ignored when `persistent` is true. |
+| `sound` | A system sound name (`Glass`), `default` (the sender's own) or `none`. Never a path. |
+| `speak` | `true` (title, then body), a string (that text) or `{text, voice, speed, lang}`. |
+| `voice`, `speed` | Voice name (`af_heart`) and 0.5 to 2, beside `speak`; either alone turns speaking on. |
+| `presentation` | `banner` (default), `voice` (speech only, no banner; implies `speak`) or `both` (implies `speak`). |
+| `priority` | `low`, `normal`, `high`, `urgent` (urgent breaks quiet hours only if you allowed it). |
+| `group` | Notifications with the same group stack into one banner. |
+| `subtitle` | A second line. |
+| `icon` | The sender's icon for this key: an https image URL or a `data:image/png|jpeg|gif|webp;base64,...` image up to 256 KB. Your own icon (Settings) wins. |
+| `imageURL` | An https preview image. |
+| `tags` | Up to 10 short labels, stored with the notification for templates and search. |
+
+`expectReply: true` **only adds the Reply and Record buttons** (the banner is already persistent by default). It does not change the title,
+the status badge, the template or the presentation; use `status` yourself if you want a badge.
+
+A spoken banner that stays until dismissed:
+
+```json
+{"title":"Build finished","body":"All 214 tests passed.","speak":true,"persistent":true}
+```
+
+Quiet hours and mute still apply on the Mac: speech held back by quiet hours leaves the banner showing (and the receipt says `suppressed`
+with `reason`, scope `speech`).
 
 ### Receipts
 
@@ -254,8 +326,8 @@ Mute and quiet hours are enforced **on the Mac**, in Herald, with the user's rea
 
 ## Replying to the agent
 
-Every cloud banner has **Reply** (text) and **Record** (voice); `allowVoiceReply: false` hides Record, `expectReply: true` keeps the banner
-up until answered and marks it as a question.
+Every cloud banner has **Reply** (text) and **Record** (voice); `allowVoiceReply: false` hides Record, `expectReply: true` only
+adds those two buttons (banners stay until dismissed anyway; the notification is not turned into a question).
 
 - **Reply**: the inline field; the text goes to the relay, `wait_for_reply` / `GET /v1/replies/{id}` return it and the receipt flips to
   `replied`. History keeps it.
@@ -280,9 +352,10 @@ up until answered and marks it as a question.
   revokes them. A connector is approved on the Mac, never by the web page alone.
 - **No admin surface for agent keys.** `/v1/device/*` (keys, receipts, usage, unpair, the stream) rejects agent keys with 403 and the
   device token is rejected on agent endpoints. There is no endpoint to change permissions, settings, quiet hours or anything on the Mac.
-- **Text only, twice.** The relay accepts a whitelist of fields; Herald rebuilds the notification from a whitelist again (`RelayPolicy`), so
-  even a hostile relay cannot make Herald run a command, open a callback, play a file or fetch an image. Links must be https and open only
-  when you press Open link.
+- **Text and presentation only, twice.** The relay accepts a whitelist of fields; Herald rebuilds the notification from a whitelist again
+  (`RelayPolicy`), so even a hostile relay cannot make Herald run a command, open a callback or play a file. `sound` is a name, never a
+  path. The only things Herald fetches are the https `icon` and `imageURL` the sender names, decoded as images and size-capped. Links
+  must be https and open only when you press Open link.
 - **Pairing**: one-time codes (10 minutes, single use, rate limited), at most `MAX_DEVICES` Macs (5). The first pairing is
   trust-on-first-use: pair soon after deploying, or set `wrangler secret put PAIRING_SECRET` and the relay then demands it
   (`X-Pairing-Secret`) on `POST /v1/pair/start`.

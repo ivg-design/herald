@@ -36,7 +36,7 @@ Herald().notify(app="bidbot", title="Bid accepted", body="…", url="https://…
 
 ## 4. Cloud agents (not on this Mac)
 
-An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at the relay's `/mcp` URL (`relay_status` > `mcpURL`) with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications, read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
+An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at the relay's `/mcp` URL (`relay_status` > `mcpURL`) with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications (with presentation fields: `persistent`, `timeoutSeconds`, `sound`, `speak`, `presentation`, ... default: the banner stays until dismissed; `expectReply` only adds Reply and Record), read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
 
 ### Set up the cloud relay (scripted walkthrough)
 
@@ -61,7 +61,9 @@ create a token, and approve a connector on the Mac.
 6b. `relay_test`: `roundTrip: true` means a notification went through the relay and reached this Mac.
 7. Connect the agent: `relay_instructions {client: "chatgpt"}` (OAuth: the user adds the URL as a connector in ChatGPT and approves on the Mac;
    `list_connectors` shows pending requests and who is connected) or `relay_instructions {client: "claude"|"codex"}` plus
-   `create_agent_key {name, client}` (the key is shown once; hand over the connector block).
+   `create_agent_key {name, client}` (the key is shown once; hand over the connector block). **No browser** in the agent (its consent page is
+   blocked, `net::ERR_BLOCKED_BY_CLIENT`)? `relay_instructions {client: "device"}`: register, `POST /device_authorization`, tell the user the
+   `user_code`, poll `POST /token`; the user presses Approve on the banner (the pending request and its code are in `list_connectors`).
 8. Turn off with `relay_unpair` (revokes everything); remove with `relay_delete {confirm: true}` after asking the user.
 
 ## Conventions

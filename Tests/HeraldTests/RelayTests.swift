@@ -942,3 +942,15 @@ final class RelayConsentTests: XCTestCase {
         XCTAssertFalse(String(decoding: withPending, as: UTF8.self).lowercased().contains("code"), "the 6-digit code stays on the Mac's screen")
     }
 }
+
+final class DeviceFlowInstructionsTests: XCTestCase {
+    func testTheDeviceFlowTextHasTheExactSequence() {
+        let t = RelayInstructions.deviceFlow(origin: "https://r.example.com/")
+        for needle in ["POST https://r.example.com/register", "POST https://r.example.com/device_authorization", "TELL THE USER", "user_code",
+                       "urn:ietf:params:oauth:grant-type:device_code", "authorization_pending", "slow_down", "access_denied", "expired_token", "https://r.example.com/mcp"] {
+            XCTAssertTrue(t.contains(needle), needle)
+        }
+        XCTAssertFalse(t.contains("//register"))
+        XCTAssertTrue(RelayInstructions.oauth(mcpURL: "https://r.example.com/mcp").contains("device flow"))
+    }
+}

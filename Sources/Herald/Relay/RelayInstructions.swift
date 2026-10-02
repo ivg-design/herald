@@ -12,6 +12,28 @@ public enum RelayInstructions {
         """
     }
 
+    /// An agent with no usable browser (a sandbox whose browser reports net::ERR_BLOCKED_BY_CLIENT): the OAuth device flow.
+    public static func deviceFlow(origin: String) -> String {
+        let o = origin.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        return """
+        No browser? Use the device flow (RFC 8628). The approval is still the user's, on their Mac; you only print a code.
+        Send a custom User-Agent (for example Herald-Agent/1.0) on every call.
+
+        1. Register once (no redirect URL needed). Keep client_id:
+           POST \(o)/register  {"client_name":"My agent","grant_types":["urn:ietf:params:oauth:grant-type:device_code"]}
+        2. Ask for a code:
+           POST \(o)/device_authorization  client_id=<client_id>&scope=notify   (form-encoded)
+           It returns device_code, user_code (like BDFG-HJKM), verification_uri, expires_in 600 and interval 5.
+        3. TELL THE USER the user_code: "Approve my Herald request in the banner on your Mac. The code is BDFG-HJKM."
+           Herald shows "Approve <you> to send you notifications? Code BDFG-HJKM" and lists it in Settings > Cloud > Connector approvals.
+        4. Poll every `interval` seconds:
+           POST \(o)/token  grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=<client_id>&device_code=<device_code>
+           authorization_pending: keep polling. slow_down: add 5 seconds to your interval. access_denied: the user said no, stop.
+           expired_token: 10 minutes passed, start again at step 2. Success returns access_token (1 hour) and refresh_token.
+        5. Call \(o)/mcp with  Authorization: Bearer <access_token>  (refresh with grant_type=refresh_token before it expires).
+        """
+    }
+
     /// ChatGPT and other cloud agents that sign in with OAuth: nothing is copied but the URL; the approval happens in Herald.
     public static func oauth(mcpURL: String) -> String {
         """
@@ -25,6 +47,9 @@ public enum RelayInstructions {
         4. Ask the agent to use Herald, for example: "Send me a Herald notification when you are done."
 
         The connector can send notifications and read their receipts, nothing else. Revoke it any time in Settings > Cloud.
+
+        No browser to sign in with (the agent cannot open the consent page)? Use the device flow: ask for client "device" in relay_instructions,
+        or see docs/CLOUD.md, "No browser? Use the device flow".
 
         If the agent calls the relay with its own HTTP code (not as a connector):
         \(userAgentNote(withKey: false))

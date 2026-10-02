@@ -272,7 +272,8 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
         switch kind.lowercased() {
         case "chatgpt", "openai": return RelayInstructions.oauth(mcpURL: url)
         case "claude", "codex", "claude-code": return RelayInstructions.staticKey(mcpURL: url)
-        default: throw BackendError(400, "client must be chatgpt, claude or codex")
+        case "device", "no-browser": return RelayInstructions.deviceFlow(origin: relayURL.isEmpty ? "https://your-relay.workers.dev" : relayURL)
+        default: throw BackendError(400, "client must be chatgpt, claude, codex or device")
         }
     }
 }
