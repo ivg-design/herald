@@ -670,6 +670,12 @@ public extension HeraldTemplate {
             break
         }
 
+        for (i, sym) in comp.symbols.enumerated() {
+            for pr in sym.problems() {
+                let key = comp.symbols.count > 1 ? "symbol[\(i)].\(pr.key)" : "symbol.\(pr.key)"
+                if pr.isError { err("\(p).\(key)", pr.message) } else { warn("\(p).\(key)", pr.message) }
+            }
+        }
         // An actionRef must point at something that can exist.
         if let ref = comp.actionRef, !ref.isEmpty, let m = manifest {
             let declared = Set((0..<m.actions.count).map { m.actionID(at: $0) })
