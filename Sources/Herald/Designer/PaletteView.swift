@@ -128,7 +128,7 @@ private struct PaletteChip: View {
     let symbol: String
     let title: String
     let payload: DragPayload
-    let help: String
+    let help: HelpEntry?
     let tap: () -> Void
 
     var body: some View {
@@ -147,7 +147,7 @@ private struct PaletteChip: View {
         } preview: {
             Label(title, systemImage: symbol).padding(6).background(Capsule().fill(Color.accentColor.opacity(0.9))).foregroundStyle(.white)
         }
-        .help(help)
+        .heraldHelp(name: help?.name ?? title, detail: help?.detail ?? "", shortcut: nil)
     }
 }
 
@@ -160,7 +160,7 @@ struct ComponentsPalette: View {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                 ForEach(DesignerPalette.components) { c in
                     PaletteChip(model: model, symbol: c.symbol, title: c.title, payload: .component(c.type),
-                                help: "Drag onto the canvas, or click to add") { model.addComponent(type: c.type) }
+                                help: HeraldHelpCatalog.component(c.type)) { model.addComponent(type: c.type) }
                 }
             }
         }
@@ -367,7 +367,7 @@ private struct AssetRow: View {
             Divider()
             Button("Remove\u{2026}", role: .destructive) { remove() }
         }
-        .help("\(asset.url.path)\nDrag onto the canvas, or click to add it to the selected slot.")
+        .heraldHelp(name: asset.file, detail: "A Rive animation in this issuer's assets folder, ready to play in a cell")
     }
 
     private func remove() {

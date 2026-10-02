@@ -48,6 +48,16 @@ struct GeneralSettingsView: View {
             HistoryCapSettingsView(history: controller.history)
         }
         .formStyle(.grouped)
+        .overlay(alignment: .bottomTrailing) {
+            Text(HeraldVersionLabel.current)
+                .font(.caption2).foregroundStyle(.secondary)
+                .padding(.trailing, 6).padding(.bottom, 2)
+                .onTapGesture {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(HeraldVersionLabel.current, forType: .string)
+                }
+                .heraldHelp(.appVersion)
+        }
         .onAppear { portText = String(settings.effectivePort) }
     }
 

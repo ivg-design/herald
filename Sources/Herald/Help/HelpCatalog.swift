@@ -36,7 +36,24 @@ enum HeraldHelpFormat {
 
 enum HeraldHelpCatalog {
     /// Every entry of every area; the catalog test walks this.
-    static var all: [HelpEntry] { designer + authoring + history + settings }
+    static var all: [HelpEntry] { designer + authoring + history + settings + palette }
     static func entry(_ id: String) -> HelpEntry? { all.first { $0.id == id } }
 }
 
+
+/// "Herald 1.4.1 (Build 8)", shown at the bottom right of Settings > General.
+enum HeraldVersionLabel {
+    static func text(version: String?, build: String?) -> String {
+        let v = (version ?? "").trimmingCharacters(in: .whitespaces), b = (build ?? "").trimmingCharacters(in: .whitespaces)
+        switch (v.isEmpty, b.isEmpty) {
+        case (true, true): return "Herald"
+        case (false, true): return "Herald \(v)"
+        case (true, false): return "Herald (Build \(b))"
+        case (false, false): return "Herald \(v) (Build \(b))"
+        }
+    }
+    static var current: String {
+        let info = Bundle.main.infoDictionary
+        return text(version: info?["CFBundleShortVersionString"] as? String, build: info?["CFBundleVersion"] as? String)
+    }
+}

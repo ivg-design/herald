@@ -31,4 +31,51 @@ final class HelpTooltipTests: XCTestCase {
         XCTAssertEqual(TooltipLevel.defaultLevel, .nameAndDescription)
         XCTAssertEqual(TooltipLevel.allCases.map(\.title), ["Name only", "Name and description"])
     }
+
+    // MARK: Names and explanations, never click instructions
+
+    func testNoDetailIsAnInteractionInstruction() {
+        let banned = try! NSRegularExpression(pattern: #"\b(drag\w*|click\w*|tap\w*|press\w*|select|double-click|shift-click)\b"#, options: [.caseInsensitive])
+        for e in HeraldHelpCatalog.all {
+            let range = NSRange(e.detail.startIndex..., in: e.detail)
+            XCTAssertNil(banned.firstMatch(in: e.detail, range: range), "\(e.id) explains how to click, not what it is: \(e.detail)")
+        }
+    }
+
+    func testNoTwoEntriesShareADetail() {
+        let groups = Dictionary(grouping: HeraldHelpCatalog.all, by: { $0.detail.lowercased() }).filter { $1.count > 1 }
+        XCTAssertTrue(groups.isEmpty, "shared details: \(groups.mapValues { $0.map(\.id) })")
+    }
+
+    func testEveryDetailIsASentenceOfSixToOneHundredFortyCharacters() {
+        for e in HeraldHelpCatalog.all {
+            XCTAssertTrue((6...140).contains(e.detail.count), "\(e.id): \(e.detail.count) characters")
+            XCTAssertTrue(e.detail.first?.isUppercase == true || e.detail.first == "." , "\(e.id) should start with a capital: \(e.detail)")
+            XCTAssertFalse(e.detail.hasSuffix("."), "\(e.id): details carry no full stop")
+        }
+    }
+
+    func testEveryPaletteComponentExplainsWhatItRenders() {
+        let renders: [String: String] = [
+            "text": "text", "image": "picture", "issuerIcon": "icon", "timestamp": "time", "button": "button", "actions": "buttons",
+            "iconButton": "symbol", "badge": "capsule", "stackBadge": "count", "progress": "bar", "rive": "rive", "spacer": "space",
+        ]
+        for c in DesignerPalette.components {
+            guard let e = HeraldHelpCatalog.component(c.type) else { return XCTFail("no catalog entry for palette component \(c.type)") }
+            XCTAssertNotNil(renders[c.type], "add what \(c.type) renders to this test")
+            XCTAssertTrue(e.detail.lowercased().contains(renders[c.type] ?? "\u{0}"), "\(c.type): \(e.detail)")
+            XCTAssertFalse(e.name.lowercased().hasPrefix("drag"), c.type)
+        }
+        XCTAssertEqual(HeraldHelpCatalog.component("badge")?.detail, "A small capsule showing a short status or count, such as {status} or {count}")
+    }
+
+    // MARK: Version label
+
+    func testVersionLabelFormatsVersionAndBuild() {
+        XCTAssertEqual(HeraldVersionLabel.text(version: "1.4.1", build: "8"), "Herald 1.4.1 (Build 8)")
+        XCTAssertEqual(HeraldVersionLabel.text(version: "1.4.1", build: nil), "Herald 1.4.1")
+        XCTAssertEqual(HeraldVersionLabel.text(version: nil, build: "8"), "Herald (Build 8)")
+        XCTAssertEqual(HeraldVersionLabel.text(version: " ", build: ""), "Herald")
+        XCTAssertEqual(HeraldHelpCatalog.entry("settings.appVersion")?.name, "Version")
+    }
 }
