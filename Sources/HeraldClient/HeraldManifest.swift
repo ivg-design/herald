@@ -351,7 +351,7 @@ public extension HeraldManifest {
                 tooBig("\(at).\(name)", value, Limits.maxSmallFieldBytes)
             }
             if let style = a.style, !["default", "destructive", "cancel"].contains(style) {
-                errors.append("\(at).style '\(style)' must be default, destructive or cancel")
+                errors.append("\(at).style '\(style)' must be normal, prominent, destructive or cancel")
             }
             let id = actionID(at: i)
             if !ids.insert(id).inserted { errors.append("\(at).id '\(id)' is declared twice") }

@@ -208,7 +208,7 @@ struct DesignerCellView: View {
 
     /// Empty as the live renderer sees it: no bound value, or a picture nothing can load.
     private var isEmpty: Bool {
-        if !cell.component.hasContent(fields: ctx.fields, actions: ctx.actions) { return true }
+        if !model.draft.cellHasContent(cell, fields: ctx.fields, actions: ctx.actions, assignment: ctx.assignment) { return true }
         if case .image(let i) = cell.component {
             return ctx.image(forBinding: i.binding) == nil && ctx.remoteImageURL(forBinding: i.binding) == nil
         }
@@ -223,7 +223,7 @@ struct DesignerCellView: View {
             Group {
                 if empty { EmptyMarker(cell: cell, behavior: model.draft.behavior(for: cell.component)) }
                 else if case .spacer = cell.component { SpacerMarker() }
-                else { DesignerComponent.view(cell.component, ctx: ctx, align: cell.align) }
+                else { DesignerComponent.view(cell.component, ctx: ctx.forCell(cell.id), align: cell.align) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cell.align.alignment)
         }

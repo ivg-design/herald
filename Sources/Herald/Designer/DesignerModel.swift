@@ -587,7 +587,7 @@ struct DesignerActionRow: Identifiable, Equatable {
     var hidden: Bool
     var id: String { action.id }
     var isRelabeled: Bool { base.map { $0.label != action.label } ?? false }
-    var isRestyled: Bool { base.map { ($0.style ?? "default") != (action.style ?? "default") } ?? false }
+    var isRestyled: Bool { base.map { HeraldActionStyle.parse($0.style) != HeraldActionStyle.parse(action.style) } ?? false }
 }
 
 /// Editing of `HeraldTemplate.actionRules`. The designer owns two kinds of rule and leaves every other rule
@@ -1602,7 +1602,7 @@ final class DesignerModel: ObservableObject {
 
     /// Is the component of this cell empty with the current preview data?
     func isEmpty(_ cell: HeraldCell) -> Bool {
-        !cell.component.hasContent(fields: previewFields, actions: previewActions)
+        !draft.cellHasContent(cell, fields: previewFields, actions: previewActions)
     }
 
     /// The action a button, icon button or Rive cell runs: an inline one, or the id of a resolved action.
@@ -1784,7 +1784,7 @@ final class DesignerModel: ObservableObject {
     }
 
     func setActionStyle(_ id: String, style: String, original: String?) {
-        perform { ActionRules.override(id, in: &$0.actionRules) { $0.style = style == (original ?? "default") ? nil : style } }
+        perform { ActionRules.override(id, in: &$0.actionRules) { $0.style = HeraldActionStyle.parse(style) == HeraldActionStyle.parse(original) ? nil : style } }
     }
 
     func resetAction(_ id: String) { changeActionRules { ActionRules.reset(id, in: &$0) } }

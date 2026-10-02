@@ -67,7 +67,7 @@ struct BannerConfirmationView: View {
 
     /// `BannerButtonStyle`'s kinds: the safe answer is tinted, the lasting permission and Cancel are quiet.
     static func styleKind(_ role: BannerConfirmationButton.Role) -> String {
-        role == .primary ? "default" : "cancel"
+        role.buttonStyleKind
     }
 
     /// The text that will run or be sent, verbatim and in monospace. Never truncated: a long command scrolls.

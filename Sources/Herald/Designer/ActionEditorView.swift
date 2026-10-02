@@ -130,12 +130,12 @@ private struct ActionRowView: View {
                 Spacer(minLength: 0)
                 if isIssuer {
                     Menu {
-                        ForEach(["default", "destructive", "cancel"], id: \.self) { s in
-                            Button { model.setActionStyle(row.id, style: s, original: row.base?.style) } label: {
-                                if (row.action.style ?? "default") == s { Label(s, systemImage: "checkmark") } else { Text(s) }
+                        ForEach(ActionStyleCopy.options, id: \.value) { s in
+                            Button { model.setActionStyle(row.id, style: s.value, original: row.base?.style) } label: {
+                                if HeraldActionStyle.parse(row.action.style).rawValue == s.value { Label(s.title, systemImage: "checkmark") } else { Text(s.title) }
                             }
                         }
-                    } label: { Text(row.action.style ?? "default").font(.caption2) }
+                    } label: { Text(ActionStyleCopy.options.first { $0.value == HeraldActionStyle.parse(row.action.style).rawValue }?.title ?? "Normal").font(.caption2) }
                         .menuStyle(.borderlessButton).fixedSize().disabled(row.hidden).heraldHelp(.designerActionStyle)
                     if row.isRelabeled || row.isRestyled || row.hidden {
                         Button { model.resetAction(row.id) } label: { Image(systemName: "arrow.counterclockwise") }
@@ -266,10 +266,11 @@ struct ActionFormView: View {
                     Picker("Does this", selection: kindBinding) {
                         ForEach(HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
                     }.heraldHelp(.designerEditorKind)
-                    Picker("Style", selection: Binding(get: { request.action.style ?? "default" },
-                                                       set: { request.action.style = $0 == "default" ? nil : $0 })) {
-                        Text("Default").tag("default"); Text("Destructive").tag("destructive"); Text("Quiet").tag("cancel")
+                    Picker("Style", selection: Binding(get: { HeraldActionStyle.parse(request.action.style).rawValue },
+                                                       set: { request.action.style = $0 == "normal" ? nil : $0 })) {
+                        ForEach(ActionStyleCopy.options, id: \.value) { Text($0.title).tag($0.value) }
                     }.heraldHelp(.designerEditorStyle)
+                    Text(ActionStyleCopy.caption).font(.caption).foregroundStyle(.secondary)
                 }
                 detail
                 Section {

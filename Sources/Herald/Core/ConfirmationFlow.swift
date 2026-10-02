@@ -64,6 +64,13 @@ public final class ConfirmationFlow {
         }
     }
 
+    /// A button styled `destructive`. `run` goes ahead for "once"; cancel (or the banner going away) does nothing.
+    public func askDestructive(app: String, id: String, label: String, name: String, run: @escaping () -> Void) {
+        ask(.destructiveAction(label: label, name: name), app: app, id: id) { choice in
+            if choice == .once { run() }
+        }
+    }
+
     /// An issuer's command, script or Shortcut. `text` is the exact command (`ActionRunner.describe`).
     public func askCommand(app: String, id: String, name: String, kind: HeraldActionKind, text: String,
                            run: @escaping () -> Void) {

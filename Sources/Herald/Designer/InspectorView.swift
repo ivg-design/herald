@@ -567,10 +567,7 @@ private struct ButtonEditor: View {
     var body: some View {
         let b = PayloadBinder<HeraldButtonComponent>.of(model, id)
         ActionSlotEditor(model: model, id: id, allowNone: false)
-        FieldRow("Style") {
-            OptionalPicker(selection: b.binding(\.style, nil),
-                           options: [("default", "Default"), ("destructive", "Destructive"), ("cancel", "Quiet")], noneLabel: "Action\u{2019}s own").heraldHelp(.designerButtonStyle)
-        }
+        ActionStyleField(style: b.binding(\.style, nil), noneLabel: "Action\u{2019}s own").heraldHelp(.designerButtonStyle)
         Divider()
         SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
     }
@@ -592,6 +589,9 @@ private struct ActionsRowEditor: View {
             }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerActionsLayout)
         }
         FieldRow("Max") { OptionalIntField(value: b.binding(\.maxVisible, nil), placeholder: "all").heraldHelp(.designerMaxButtons) }
+        ActionsArrangementFields(model: model, id: id)
+        Divider()
+        WhichActionsEditor(model: model, id: id)
         Button { model.tab = .actions } label: { Label("Edit the buttons\u{2026}", systemImage: "slider.horizontal.3") }
             .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerEditButtons)
         Divider()

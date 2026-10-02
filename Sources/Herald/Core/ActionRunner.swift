@@ -285,6 +285,12 @@ public final class ActionRunner: Sendable {
         }
     }
 
+    /// A button styled `destructive` asks the user before it runs, whatever its kind (the question is the inline
+    /// row of `ConfirmationFlow.askDestructive`, ahead of any gate of the action itself).
+    public static func confirmsBeforeRunning(_ action: HeraldAction) -> Bool {
+        HeraldActionStyle.asksConfirmation(action.style)
+    }
+
     /// The action as the confirmation alert and the log show it.
     public static func describe(_ action: HeraldAction) -> String {
         switch action.kind {

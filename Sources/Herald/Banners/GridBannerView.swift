@@ -81,7 +81,9 @@ struct GridRenderState {
             dismiss: { [weak model] in model?.onClose() },
             stackCount: model.stackCount,
             expandStack: { [weak model] in model?.onExpandStack() })
-        self.ctx = ctx
+        var ctx2 = ctx
+        ctx2.assignment = t.actionAssignment(actions: ctx.actions)
+        self.ctx = ctx2
 
         var empty = t.emptyCellIDs(fields: ctx.fields, actions: ctx.actions)
         for c in t.cells {
@@ -163,7 +165,8 @@ struct GridBannerView: View {
         .environment(\.openURL, linkAction)
     }
 
-    @ViewBuilder private func component(of cell: HeraldCell, _ ctx: GridContext, replay: HeraldSpeech? = nil) -> some View {
+    @ViewBuilder private func component(of cell: HeraldCell, _ gridCtx: GridContext, replay: HeraldSpeech? = nil) -> some View {
+        let ctx = gridCtx.forCell(cell.id)
         switch cell.component {
         case .text(let c): TextComponentView(component: c, ctx: ctx, align: cell.align)
         case .image(let c): ImageComponentView(component: c, ctx: ctx)

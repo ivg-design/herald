@@ -11,7 +11,11 @@ struct ActionsComponentView: View {
     /// The extras only belong to the issuer's side of the list, never to a template-only action row.
     private var includesExtras: Bool { component.source != .template }
 
-    private var listed: [HeraldResolvedAction] { ctx.actions.filter { component.source.includes($0.origin) } }
+    /// What this cell shows: the actions the template's assignment gave it (`include`, or whatever no other cell
+    /// claims), else, with no assignment, every action of `source`.
+    private var listed: [HeraldResolvedAction] {
+        (ctx.cellActions ?? ctx.actions).filter { component.source.includes($0.origin) }
+    }
     /// A snooze action with no fixed minutes is the menu, not a button.
     private var hasSnoozeMenu: Bool { listed.contains(where: Self.isSnoozeMenu) }
     private var buttons: [HeraldResolvedAction] { listed.filter { !Self.isSnoozeMenu($0) } }
@@ -25,7 +29,7 @@ struct ActionsComponentView: View {
         if buttons.isEmpty && !hasSnoozeMenu && !showsReminder {
             Color.clear.frame(width: 0, height: Self.buttonHeight)   // a kept, empty row holds one button's height
         } else {
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .top, spacing: gap) {
                 flow.frame(maxWidth: .infinity, alignment: .leading)
                 if hasSnoozeMenu { snoozeMenu }
             }
@@ -38,17 +42,26 @@ struct ActionsComponentView: View {
 
     private var visibleCount: Int { ActionOverflow.visibleCount(total: buttons.count, maxVisible: component.maxVisible) }
 
+    private var gap: CGFloat { CGFloat(component.effectiveSpacing) }
+
     @ViewBuilder private var flow: some View {
         switch component.layout {
-        case .wrap:
-            FlowLayout(spacing: 6, lineSpacing: 6) { items(visible: visibleCount) }
         case .stack:
-            VStack(alignment: .leading, spacing: 6) { items(visible: visibleCount) }
-        case .row:
-            // The first variant that fits the width wins: all the buttons, else one fewer plus "+N", and so on.
-            ViewThatFits(in: .horizontal) {
-                ForEach(Array(stride(from: visibleCount, through: 0, by: -1)), id: \.self) { k in
-                    HStack(spacing: 6) { items(visible: k) }.fixedSize()
+            VStack(alignment: component.effectiveAlign.horizontal, spacing: gap) { items(visible: visibleCount) }
+                .frame(maxWidth: .infinity, alignment: component.effectiveAlign.frame)
+        case .wrap, .row:
+            if component.wraps {
+                ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: true, align: component.effectiveAlign) {
+                    items(visible: visibleCount)
+                }
+            } else {
+                // The first variant that fits the width wins: all the buttons, else one fewer plus "+N", and so on.
+                ViewThatFits(in: .horizontal) {
+                    ForEach(Array(stride(from: visibleCount, through: 0, by: -1)), id: \.self) { k in
+                        ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: false, align: component.effectiveAlign) {
+                            items(visible: k)
+                        }
+                    }
                 }
             }
         }
@@ -132,6 +145,51 @@ struct ReminderButton: View {
         case .failed(let message):
             Button("Reminders unavailable", action: action)
                 .buttonStyle(BannerButtonStyle(kind: "destructive")).help(message)
+        }
+    }
+}
+
+
+extension HeraldActionsAlign {
+    var horizontal: HorizontalAlignment {
+        switch self {
+        case .leading, .spaceBetween: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+    var frame: Alignment {
+        switch self {
+        case .leading, .spaceBetween: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
+}
+
+/// Lays the buttons of an `actions` cell out with `ActionRowMath`: left to right, onto further lines when `wrap`
+/// is on and they do not fit, each line placed by `align`. With a width to fill, a non-leading alignment takes all
+/// of it so the buttons can sit against the trailing edge or the middle.
+struct ActionRowLayout: Layout {
+    var spacing: CGFloat = 6
+    var lineSpacing: CGFloat = 6
+    var wrap = true
+    var align: HeraldActionsAlign = .leading
+
+    private func result(_ subviews: Subviews, width: CGFloat?) -> ActionRowMath.Result {
+        ActionRowMath.arrange(sizes: subviews.map { $0.sizeThatFits(.unspecified) }, width: width,
+                              spacing: spacing, lineSpacing: lineSpacing, wrap: wrap, align: align)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        result(subviews, width: proposal.width).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let r = result(subviews, width: bounds.width)
+        for (i, f) in r.frames.enumerated() {
+            subviews[i].place(at: CGPoint(x: bounds.minX + f.minX, y: bounds.minY + f.minY), anchor: .topLeading,
+                              proposal: .unspecified)
         }
     }
 }

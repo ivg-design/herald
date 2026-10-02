@@ -20,10 +20,23 @@ public enum ConfirmationChoice: String, Sendable, Equatable {
     case openSettings
 }
 
+public extension BannerConfirmationButton.Role {
+    /// The `BannerButtonStyle` kind a button of this role is drawn with (a `HeraldActionStyle` name).
+    var buttonStyleKind: String {
+        switch self {
+        case .primary: return "normal"
+        case .danger: return "destructive"
+        case .secondary, .cancel: return "cancel"
+        }
+    }
+}
+
 public struct BannerConfirmationButton: Sendable, Equatable, Identifiable {
     /// How loudly the button is drawn: `primary` is the safe answer and is tinted, `secondary` is the lasting
     /// permission (quiet on purpose, so Return-by-habit style clicking cannot grant it), `cancel` is grey.
-    public enum Role: String, Sendable, Equatable { case primary, secondary, cancel }
+    public enum Role: String, Sendable, Equatable { case primary, secondary, cancel
+        /// The answer that goes ahead with something destructive: drawn in red.
+        case danger }
 
     public var choice: ConfirmationChoice
     public var title: String
@@ -37,7 +50,7 @@ public struct BannerConfirmationButton: Sendable, Equatable, Identifiable {
 
 public struct BannerConfirmation: Sendable, Equatable, Identifiable {
     public enum Kind: String, Sendable, Equatable, CaseIterable {
-        case callbackHost, command, script, shortcut, templateCommand, remindersError, remindersDenied
+        case callbackHost, command, script, shortcut, templateCommand, remindersError, remindersDenied, destructiveAction
     }
 
     /// `caution` asks a question; `error` reports a failure.
@@ -137,6 +150,16 @@ public extension BannerConfirmation {
                       .init(.cancel, "Cancel", .cancel)])
     }
 
+    /// A button whose style is `destructive`: Herald asks before running it, whatever it does. `label` is the
+    /// button's text; `name` the issuer or template that offers it.
+    static func destructiveAction(label: String, name: String) -> BannerConfirmation {
+        BannerConfirmation(
+            kind: .destructiveAction,
+            title: "Run \u{201C}\(short(label, limit: 40))\u{201D}?",
+            detail: "This button is marked destructive, so Herald asks before it runs. It was offered by \(name).",
+            buttons: [.init(.once, short(label, limit: 24), .danger), .init(.cancel, "Cancel", .cancel)])
+    }
+
     /// "Couldn't add to Reminders". A denied permission offers a shortcut to the Privacy settings.
     static func remindersError(message: String, canOpenSettings: Bool) -> BannerConfirmation {
         var buttons = [BannerConfirmationButton(.ok, "OK", .primary)]
@@ -198,6 +221,8 @@ public extension BannerConfirmation {
             return .templateCommand(kind: .command, template: try text("template") ?? "ops-alerts", name: name,
                                     pressedText: command ?? "open -a Safari https://example.com", others: others,
                                     replacedIssuerLabel: try text("replaces"))
+        case .destructiveAction:
+            return .destructiveAction(label: try text("label") ?? "Delete", name: name)
         case .remindersError, .remindersDenied:
             return .remindersError(message: try text("message") ?? "Herald does not have permission to use Reminders.",
                                    canOpenSettings: kind == .remindersDenied)

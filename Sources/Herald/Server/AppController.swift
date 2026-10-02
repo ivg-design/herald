@@ -499,8 +499,11 @@ final class AppController {
         let manifest = manifests.get(app: app)
         let offered = ActionRunner.resolvedActions(notification: item.notification, manifest: manifest, template: template)
         let found = ActionRunner.match(pressed, in: offered)
+        // The pressed copy carries the style the button was drawn with (a button's own `style` overrides its action's).
+        var action = found?.action ?? pressed
+        if let style = pressed.style { action.style = style }
         // An action the notification does not offer is treated as the issuer's: the strictest rule.
-        perform(found?.action ?? pressed, origin: found?.origin ?? .issuer, item: item, template: template, manifest: manifest)
+        perform(action, origin: found?.origin ?? .issuer, item: item, template: template, manifest: manifest)
     }
 
     private func perform(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
@@ -522,9 +525,27 @@ final class AppController {
         }
         // The gate may have to ask the user first. The question is drawn inside the banner (never an alert), so the
         // rest of the action runs from its answer: `proceed` is called at once when nothing needs asking.
-        authorize(action, origin: origin, item: item, template: template, manifest: manifest) { [self] in
-            execute(plan, action: action, origin: origin, item: item, manifest: manifest)
+        let go = { [self] in
+            authorize(action, origin: origin, item: item, template: template, manifest: manifest) { [self] in
+                execute(plan, action: action, origin: origin, item: item, manifest: manifest)
+            }
         }
+        // A destructive button is asked about first (inline, never an alert); its own gate follows.
+        if ActionRunner.confirmsBeforeRunning(action) {
+            let name = registry.record(for: app)?.displayName ?? app
+            confirmations.askDestructive(app: app, id: id, label: ctxLabel(action, item: item), name: name, run: go)
+        } else {
+            go()
+        }
+    }
+
+    /// The button's text as the banner draws it (`{tokens}` filled).
+    private func ctxLabel(_ action: HeraldAction, item: HeraldHistoryItem) -> String {
+        let template = templates.template(for: item.notification)
+        let fields = TemplateResolver.fields(for: item.notification, manifest: manifests.get(app: item.app),
+                                             extra: template?.extra ?? [:], deliveredAt: item.deliveredAt)
+        let s = TemplateResolver.fill(action.label, fields: fields).trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? action.id : s
     }
 
     /// What an authorized action does.

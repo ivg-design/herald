@@ -374,7 +374,8 @@ public extension HeraldTemplate {
 
     /// Ids of the cells whose component has nothing to show (`HeraldComponent.hasContent`).
     func emptyCellIDs(fields: [String: HeraldFieldValue], actions: [HeraldResolvedAction]) -> Set<String> {
-        Set(cells.filter { !$0.component.hasContent(fields: fields, actions: actions) }.map(\.id))
+        let assignment = actionAssignment(actions: actions)
+        return Set(cells.filter { !cellHasContent($0, fields: fields, actions: actions, assignment: assignment) }.map(\.id))
     }
 
     /// The collapse plan for one notification. `emptyCells` are the ids of cells with nothing to show.
@@ -474,7 +475,7 @@ public extension HeraldTemplate {
             }
             if let pos = r.position, pos < 0 { err("\(p).position", "position must be 0 or greater") }
             if let s = r.style, !s.isEmpty, !Self.actionStyles.contains(s) {
-                err("\(p).style", "style '\(s)' must be default, destructive or cancel")
+                err("\(p).style", "style '\(s)' must be \(HeraldActionStyle.acceptedList)")
             }
             if let a = r.add { Self.validateAction(a, path: "\(p).add", cell: nil, into: &issues) }
             if let sym = r.symbol {
@@ -553,13 +554,20 @@ public extension HeraldTemplate {
                                    knownTokens: knownTokens, extraKeys: Set(extra.keys),
                                    templateActionIDs: templateActionIDs, into: &issues)
         }
+        // An action is drawn in at most one cell; the later cell shows nothing for it.
+        let claims = actionAssignment(actions: []).claimants
+        for (id, cellIDs) in claims.sorted(by: { $0.key < $1.key }) where cellIDs.count > 1 {
+            for later in cellIDs.dropFirst() {
+                warn("cells", "action '\(id)' is asked for by cells '\(cellIDs[0])' and '\(later)': it is drawn once, in '\(cellIDs[0])'", cell: later)
+            }
+        }
         return issues
     }
 
     /// True when `validate` finds no errors.
     func isValid(manifest: HeraldManifest? = nil) -> Bool { !validate(manifest: manifest).contains { $0.isError } }
 
-    private static let actionStyles = ["default", "destructive", "cancel"]
+    private static let actionStyles = HeraldActionStyle.accepted
     private static let colorKeywords = ["accent", "primary", "secondary"]
 
     /// `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA`, or (when allowed) `accent` / `primary` / `secondary`.
@@ -575,7 +583,7 @@ public extension HeraldTemplate {
         func blank(_ s: String?) -> Bool { (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if a.label.trimmingCharacters(in: .whitespaces).isEmpty { err("\(p).label", "an action needs a label") }
         if a.id.trimmingCharacters(in: .whitespaces).isEmpty { err("\(p).id", "an action needs an id") }
-        if let s = a.style, !actionStyles.contains(s) { err("\(p).style", "style '\(s)' must be default, destructive or cancel") }
+        if let s = a.style, !actionStyles.contains(s) { err("\(p).style", "style '\(s)' must be \(HeraldActionStyle.acceptedList)") }
         if let sym = a.symbol {
             for pr in sym.problems() { issues.append(.init(severity: pr.isError ? .error : .warning, path: "\(p).symbol.\(pr.key)", cellId: cell, message: pr.message)) }
         }
@@ -636,11 +644,24 @@ public extension HeraldTemplate {
             color("color", t.color)
             if let f = t.fontSize, !(6...72).contains(f) { err("\(p).fontSize", "fontSize must be 6 to 72") }
         case .button(let b):
-            if b.action == nil && blank(b.actionRef) { err(p, "a button needs an inline 'action' or an 'actionRef'") }
+            if b.action == nil && blank(b.actionRef) { err(p, "a button needs an inline 'action' or an 'actionRef' (also written 'actionId')") }
             if let a = b.action { validateAction(a, path: "\(p).action", cell: cell, into: &issues) }
-            if let s = b.style, !actionStyles.contains(s) { err("\(p).style", "style '\(s)' must be default, destructive or cancel") }
+            if let s = b.style, !actionStyles.contains(s) { err("\(p).style", "style '\(s)' must be \(HeraldActionStyle.acceptedList)") }
         case .actions(let a):
             if let m = a.maxVisible, m < 1 { err("\(p).maxVisible", "maxVisible must be at least 1") }
+            if let sp = a.spacing, !(0...64).contains(sp) { err("\(p).spacing", "spacing must be 0 to 64 points") }
+            if let inc = a.include {
+                if inc.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) { err("\(p).include", "include lists action ids; one of them is blank") }
+                if a.includedIDs.count != inc.count, !inc.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                    warn("\(p).include", "include names the same action more than once; it is shown once")
+                }
+                if let m = manifest {
+                    let known = Set(m.actions.indices.map { m.actionID(at: $0) }).union(templateActionIDs)
+                    for id in a.includedIDs where !known.contains(id) {
+                        warn("\(p).include", "'\(id)' is not an action of the manifest or one this template adds, so nothing shows for it")
+                    }
+                }
+            }
         case .iconButton(let b):
             if blank(b.symbol) { err("\(p).symbol", "an iconButton needs an SF Symbol name, for example \"xmark\"") }
             if b.action == nil && blank(b.actionRef) { err(p, "an iconButton needs an inline 'action' or an 'actionRef'") }

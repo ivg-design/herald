@@ -38,6 +38,18 @@ struct GridContext {
     /// counter (`stackBadge`) opens the stack in place.
     var stackCount = 1
     var expandStack: () -> Void = {}
+    /// Which action each cell shows (`HeraldTemplate.actionAssignment`): an action is drawn in at most one cell.
+    var assignment: HeraldActionAssignment?
+    /// The actions of the cell this context was made for (`forCell`); nil outside an `actions` or id-bound
+    /// `button` cell, which then read the whole list.
+    var cellActions: [HeraldResolvedAction]?
+
+    /// This context narrowed to one cell: its action row or button sees only what the template assigned to it.
+    func forCell(_ id: String) -> GridContext {
+        var c = self
+        c.cellActions = assignment?.actions(forCell: id)
+        return c
+    }
 
     // MARK: Data
 
@@ -55,7 +67,7 @@ struct GridContext {
     /// issuer did not send it).
     func action(inline: HeraldAction?, ref: String?) -> (action: HeraldAction, origin: HeraldActionOrigin)? {
         if let inline { return (inline, .template) }
-        guard let ref, !ref.isEmpty, let r = actions.first(where: { $0.action.id == ref }) else { return nil }
+        guard let ref, !ref.isEmpty, let r = (cellActions ?? actions).first(where: { $0.action.id == ref }) else { return nil }
         return (r.action, r.origin)
     }
 

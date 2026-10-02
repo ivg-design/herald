@@ -178,13 +178,15 @@ private struct BannerButtonBody: View {
     let accent: Color?
     @State private var hovering = false
 
-    private var destructive: Bool { kind == "destructive" }
+    private var style: HeraldActionStyle { HeraldActionStyle.parse(kind) }
+    private var destructive: Bool { style == .destructive }
+    private var prominent: Bool { style == .prominent }
 
     private var color: Color {
-        switch kind {
-        case "destructive": return Color(nsColor: .systemRed)
-        case "cancel": return .secondary
-        default: return accent ?? .accentColor
+        switch style {
+        case .destructive: return Color(nsColor: .systemRed)
+        case .cancel: return .secondary
+        case .normal, .prominent: return accent ?? .accentColor
         }
     }
 
@@ -195,13 +197,13 @@ private struct BannerButtonBody: View {
             // A label never wraps inside its capsule; the action row wraps whole buttons instead.
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
-            .font(.system(size: 12, weight: destructive ? .semibold : .medium))
-            .foregroundStyle(color)
+            .font(.system(size: 12, weight: destructive || prominent ? .semibold : .medium))
+            .foregroundStyle(prominent ? Color.white : color)
             .padding(.horizontal, 10).padding(.vertical, 4)
             .background {
                 // Fill and outline share one ZStack inside the background so the outline is clipped with the fill.
                 ZStack {
-                    Capsule().fill(color.opacity(fill))
+                    Capsule().fill(prominent ? color.opacity(pressed ? 0.75 : (hovering ? 0.9 : 1)) : color.opacity(fill))
                     if destructive { Capsule().stroke(color.opacity(0.45), lineWidth: 1).clipShape(Capsule()) }
                 }
             }
