@@ -617,7 +617,7 @@ public extension HeraldTemplate {
             if let path = a.path, !path.trimmingCharacters(in: .whitespaces).isEmpty, !path.lowercased().hasSuffix(".app") {
                 err("\(p).path", "path must be an application, ending in .app (for example /Applications/Example.app)")
             }
-        case .callback, .dismiss:
+        case .callback, .dismiss, .reply:
             break
         }
     }

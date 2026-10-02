@@ -61,8 +61,11 @@ final class AgentIssuerTests: XCTestCase {
             XCTAssertTrue(m.fields.allSatisfy { $0.sample != nil }, "every field has a sample for previews")
             XCTAssertEqual(m.field("needsInput")?.type, .bool); XCTAssertEqual(m.field("link")?.type, .url)
             XCTAssertEqual(m.field("title")?.required, true)
-            XCTAssertEqual((0..<m.actions.count).map { m.actionID(at: $0) }, ["open", "reply", "dismiss"])
-            XCTAssertNotNil(m.actions[0].url); XCTAssertNotNil(m.actions[1].callback)
+            // Open, Reply, Open link: no Dismiss and no Done (the banner's close button dismisses).
+            XCTAssertEqual((0..<m.actions.count).map { m.actionID(at: $0) }, ["open", "reply", "open-link"])
+            XCTAssertNil(m.actions[0].url, "Open never opens a URL"); XCTAssertNotNil(m.actions[0].openApp)
+            XCTAssertNotNil(m.actions[1].reply); XCTAssertNil(m.actions[1].callback, "an MCP agent has no callback server")
+            XCTAssertEqual(m.actions[2].url, "{link}")
         }
     }
 
@@ -76,7 +79,7 @@ final class AgentIssuerTests: XCTestCase {
             let tokens = Set(t.referencedTokens)
             XCTAssertTrue(tokens.isSubset(of: Set(agent.manifest().fields.map(\.key)).union(["timestamp", "appName", "app", "id"])), "\(tokens)")
             // The compact skeleton is still there, with the status badge carrying the agent's symbol.
-            XCTAssertTrue(["icon", "title", "time", "close", "actions"].allSatisfy { id in t.cells.contains { $0.id == id } })
+            XCTAssertTrue(["icon", "title", "status", "body", "time", "close", "actions"].allSatisfy { id in t.cells.contains { $0.id == id } })
             let badge = try XCTUnwrap(t.cells.first { $0.id == "status" })
             guard case .badge(let b) = badge.component else { return XCTFail("a badge") }
             XCTAssertEqual(b.symbol?.name, agent.symbol); XCTAssertEqual(b.binding, "{status}")

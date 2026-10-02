@@ -58,16 +58,59 @@ public enum AgentIssuer {
         public var manifestWritten: Bool
         /// False when a template named `agent` already existed and was left alone.
         public var templateCreated: Bool
+        /// What the agent's "Open" button brings to the front (the manifest's `appBundleId` or `appPath`).
+        public var opens: HeraldHostApp.Target?
+        /// The old default template was replaced by the current one (the user had not edited it).
+        public var templateUpgraded: Bool = false
         /// The PNG inside Herald's support folder the app's icon points to; nil when no icon is set.
         public var iconPath: String?
         /// No PNG was given and the app has none: Settings > MCP asks the user to choose one.
         public var iconMissing: Bool
     }
 
+    /// The manifest with its "Open" target changed: a bundle id sets `appBundleId`, an application path `appPath` (the other
+    /// is cleared, so the resolver sees exactly one choice). An app without a manifest gets a bare one.
+    public static func manifest(settingOpens target: HeraldHostApp.Target, app: String, appName: String?, current: HeraldManifest?) -> HeraldManifest {
+        var m = current ?? HeraldManifest(app: app, appName: appName)
+        switch target {
+        case .bundleId(let b): m.appBundleId = b; m.appPath = nil
+        case .path(let p): m.appPath = p; m.appBundleId = nil
+        }
+        return m
+    }
+
+    /// The identity an installed agent app was registered under, from its manifest; nil for an app that is not an agent.
+    public static func identity(of manifest: HeraldManifest) -> AgentIdentity? {
+        guard manifest.family == "agent", manifest.app.hasPrefix(HeraldAgent.prefix) else { return nil }
+        let slug = String(manifest.app.dropFirst(HeraldAgent.prefix.count))
+        for kind in [AgentIdentity.Kind.claudeCode, .codex, .claudeDesktop] {
+            if let id = AgentIdentity(kind: kind), id.slug == slug { return id }
+        }
+        guard HeraldAgent.slug(manifest.appName) == slug else { return nil }
+        return AgentIdentity(kind: .generic, genericName: manifest.appName)
+    }
+
+    /// Brings every installed agent up to the current default at launch: the manifest (Open, Reply, Open link; no Dismiss),
+    /// and the default template when it is still the one Herald generated. What the user changed stays (see `register`).
+    /// Returns the apps whose manifest or template changed.
+    @discardableResult
+    public static func refreshInstalled(supportDirectory: URL, registry: AppRegistry, manifests: ManifestStore, templates: TemplateStore,
+                                        detectedHost: String? = nil) -> [String] {
+        var changed: [String] = []
+        for m in manifests.list() {
+            guard let agent = identity(of: m),
+                  let r = try? register(agent, iconPNG: nil, detectedHost: detectedHost, supportDirectory: supportDirectory,
+                                        registry: registry, manifests: manifests, templates: templates) else { continue }
+            if r.manifestWritten || r.templateUpgraded { changed.append(agent.appID) }
+        }
+        return changed
+    }
+
     public static func iconsFolder(in support: URL) -> URL { support.appendingPathComponent("agent-icons", isDirectory: true) }
 
     @discardableResult
-    public static func register(_ agent: AgentIdentity, iconPNG: Data?, supportDirectory: URL,
+    public static func register(_ agent: AgentIdentity, iconPNG: Data?, opens: HeraldHostApp.Target? = nil,
+                                detectedHost: String? = nil, supportDirectory: URL,
                                 registry: AppRegistry, manifests: ManifestStore, templates: TemplateStore) throws -> Report {
         let existing = registry.record(for: agent.appID)?.registration
 
@@ -96,19 +139,28 @@ public enum AgentIssuer {
         registry.register(reg)
 
         // Manifest: ours, with what the user may have set kept (their default template, their assets).
-        var manifest = agent.manifest(icon: currentIcon)
+        // "Opens": what the caller chose, else what the user already has, else the host (Claude.app, or the terminal
+        // or editor this was installed from).
         let old = manifests.get(app: agent.appID)
+        let target = opens ?? AgentIdentity.opens(of: old) ?? agent.defaultOpens(detectedHost: detectedHost)
+        var manifest = agent.manifest(icon: currentIcon, opens: target)
         if let d = old?.defaultTemplate { manifest.defaultTemplate = d }
         if let a = old?.assets { manifest.assets = a }
         let written = old != manifest
         if written, !manifests.put(manifest) { throw BackendError(500, "could not save the manifest of \(agent.appID)") }
 
-        var created = false
-        if templates.get(app: agent.appID, name: AgentIdentity.templateName) == nil {
+        var created = false, upgraded = false
+        if let stored = templates.get(app: agent.appID, name: AgentIdentity.templateName) {
+            // Herald's own earlier default, untouched by the user, becomes the current one; anything else is theirs.
+            if stored == agent.previousTemplate() {
+                guard templates.put(agent.template()) else { throw BackendError(500, "could not save the template of \(agent.appID)") }
+                upgraded = true
+            }
+        } else {
             guard templates.put(agent.template()) else { throw BackendError(500, "could not save the template of \(agent.appID)") }
             created = true
         }
-        return Report(appID: agent.appID, manifestWritten: written, templateCreated: created, iconPath: currentIcon,
-                      iconMissing: currentIcon == nil)
+        return Report(appID: agent.appID, manifestWritten: written, templateCreated: created, opens: target,
+                      templateUpgraded: upgraded, iconPath: currentIcon, iconMissing: currentIcon == nil)
     }
 }

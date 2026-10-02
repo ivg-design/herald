@@ -18,6 +18,9 @@ public struct PreviewPlan: Sendable {
     /// True when the data came from the manifest's samples (or generic ones) rather than from the request.
     public var usedSamples: Bool
 
+    /// The hint of the first reply action in the resolved list, for a preview that draws the reply field.
+    public var replyPlaceholder: String? { actions.first { $0.action.kind == .reply }?.action.reply?.placeholder }
+
     public static let defaultTemplateName = BuiltinTemplates.name(for: .imageLeft)
 
     /// `placeholderImage` is an image spec (a `data:` URI) the preview uses for an image the sample data leaves

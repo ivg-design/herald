@@ -11,6 +11,8 @@ struct RouteCall {
     var path: String
     var query: [String: String] = [:]
     var body: JSONValue?
+    /// Seconds to wait for Herald's answer; nil keeps the default. `wait_for_reply` long-polls.
+    var timeout: TimeInterval?
 }
 
 struct ParityTool {
@@ -150,12 +152,51 @@ enum ParityTools {
                 "reinstall": Schema.boolean("Replace an existing registration (claudeCode)."),
                 "name": Schema.string("generic only: the client's name; its notifications arrive as agent.<slug of the name>."),
                 "icon": Schema.string("An image file on this Mac to use as the agent's icon (otherwise the product's own icon is used)."),
+                "opens": Schema.string("What the agent's Open button brings to the front: a bundle id (com.apple.Terminal) or an application path (/Applications/iTerm.app). Default: Claude.app for Claude Desktop; for Claude Code, Codex and generic clients the terminal or editor this server runs in (detected), else Terminal. A reinstall keeps the app the user chose."),
             ]), idempotent: true),
             route: { a in
                 guard let client = try text(a, "client") else { return RouteCall(method: "GET", path: "/v1/mcp") }
                 var body: [String: JSONValue] = ["client": .string(client), "reinstall": .bool(try a.bool("reinstall") ?? false)]
-                for k in ["name", "icon"] { if let v = a.value(k) { body[k] = v } }
+                for k in ["name", "icon", "opens", "detectedHost"] { if let v = a.value(k) { body[k] = v } }
                 return RouteCall(method: "POST", path: "/v1/mcp/install", body: .object(body))
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "get_replies", title: "Get replies typed into banners",
+            description: """
+            The answers the user typed into a banner's inline Reply, oldest first, from a per-app queue. Each reply has \
+            notificationId, app, text, repliedAt and the title of the notification it answers. `since` (ISO 8601 or epoch seconds) \
+            returns only newer ones; with `consume: true` the returned replies leave the queue (History keeps them on the \
+            notification record). To ask a question and wait for the answer use send_notification (persistent: true, an id) then \
+            wait_for_reply.
+            """,
+            inputSchema: Schema.input([
+                "app": Schema.string("The app id (an agent's own app by default)."),
+                "since": Schema.string("Only replies after this time: ISO 8601 or epoch seconds."),
+                "consume": Schema.boolean("Remove the returned replies from the queue (default false)."),
+            ]), readOnly: false, idempotent: false),
+            route: { a in RouteCall(method: "GET", path: "/v1/replies", query: query(a, ["app", "since", "consume"])) }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "wait_for_reply", title: "Wait for the user's reply",
+            description: """
+            Ask-a-question pattern: after send_notification (use persistent: true so the banner stays) wait here until the user \
+            presses Reply on that notification and sends text, for at most timeoutSeconds (1 to 300, default 60). Returns \
+            {replied: true, reply: {text, repliedAt, ...}} or {replied: false, timedOut: true}; call it again to keep waiting. \
+            The reply is taken out of the queue unless consume is false. Answers at once when the reply is already there.
+            """,
+            inputSchema: Schema.input([
+                "notificationId": Schema.string("The id send_notification returned."),
+                "app": Schema.string("The app the notification was sent as (an agent's own app by default)."),
+                "timeoutSeconds": Schema.number("How long to wait, 1 to 300 (default 60).", min: 1, max: 300),
+                "consume": Schema.boolean("Remove the reply from the queue once read (default true)."),
+            ], required: ["notificationId"]), readOnly: false, idempotent: false),
+            route: { a in
+                var q = query(a, ["app", "consume"])
+                q["id"] = try text(a, "notificationId")
+                let seconds = min(max(try a.number("timeoutSeconds") ?? 60, 1), 300)
+                q["timeout"] = String(Int(seconds))
+                return RouteCall(method: "GET", path: "/v1/replies/wait", query: q, timeout: seconds + 15)
             }),
 
         ParityTool(definition: MCPToolDefinition(
@@ -371,7 +412,7 @@ extension MCPTools {
             }
         }
         let call = try tool.route(args)
-        let reply = try await client.call(call.method, call.path, query: call.query, body: call.body)
+        let reply = try await client.call(call.method, call.path, query: call.query, body: call.body, timeout: call.timeout ?? 20)
         return .json(reply)
     }
 

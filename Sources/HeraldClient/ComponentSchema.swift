@@ -211,6 +211,7 @@ public enum ComponentSchema {
                 "script": prop("string", "kind script: file name in Application Support/Herald/scripts; receives the merged payload JSON on stdin."),
                 "shortcut": prop("string", "kind shortcut: name of an installed Apple Shortcut (see list_shortcuts)."),
                 "input": prop("string", "kind shortcut: text passed as the Shortcut's input, with {tokens} filled. Omit to pass the full merged payload as JSON."),
+                "reply": prop("object", "kind reply: {placeholder?, callback?}; the field's hint, and a callback that also receives the reply."),
                 "snoozeMinutes": prop("integer", "kind snooze: minutes (1-10080), default \(HeraldAction.defaultSnoozeMinutes).", min: 1, max: 10080),
                 "bundleId": prop("string", "kind openApp: bundle identifier of the application to bring to the front (com.example.App). Tried first."),
                 "path": prop("string", "kind openApp: path of the application (/Applications/Example.app; ~ is expanded). Tried after bundleId. With neither, the issuing application is opened: the manifest's appBundleId, appPath, the bundle id it registered with, then the app named appName."),
@@ -226,6 +227,7 @@ public enum ComponentSchema {
             (HeraldActionKind.command.rawValue, "run `command` through /bin/zsh -lc."),
             (HeraldActionKind.script.rawValue, "run a file from Herald's scripts folder with the merged payload JSON on stdin."),
             (HeraldActionKind.shortcut.rawValue, "run the Apple Shortcut named `shortcut`; input is the `input` text, or the full payload JSON."),
+            (HeraldActionKind.reply.rawValue, "swap the buttons for a one-line text field inside the banner; the text is stored on the notification's history record and in the app's reply queue (get_replies / wait_for_reply), and also POSTed to `callback` (or the app's callback URL) when there is one. Never opens a window or activates Herald."),
             (HeraldActionKind.dismiss.rawValue, "close the banner."),
             (HeraldActionKind.snooze.rawValue, "hide the banner and bring it back after `snoozeMinutes`."),
             (HeraldActionKind.openApp.rawValue, "bring an application to the front: `bundleId`, else `path`, else the issuing application (manifest appBundleId / appPath, registered bundle id, or the app named appName). The app is activated; Herald stays in the background. An application that cannot be found does nothing but leave a note in History."),
@@ -234,7 +236,7 @@ public enum ComponentSchema {
 
     private static func actions() -> JSONValue {
         o([
-            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. Issuer actions can only be url, callback, command, openApp or dismiss; script, shortcut and snooze come from the template (they are yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
+            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. Issuer actions can only be url, callback, command, openApp, reply or dismiss; script, shortcut and snooze come from the template (they are yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
             "kinds": .object(Dictionary(uniqueKeysWithValues: actionKindDocs().map { ($0.0, s($0.1)) })),
             "payload": s("Every action receives {app, id, action:{id,label,kind}, fields:{token: value}, extra:{key: value}, notification:{...}} - the merged payload."),
         ])

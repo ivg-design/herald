@@ -59,6 +59,8 @@ final class AppController {
     let templates: TemplateStore
     let manifests: ManifestStore
     let registry: AppRegistry
+    /// What users typed into banners' inline Reply, waiting for an agent to read it (`GET /v1/replies`).
+    let replyQueue: ReplyQueue
     let settings = AppSettings.shared
     let sounds = SoundPlayer()
     let reminders = ReminderService()
@@ -77,11 +79,13 @@ final class AppController {
         templates = TemplateStore(directory: supportDirectory.appendingPathComponent("templates", isDirectory: true))
         manifests = ManifestStore(directory: supportDirectory.appendingPathComponent("manifests", isDirectory: true))
         registry = AppRegistry(file: supportDirectory.appendingPathComponent("apps.json"))
+        replyQueue = ReplyQueue(file: supportDirectory.appendingPathComponent("replies.json"))
         banners = BannerCenter(controller: self)
         confirmations = ConfirmationFlow(registry: registry, approvals: commandApprovals) { [unowned self] in changed() }
         confirmations.surface = banners
         parityService = ParityService(templates: templates, manifests: manifests, history: history, registry: registry,
-                                      assets: AssetStore.shared, approvals: commandApprovals, host: AppParityHost(controller: self))
+                                      assets: AssetStore.shared, approvals: commandApprovals, host: AppParityHost(controller: self),
+                                      replies: replyQueue)
         // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
@@ -103,6 +107,9 @@ final class AppController {
             changed()
         }
         voice.start()
+        // Installed agents (agent.claude-code, ...) get the current default manifest and template; the user's own edits stay.
+        AgentIssuer.refreshInstalled(supportDirectory: supportDirectory, registry: registry, manifests: manifests, templates: templates,
+                                     detectedHost: HeraldHostApp.detectCurrent())
         startServer()
         restoreBanners()
         changed()
@@ -351,7 +358,8 @@ final class AppController {
             return try PreviewRenderer.png(plan: plan, appName: appName, icon: AppIcons.icon(for: record, app: request.app),
                                            image: image, appearance: request.appearance, scale: request.scale,
                                            confirmation: request.confirmation, stackCount: request.stackCount,
-                                           stackExpanded: request.stackExpanded)
+                                           stackExpanded: request.stackExpanded,
+                                           reply: request.replying ? BannerReplyPrompt(placeholder: plan.replyPlaceholder, sample: request.replySample) : nil)
         } catch {
             throw BackendError(500, error.localizedDescription)
         }
@@ -580,12 +588,79 @@ final class AppController {
             runProcess(spec, action: action, origin: origin, item: item)
         case .openApp(let bundleId, let path):
             openApplication(bundleId: bundleId, path: path, action: action, item: item, manifest: manifest)
+        case .reply(let reply):
+            beginReply(reply, action: action, origin: origin, item: item, manifest: manifest)
         case .dismiss:
             dismissItem(app: app, id: id, action: action.label)
         case .snooze(let minutes):
             do { _ = try snoozeItem(app: app, id: id, minutes: minutes) }
             catch { flashFailure(app: app, id: id, reason: "could not snooze") }
         }
+    }
+
+    // MARK: Inline reply
+
+    /// A reply being typed: what the banner's field belongs to and where the answer goes.
+    private struct PendingReply {
+        let prompt: UUID
+        let reply: HeraldReply
+        let label: String
+        let origin: HeraldActionOrigin
+    }
+    private var pendingReplies: [String: PendingReply] = [:]
+
+    /// Reply was pressed: the buttons give way to a text field inside the banner (never a window, never an activation).
+    private func beginReply(_ reply: HeraldReply, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
+                            manifest: HeraldManifest?) {
+        let key = BannerCenter.key(item.app, item.id)
+        let label = origin == .issuer
+            ? (ActionRunner.issuerLabel(id: action.id, notification: item.notification, manifest: manifest) ?? action.label)
+            : action.label
+        let prompt = BannerReplyPrompt(placeholder: reply.placeholder)
+        confirmations.drop(app: item.app, id: item.id)
+        guard banners.setReply(app: item.app, id: item.id, prompt) else {
+            flashFailure(app: item.app, id: item.id, reason: "the banner is not on screen to reply on")
+            return
+        }
+        pendingReplies[key] = PendingReply(prompt: prompt.id, reply: reply, label: label, origin: origin)
+    }
+
+    /// Send on the reply field. The text goes onto the notification's History record (`reply`, `repliedAt`) and into the app's
+    /// reply queue; with a callback (the action's own, or the app's registered URL) it is also POSTed there. The banner is
+    /// then dismissed (after the callback has gone, when there is one). An empty reply, or one for a prompt that was
+    /// replaced, is ignored.
+    func sendReply(app: String, id: String, prompt: UUID, text: String) {
+        let key = BannerCenter.key(app, id)
+        guard let pending = pendingReplies[key], pending.prompt == prompt,
+              let stored = ReplyRecorder.record(app: app, id: id, text: text, history: history, queue: replyQueue),
+              let item = history.item(app: app, id: id) else { return }
+        let clean = stored.text
+        pendingReplies[key] = nil
+        banners.setReply(app: app, id: id, nil)
+        changed()
+        guard var callback = pending.reply.callback else {
+            dismissItem(app: app, id: id, action: "reply")
+            return
+        }
+        var payload: [String: JSONValue] = [:]
+        if case .object(let o)? = callback.payload { payload = o }
+        payload["reply"] = .string(clean)
+        callback.payload = .object(payload)
+        runCallbackButton(item: history.item(app: app, id: id) ?? item, label: pending.label, callback: callback)
+    }
+
+    func cancelReply(app: String, id: String, prompt: UUID) {
+        let key = BannerCenter.key(app, id)
+        guard pendingReplies[key]?.prompt == prompt else { return }
+        pendingReplies[key] = nil
+        banners.setReply(app: app, id: id, nil)
+    }
+
+    /// The banner went away or was replaced while its reply field was up: nothing is stored.
+    func dropReply(app: String, id: String) {
+        let key = BannerCenter.key(app, id)
+        guard pendingReplies.removeValue(forKey: key) != nil else { return }
+        banners.setReply(app: app, id: id, nil)
     }
 
     // MARK: Open app

@@ -116,6 +116,53 @@ struct MCPSettingsView: View {
             }
             .heraldHelp(name: "Design notifications", detail: "open the Designer on this agent's banner")
         }
+        opensLine(agent)
+    }
+
+    /// "Opens:" the application the banner's Open button brings to the front (the manifest's appBundleId / appPath).
+    @ViewBuilder private func opensLine(_ agent: AgentIdentity) -> some View {
+        let _ = ticker.tick
+        let manifest = controller.manifests.get(app: agent.appID)
+        let found = HeraldOpenAppResolver.resolve(HeraldOpenAppResolver.candidates(bundleId: nil, path: nil, manifest: manifest,
+                                                                                    appName: ""))
+        let target = AgentIdentity.opens(of: manifest)
+        HStack(spacing: 8) {
+            Text("Opens:").font(.caption).foregroundStyle(.secondary)
+            if let found {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: found.url.path)).resizable().frame(width: 16, height: 16)
+                Text(found.url.deletingPathExtension().lastPathComponent).font(.caption)
+            } else {
+                Text(target.map(Self.describe) ?? "not set").font(.caption).foregroundStyle(.orange)
+            }
+            Spacer()
+            Button("Choose app\u{2026}") { chooseOpens(for: agent) }
+                .heraldHelp(name: "Choose app", detail: "pick the application the Open button brings to the front")
+            Button("Default") {
+                setOpens(agent.defaultOpens(detectedHost: HeraldHostApp.detectCurrent()), for: agent)
+            }
+            .heraldHelp(name: "Default app", detail: "Claude.app for Claude Desktop, otherwise the terminal Herald was started from, else Terminal")
+        }
+    }
+
+    private static func describe(_ t: HeraldHostApp.Target) -> String {
+        switch t { case .bundleId(let b): return b; case .path(let p): return (p as NSString).lastPathComponent }
+    }
+
+    private func setOpens(_ target: HeraldHostApp.Target, for agent: AgentIdentity) {
+        let m = AgentIssuer.manifest(settingOpens: target, app: agent.appID, appName: agent.name,
+                                     current: controller.manifests.get(app: agent.appID))
+        if controller.manifests.put(m) { controller.changed() }
+    }
+
+    private func chooseOpens(for agent: AgentIdentity) {
+        let p = NSOpenPanel()
+        p.title = "Choose the application Open should bring to the front"
+        p.allowedContentTypes = [.applicationBundle]
+        p.directoryURL = URL(fileURLWithPath: "/Applications")
+        p.allowsMultipleSelection = false
+        guard p.runModal() == .OK, let url = p.url else { return }
+        if let id = HeraldHostApp.bundleIdentifier(ofApp: url.path), HeraldManifest.isBundleId(id) { setOpens(.bundleId(id), for: agent) }
+        else { setOpens(.path(url.path), for: agent) }
     }
 
     @ViewBuilder private func genericControls(_ client: MCPClient) -> some View {

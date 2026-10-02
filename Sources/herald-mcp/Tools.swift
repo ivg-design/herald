@@ -12,14 +12,24 @@ final class MCPTools: @unchecked Sendable {
     /// The app a call uses when it leaves `app` out (`--agent`, issue #62); nil means `app` is required where it was.
     let defaultApp: String?
 
-    init(client: HeraldClient, previewDirectory: URL, defaultApp: String? = nil) {
+    /// Where this server runs (the terminal or editor of the agent), asked for when a client is installed so "Open" can bring
+    /// that application to the front. nil sends no hint (tests); `main` passes `HeraldHostApp.detectCurrent`.
+    let hostDetector: (@Sendable () -> String?)?
+
+    init(client: HeraldClient, previewDirectory: URL, defaultApp: String? = nil, hostDetector: (@Sendable () -> String?)? = nil) {
         self.client = client
         self.previewDirectory = previewDirectory
         self.defaultApp = defaultApp
+        self.hostDetector = hostDetector
     }
 
+    /// The buttons an agent's notification offers when it names none: Open (its host application), Reply (the inline field) and
+    /// Open link (collapsed unless the notification carries a `link`). Ids from the agent manifest (`AgentIdentity.manifest`).
+    static let agentActionIDs = ["open", "reply", "open-link"]
+
     /// The tools whose `app` falls back to the agent's own app.
-    static let appDefaulting: Set<String> = ["send_notification", "send_test", "speak", "dismiss", "list_history", "list_stacks"]
+    static let appDefaulting: Set<String> = ["send_notification", "send_test", "speak", "dismiss", "list_history", "list_stacks",
+                                                  "get_replies", "wait_for_reply"]
 
     /// The definition as `tools/list` shows it with a default app: `app` is optional and the description says what it defaults to.
     static func withDefaultApp(_ d: MCPToolDefinition, _ app: String?) -> MCPToolDefinition {
@@ -39,6 +49,11 @@ final class MCPTools: @unchecked Sendable {
             if let app = defaultApp, Self.appDefaulting.contains(name), args.value("app") == nil {
                 var values = args.values
                 values["app"] = .string(app)
+                args = try MCPArgs(.object(values))
+            }
+            if name == "install_mcp", args.value("client") != nil, args.value("detectedHost") == nil, let host = hostDetector?() {
+                var values = args.values
+                values["detectedHost"] = .string(host)
                 args = try MCPArgs(.object(values))
             }
             switch name {
@@ -585,6 +600,10 @@ final class MCPTools: @unchecked Sendable {
             }
         }
         payload["allowCommandButtons"] = nil
+        // An agent's notification that names no buttons gets the agent's own: Open, Reply and (with a link) Open link.
+        if app.hasPrefix(HeraldAgent.prefix), payload["buttons"] == nil, payload["actions"] == nil, payload["actionIds"] == nil {
+            payload["actionIds"] = .array(Self.agentActionIDs.map { .string($0) })
+        }
         let id = try await client.notify(payload: .object(payload))
         return .json(.object(["sent": .bool(true), "id": .string(id), "app": .string(app)]))
     }

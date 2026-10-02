@@ -33,7 +33,8 @@ final class MCPServer: @unchecked Sendable {
     let defaultApp: String?
 
     init(client: HeraldClient, previewDirectory: URL, defaultApp: String? = nil, log: @escaping (String) -> Void = { _ in }) {
-        let tools = MCPTools(client: client, previewDirectory: previewDirectory, defaultApp: defaultApp)
+        let tools = MCPTools(client: client, previewDirectory: previewDirectory, defaultApp: defaultApp,
+                             hostDetector: { HeraldHostApp.detectCurrent() })
         self.defaultApp = defaultApp
         self.tools = tools
         self.resources = MCPResources(client: client, describe: { tools.describe($0) })

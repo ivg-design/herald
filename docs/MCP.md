@@ -268,10 +268,43 @@ moving or updating the product does not break it. When no icon can be found on t
 found** with a Choose button; nothing generated is put in its place.
 
 What gets registered: the app (display name, icon, default sound), a **manifest** (`title`, `body`, `status`, `project`,
-`session`, `task`, `tool`, `duration`, `link`, `needsInput`, with samples; actions `open`, `reply`, `dismiss`), and a default
-template named `agent` built from `builtin.compact`: the agent's icon, title, time and close button, the body (two lines), a
-**status badge** carrying the agent's symbol, the project, and the action row. Send `status` as `done`, `failed`, `waiting` or
-`question`. Fields that are not sent collapse.
+`session`, `task`, `tool`, `duration`, `link`, `needsInput`, with samples; actions `open`, `reply`, `open-link`), and a default
+template named `agent`: the product icon, then the title and body, then the **status badge** (carrying the agent's symbol), the
+close button, the project and time, and the button row. Send `status` as `done`, `failed`, `waiting` or `question`. Fields that
+are not sent collapse. The status badge is not a button.
+
+Every control does something, and none repeats another:
+
+| Control | What it does |
+|---|---|
+| **x** (close) | Dismisses the banner. There is no Dismiss or Done button. |
+| **Open** | Brings the agent's **host application** to the front (never a URL). |
+| **Reply** | Swaps the buttons for a text field inside the banner. The text is stored on the notification (`reply`, `repliedAt`) and in the app's reply queue. |
+| **Open link** | Opens the notification's `link`. Present only when the notification has one. |
+
+An agent that names no buttons gets Open, Reply and (with a `link`) Open link. **Open** uses the manifest's `appBundleId`:
+Claude Desktop opens `Claude.app`; Claude Code, Codex and generic clients open the terminal or editor the install ran from
+(`__CFBundleIdentifier`, `TERM_PROGRAM`, then the parent processes: iTerm2, Terminal, Warp, Ghostty, VS Code, Cursor...),
+Terminal.app when none is found. Change it in Settings > MCP (**Opens:** > Choose app), with `install_mcp`'s `opens`, or with
+`update_app_settings` `{"opens": "com.googlecode.iterm2"}` (a bundle id or an `.app` path). Reinstalling keeps your choice.
+Herald also brings an installed agent's manifest, and its template when you never edited it, up to date at launch.
+
+### Ask the user a question
+
+MCP agents have no callback server, so Reply works through a queue:
+
+```text
+agent> send_notification {"title": "Which branch?", "body": "main or release/1.7?", "status": "question", "persistent": true}
+herald< {"sent": true, "id": "n-123", "app": "agent.claude-code"}
+agent> wait_for_reply {"notificationId": "n-123", "timeoutSeconds": 120}
+herald< {"replied": true, "reply": {"text": "release/1.7", "repliedAt": "...", "notificationId": "n-123", "app": "agent.claude-code"}}
+```
+
+`wait_for_reply` long-polls (1 to 300 s) and returns `{"replied": false, "timedOut": true}` when nothing came; call it again to keep
+waiting. `get_replies {app?, since?, consume?}` lists what is queued, oldest first; `consume: true` removes what it returned
+(History keeps the reply on the notification either way). The field never activates Herald: the banner takes keys only
+while you click into the field. Any issuer can declare an action of kind `reply` (optionally with a `callback`, which then also
+receives the text as `payload.reply`).
 
 With `--agent` (or `HERALD_AGENT`) in its configuration, `herald-mcp` uses that app when a call leaves `app` out
 (`send_notification`, `send_test`, `speak`, `dismiss`, `list_history`, `list_stacks`; an explicit `app` still wins), so an agent

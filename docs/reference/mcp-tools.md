@@ -294,11 +294,13 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `get_settings` | none | `GET /v1/settings` | Values, `schema`, `options` (sounds, displays, voices, corners, levels). |
 | `set_settings` | `settings` (object) | `PUT /v1/settings` | Keys: `port`, `launchAtLogin`, `muteAllSounds`, `stacking`, `historyCapPerApp`, `tooltipLevel`, `voiceEngine`, `voiceDefault`, `voiceSpeed`, `voiceLang`, `voiceSystem`. All or nothing. |
 | `list_apps` | `app?` | `GET /v1/apps/settings` | Per-app settings, voice, approvals (read only) and the schema. |
-| `update_app_settings` | `app`, `settings` | `PUT /v1/apps/settings` | `sound`, `persistent`, `timeout`, `corner`, `display`, `muteBanners`, `stacking`, `speak`, `voice`, `urgentBreaksQuiet`; `revokeCommands: true`, `revokeCallbackHost: true`. Granting an approval is refused (403). |
+| `update_app_settings` | `app`, `settings` | `PUT /v1/apps/settings` | `sound`, `persistent`, `timeout`, `corner`, `display`, `muteBanners`, `stacking`, `opens`, `speak`, `voice`, `urgentBreaksQuiet`; `revokeCommands: true`, `revokeCallbackHost: true`. Granting an approval is refused (403). |
 | `register_app` | `app`, `appName?`, `icon?`, `bundleId?`, `callbackURL?`, `allowCommands?`, `defaults?` | `POST /v1/register` | `allowCommands` is only a request; the user confirms it in Settings. |
 | `voice_status` | none | `GET /v1/voice` | Engine, Kokoro installed or missing, progress, voices. |
 | `install_voice` | `action`: `install`, `cancel`, `useExisting` | `POST /v1/voice/install` | `install` downloads about 340 MB: ask first. |
-| `install_mcp` | `client?`, `reinstall?`, `name?`, `icon?` | `GET /v1/mcp`, `POST /v1/mcp/install` | Without `client`: status. Edits another application's configuration, writes `--agent`, and registers the agent as an issuer ([MCP.md](../MCP.md#agents-as-issuers)). |
+| `install_mcp` | `client?`, `reinstall?`, `name?`, `icon?`, `opens?` | `GET /v1/mcp`, `POST /v1/mcp/install` | Without `client`: status. Edits another application's configuration, writes `--agent`, and registers the agent as an issuer ([MCP.md](../MCP.md#agents-as-issuers)). |
+| `get_replies` | `app?`, `since?`, `consume?` | `GET /v1/replies` | The answers typed into banners' Reply, oldest first; `consume` removes them from the queue. |
+| `wait_for_reply` | `notificationId`, `app?`, `timeoutSeconds?` (at most 300), `consume?` | `GET /v1/replies/wait` | Long-polls for the reply to one notification; see [Ask the user a question](../MCP.md#ask-the-user-a-question). |
 | `list_approvals` | none | `GET /v1/actions/approvals` | Template commands, scripts and Shortcuts the user approved. |
 | `revoke_approval` | `app`, `template` | `DELETE /v1/actions/approvals` | Destructive. There is no tool that grants one. |
 

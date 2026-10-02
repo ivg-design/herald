@@ -149,7 +149,7 @@ public enum CLIArguments {
       template list [--app ID] | template put FILE|- | template delete --app ID --name N
       template duplicate --app ID --name N [--new-name M] [--to-app ID] | template rename --app ID --name N --new-name M
       template default --app ID (--name N | --clear)
-      mcp install CLIENT [--reinstall] [--name "My Bot"] [--icon FILE]   (also registers the agent as app agent.<client>)
+      mcp install CLIENT [--reinstall] [--name "My Bot"] [--icon FILE] [--opens APP]   (also registers the agent as app agent.<client>)
 
     register OPTIONS
       --app ID  --name NAME  --icon PATH|data:  --bundle-id ID  --callback-url URL

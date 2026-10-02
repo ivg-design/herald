@@ -33,7 +33,9 @@ public protocol ParityHost: AnyObject, Sendable {
     func mcpStatus() async throws -> JSONValue
     /// `name` is the generic client's name (its app becomes `agent.<slug>`); `icon` a file to use as its icon. Installing also
     /// registers the agent as an issuer (app, manifest, default template, icon): see `AgentIssuer`.
-    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue
+    /// `opens` (a bundle id or `.app` path) is what the agent's "Open" button brings to the front; `detectedHost` is the terminal or editor
+    /// the request came from (`herald-mcp` detects it), used when nothing was chosen.
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?, opens: String?, detectedHost: String?) async throws -> JSONValue
     /// Shows a stored notification again as a new banner. Returns its id.
     func reshow(_ n: HeraldNotification) async throws -> String
     /// Closes the banner of a notification that is being deleted from History.
@@ -51,7 +53,7 @@ public extension ParityHost {
     func voiceState() async throws -> JSONValue { throw BackendError(501, "voice is not supported") }
     func voiceInstall(action: String) async throws -> JSONValue { throw BackendError(501, "voice is not supported") }
     func mcpStatus() async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
-    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?, opens: String?, detectedHost: String?) async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
     func reshow(_ n: HeraldNotification) async throws -> String { throw BackendError(501, "re-show is not supported") }
     func closeBanner(app: String, id: String) async {}
     func changed() async {}
@@ -66,6 +68,8 @@ public final class ParityService: @unchecked Sendable {
     let bundles: TemplateBundleService
     let approvals: TemplateCommandApprovals
     let host: ParityHost
+    /// The answers typed into banners' inline Reply (see `ReplyQueue`).
+    public let replies: ReplyQueue
     /// Saves go through the app (it refreshes open windows); a service in a test passes the stores' own.
     let saveTemplate: (HeraldTemplate) throws -> Void
     let removeTemplate: (_ app: String, _ name: String) throws -> Void
@@ -74,12 +78,13 @@ public final class ParityService: @unchecked Sendable {
 
     public init(templates: TemplateStore, manifests: ManifestStore, history: HistoryStore, registry: AppRegistry,
                 assets: AssetStore, approvals: TemplateCommandApprovals, host: ParityHost,
+                replies: ReplyQueue = ReplyQueue(),
                 saveTemplate: ((HeraldTemplate) throws -> Void)? = nil,
                 removeTemplate: ((String, String) throws -> Void)? = nil,
                 saveManifest: ((HeraldManifest) throws -> Void)? = nil,
                 symbols: @escaping () -> SymbolListing? = { ParityService.systemSymbols }) {
         self.templates = templates; self.manifests = manifests; self.history = history; self.registry = registry
-        self.assets = assets; self.approvals = approvals; self.host = host
+        self.assets = assets; self.approvals = approvals; self.host = host; self.replies = replies
         self.bundles = TemplateBundleService(templates: templates, assets: assets, manifest: { manifests.get(app: $0) })
         self.saveTemplate = saveTemplate ?? { t in
             guard templates.put(t) else { throw BackendError(500, "could not save template \(t.name)") }
@@ -117,6 +122,8 @@ public final class ParityService: @unchecked Sendable {
         "/v1/mcp": ["GET"],
         "/v1/mcp/install": ["POST"],
         "/v1/actions/approvals": ["GET", "DELETE"],
+        "/v1/replies": ["GET"],
+        "/v1/replies/wait": ["GET"],
     ]
 
     public static func owns(_ path: String) -> Bool { methods[path] != nil }
@@ -160,6 +167,8 @@ public final class ParityService: @unchecked Sendable {
             case ("POST", "/v1/voice/install"): return try await voiceInstall(req)
             case ("GET", "/v1/mcp"): return Self.reply(try await host.mcpStatus())
             case ("POST", "/v1/mcp/install"): return try await mcpInstall(req)
+            case ("GET", "/v1/replies"): return getReplies(req)
+            case ("GET", "/v1/replies/wait"): return try await waitForReply(req)
             case ("GET", "/v1/actions/approvals"): return listApprovals()
             case ("DELETE", "/v1/actions/approvals"): return try await revokeApproval(req)
             default: return .error(404, "not found")
@@ -269,6 +278,11 @@ public final class ParityService: @unchecked Sendable {
         approvals["callbackHostApproved"] = rec.callbackHostApproved ?? NSNull()
         var o: [String: Any] = ["app": rec.registration.app, "appName": rec.displayName, "settings": settings,
                                 "voice": Self.any(.object(voice)), "approvals": approvals]
+        if let m = manifests.get(app: rec.registration.app) {
+            var s2 = o["settings"] as? [String: Any] ?? [:]
+            s2["opens"] = m.appBundleId ?? m.appPath ?? NSNull()
+            o["settings"] = s2
+        }
         if let b = rec.registration.bundleId { o["bundleId"] = b }
         if let c = rec.registration.callbackURL { o["callbackURL"] = c }
         return o
@@ -306,6 +320,10 @@ public final class ParityService: @unchecked Sendable {
             case "display": registry.update(app) { $0.screen = s.value.parityString == BannerDisplay.main ? nil : s.value.parityString }
             case "muteBanners": registry.update(app) { $0.mutedBanners = s.value.parityBool ?? false }
             case "stacking": registry.update(app) { $0.stacking = s.value.parityString.flatMap(StackingLevel.init(rawValue:)) }
+            case "opens":
+                guard let value = s.value.parityString, let target = HeraldHostApp.parseTarget(value) else { break }
+                try saveManifest(AgentIssuer.manifest(settingOpens: target, app: app, appName: registry.record(for: app)?.displayName,
+                                                      current: manifests.get(app: app)))
             case "speak", "voice", "urgentBreaksQuiet": try await host.applyAppVoice(app: app, key: s.key, value: s.value)
             case "revokeCommands": registry.update(app) { $0.commandsConfirmed = false }
             case "revokeCallbackHost": registry.update(app) { $0.callbackHostApproved = nil }
@@ -321,6 +339,56 @@ public final class ParityService: @unchecked Sendable {
         var x = d ?? HeraldAppDefaults()
         change(&x)
         return x
+    }
+
+    // MARK: Replies
+
+    static let maxReplyWait: Double = 300
+
+    private func replyJSON(_ r: HeraldReplyRecord) -> [String: Any] {
+        var o: [String: Any] = ["notificationId": r.notificationId, "app": r.app, "text": r.text, "repliedAt": ISODate.string(from: r.repliedAt)]
+        if let t = r.title { o["title"] = t }
+        return o
+    }
+
+    private func sinceDate(_ req: HTTPRequest) throws -> Date? {
+        guard let raw = query(req, "since") else { return nil }
+        if let n = Double(raw) { return Date(timeIntervalSince1970: n) }
+        guard let d = ISODate.parse(raw) else { throw BackendError(400, "since must be an ISO 8601 date or epoch seconds") }
+        return d
+    }
+
+    private func flag(_ req: HTTPRequest, _ key: String, default d: Bool) -> Bool {
+        guard let v = query(req, key)?.lowercased() else { return d }
+        return ["1", "true", "yes"].contains(v)
+    }
+
+    /// `GET /v1/replies?app=&since=&consume=`: the answers waiting in the queue, oldest first. `consume=true` takes them out.
+    func getReplies(_ req: HTTPRequest) -> HTTPResponse {
+        do {
+            let list = replies.list(app: query(req, "app"), since: try sinceDate(req), consume: flag(req, "consume", default: false))
+            return Self.reply(["replies": list.map(replyJSON), "count": list.count])
+        } catch let e as BackendError { return .error(e.status, e.message) }
+        catch { return .error(500, "\(error)") }
+    }
+
+    /// `GET /v1/replies/wait?id=&app=&timeout=&consume=`: long-polls until the notification `id` has been replied to, up to
+    /// `timeout` seconds (1 to 300, default 60). Answers at once when the reply is already there (queue, else the
+    /// notification's History record). 200 `{replied:true, reply}` or 200 `{replied:false, timedOut:true}`.
+    func waitForReply(_ req: HTTPRequest) async throws -> HTTPResponse {
+        let id = try requiredQuery(req, "id"), app = query(req, "app")
+        let seconds = min(max(Double(query(req, "timeout") ?? "") ?? 60, 1), Self.maxReplyWait)
+        let consume = flag(req, "consume", default: true)
+        let deadline = Date().addingTimeInterval(seconds)
+        while true {
+            if let r = replies.reply(to: id, app: app, consume: consume) { return Self.reply(["replied": true, "reply": replyJSON(r)]) }
+            if let app, let item = history.item(app: app, id: id), let text = item.reply, let at = item.repliedAt {
+                return Self.reply(["replied": true, "reply": replyJSON(HeraldReplyRecord(notificationId: id, app: app, text: text, repliedAt: at,
+                                                                                           title: item.notification.title))])
+            }
+            if Date() >= deadline { return Self.reply(["replied": false, "timedOut": true, "waitedSeconds": seconds]) }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
     }
 
     // MARK: Approvals
@@ -358,10 +426,15 @@ public final class ParityService: @unchecked Sendable {
         guard Self.mcpClients.contains(client) else { throw BackendError(400, "client must be one of \(Self.mcpClients.joined(separator: ", "))") }
         let reinstall = (o["reinstall"] as? Bool) ?? false
         let name = try optionalString(o, "name"), icon = try optionalString(o, "icon")
+        let opens = try optionalString(o, "opens"), detected = try optionalString(o, "detectedHost")
+        if let opens, HeraldHostApp.parseTarget(opens) == nil {
+            throw BackendError(400, "opens must be a bundle identifier (com.example.App) or the path of an application (/Applications/Example.app)")
+        }
         if client == "generic", name == nil { throw BackendError(400, "name is required for the generic client (its app becomes agent.<slug>)") }
         if let icon, !FileManager.default.fileExists(atPath: (icon as NSString).expandingTildeInPath) { throw BackendError(400, "no such icon file: \(icon)") }
         return Self.reply(try await host.mcpInstall(client: client, reinstall: reinstall, name: name,
-                                                    icon: icon.map { ($0 as NSString).expandingTildeInPath }))
+                                                    icon: icon.map { ($0 as NSString).expandingTildeInPath },
+                                                    opens: opens, detectedHost: detected))
     }
 }
 

@@ -385,7 +385,7 @@ final class MCPProtocolTests: XCTestCase {
         "list_shortcuts", "add_action_rule", "list_history", "dismiss", "list_stacks", "speak", "get_quiet_hours", "set_quiet_hours",
         // Parity with the editor and Settings (docs/reference/parity.md).
         "get_settings", "set_settings", "list_apps", "update_app_settings", "register_app", "voice_status", "install_voice",
-        "install_mcp", "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template",
+        "install_mcp", "get_replies", "wait_for_reply", "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template",
         "export_template_bundle", "import_template_bundle", "delete_manifest", "list_assets", "upload_asset", "delete_asset",
         "list_symbols", "rive_check", "history_search", "reshow_notification", "delete_history", "export_history", "snooze",
         "expand_stack", "designer_snapshot",

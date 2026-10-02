@@ -77,6 +77,8 @@ final class ParityToolTests: XCTestCase {
             Case(tool: "install_voice", args: ["action": s("useExisting")], method: "POST", path: "/v1/voice/install", body: ["action": s("useExisting")]),
             Case(tool: "install_mcp", args: [:], method: "GET", path: "/v1/mcp"),
             Case(tool: "install_mcp", args: ["client": s("codex"), "reinstall": .bool(true)], method: "POST", path: "/v1/mcp/install", body: ["client": s("codex"), "reinstall": .bool(true)]),
+            Case(tool: "get_replies", args: ["app": s("demo"), "since": s("2026-10-02T10:00:00Z"), "consume": .bool(true)], method: "GET", path: "/v1/replies", query: ["app": "demo", "since": "2026-10-02T10:00:00Z", "consume": "true"]),
+            Case(tool: "wait_for_reply", args: ["notificationId": s("n1"), "app": s("demo"), "timeoutSeconds": .number(30)], method: "GET", path: "/v1/replies/wait", query: ["app": "demo", "id": "n1", "timeout": "30"]),
             Case(tool: "list_approvals", args: [:], method: "GET", path: "/v1/actions/approvals"),
             Case(tool: "revoke_approval", args: ["app": s("demo"), "template": s("hero")], method: "DELETE", path: "/v1/actions/approvals", query: ["app": "demo", "template": "hero"]),
             Case(tool: "duplicate_template", args: ["app": s("demo"), "name": s("hero"), "newName": s("b")], method: "POST", path: "/v1/templates/duplicate", body: ["app": s("demo"), "name": s("hero"), "newName": s("b")]),

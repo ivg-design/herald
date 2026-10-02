@@ -25,7 +25,7 @@ enum PreviewRenderer {
     /// The PNG for a plan. `icon` is the issuer's icon; `image` the picture bound to `{image}`, if any.
     static func png(plan: PreviewPlan, appName: String, icon: NSImage, image: NSImage?,
                     appearance: PreviewAppearance, scale: Double, confirmation: BannerConfirmation? = nil,
-                    stackCount: Int = 1, stackExpanded: Bool = false) throws -> Data {
+                    stackCount: Int = 1, stackExpanded: Bool = false, reply: BannerReplyPrompt? = nil) throws -> Data {
         let item = HeraldHistoryItem(id: plan.notification.id ?? "preview", app: plan.notification.app,
                                      notification: plan.notification, deliveredAt: plan.deliveredAt,
                                      fields: plan.fields)
@@ -38,6 +38,7 @@ enum PreviewRenderer {
         model.liveAnimations = false
         // A pending inline confirmation replaces the actions row, as in a live banner (DESIGN 8).
         model.confirmation = confirmation
+        model.reply = reply
         // The top card of a stack (DESIGN section 9): the stacked-card edges and the count badge, `{stack.count}` filled.
         if stackCount > 1, stackExpanded {
             // The open stack: the banner repeated, newest first, so the list, its scrolling cap and its footer can be seen.

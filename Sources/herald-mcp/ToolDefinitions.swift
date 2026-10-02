@@ -184,7 +184,8 @@ enum MCPToolCatalog {
             replaces the visible banner), template, buttons [{label, url|command|callback}], snooze, reminder, metadata. \
             Manifest fields go in `fields` (or at the top level) and are what the template binds. `actionIds` names actions \
             the manifest declares (or send `buttons`/`actions` in full); the manifest's actions are not shown unless the \
-            payload names them. Buttons with a shell `command` are refused unless allowCommandButtons is true: you can send \
+            payload names them (an agent app's own default is Open, Reply and, when it has a `link`, Open link; Reply opens a text \
+            field in the banner: send with persistent: true and read the answer with wait_for_reply or get_replies). Buttons with a shell `command` are refused unless allowCommandButtons is true: you can send \
             as any app id, so a command button would run under that app's command permission. Prefer send_test while \
             iterating on a template.
             """,

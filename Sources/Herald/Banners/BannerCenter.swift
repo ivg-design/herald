@@ -5,8 +5,10 @@ final class BannerPanel: NSPanel {
     /// Banners must never take keyboard focus from the app the user is working in: the
     /// panel is non-activating AND refuses key/main status, so a click on a button or
     /// link is handled without the user's typing target changing. Nothing in a banner
-    /// needs key status (there are no text fields).
-    override var canBecomeKey: Bool { false }
+    /// needs key status, except the inline reply field (`BannerCenter.setReply`): while that row is up the panel may become
+    /// key, and only because the user clicked the field (`becomesKeyOnlyIfNeeded`); it never activates Herald.
+    var allowsKey = false
+    override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 }
 
@@ -155,6 +157,7 @@ final class BannerCenter {
             e.model.failureLine = nil
             // The question was about the content that is being replaced: it is cancelled, not carried over.
             controller.confirmations.drop(app: item.app, id: item.id)
+            controller.dropReply(app: item.app, id: item.id)
             e.remaining = settings.timeout
             e.timeout = settings.timeout
             e.corner = settings.corner
@@ -177,6 +180,8 @@ final class BannerCenter {
         model.onConfirmationAnswer = { [weak self] confirmation, choice in
             self?.controller.confirmations.answer(app: item.app, id: item.id, confirmation: confirmation, choice)
         }
+        model.onReplySend = { [weak self] prompt, text in self?.controller.sendReply(app: item.app, id: item.id, prompt: prompt, text: text) }
+        model.onReplyCancel = { [weak self] prompt in self?.controller.cancelReply(app: item.app, id: item.id, prompt: prompt) }
 
         let stackModel = StackModel()
         stackModel.onExpand = { [weak self] in self?.setStackOpen(key: key, true) }
@@ -453,7 +458,7 @@ final class BannerCenter {
         let key = Self.key(app, id)
         // A question open on a banner that goes away is cancelled (nothing runs, nothing is remembered). Last, so
         // the entry is already gone and clearing the row does not lay the stack out a second time.
-        defer { controller.confirmations.drop(app: app, id: id) }
+        defer { controller.confirmations.drop(app: app, id: id); controller.dropReply(app: app, id: id) }
         cancelSnooze(key)
         let wasDeferred = deferred.remove(key)
         guard let e = entries.removeValue(forKey: key) else {
@@ -521,6 +526,26 @@ final class BannerCenter {
         e.model.confirmation = confirmation
         // A banner that is asking does not count down (see `tick`); the countdown starts over once it is answered.
         if wasAsking && confirmation == nil { e.remaining = e.timeout }
+        relayout(animated: true)
+        return true
+    }
+
+    // MARK: Inline reply
+
+    /// Puts the reply field on a banner (or takes it off with nil) in place of the actions row. For as long as it is up the
+    /// panel may become key, so a click in the field can take typing; it still never activates Herald and never becomes key
+    /// by itself. When the row goes the panel gives key status up again. False when no such banner is up.
+    @discardableResult
+    func setReply(app: String, id: String, _ prompt: BannerReplyPrompt?) -> Bool {
+        guard let e = entries[Self.key(app, id)] else { return false }
+        let wasReplying = e.model.reply != nil
+        e.model.reply = prompt
+        e.panel.allowsKey = prompt != nil
+        if prompt == nil {
+            if e.panel.isKeyWindow { e.panel.makeFirstResponder(nil); e.panel.resignKey() }
+            // A banner that was being answered counts down again from the start.
+            if wasReplying { e.remaining = e.timeout }
+        }
         relayout(animated: true)
         return true
     }
@@ -703,7 +728,7 @@ final class BannerCenter {
             let hovered = e.shown && e.panel.frame.contains(mouse)
             if e.model.hovering != hovered { e.model.hovering = hovered }
             // A stack counts down as one: hovering its card or having it open holds every member, hidden ones too.
-            guard let rem = e.remaining, !hovered, !stackHeld(e, mouse: mouse), e.model.confirmation == nil else { continue }
+            guard let rem = e.remaining, !hovered, !stackHeld(e, mouse: mouse), e.model.confirmation == nil, e.model.reply == nil else { continue }
             e.remaining = rem - 0.25
             if e.remaining! <= 0, let pair = split(e.key) { expired.append(pair) }
         }

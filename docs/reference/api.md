@@ -64,6 +64,7 @@ AUTH="Authorization: Bearer $(cat "$D/token")"
 | GET, PUT | [`/v1/settings/stacking`](#stacks) | The global stacking level. |
 | GET, PUT | [`/v1/settings/quiet-hours`](#quiet-hours) | Quiet hours. |
 | GET, PUT | [`/v1/settings`](#settings) | Every general and voice setting, validated. |
+| GET | [`/v1/replies`, `/v1/replies/wait`](#replies) | Answers typed into banners' Reply; long-poll for one. |
 | GET, PUT | [`/v1/apps/settings`](#per-app-settings) | Per-app sound, corner, display, mute, stacking, voice; approvals (revoke only). |
 | GET, POST, DELETE | [`/v1/assets`](#assets) | An app's Rive files and images. |
 | POST | [`/v1/templates/duplicate`, `/rename`](#template-duplicate-rename-default) | Duplicate or rename a template. |
@@ -355,6 +356,15 @@ otherwise); `limit` defaults to 100 (at most 1000). Use the names for a componen
   the agent as an issuer: app `agent.claude-code`, `agent.codex`, `agent.claude-desktop` or `agent.<slug of name>` (`generic` needs
   `name`), a manifest, a default template `agent` and the product's icon (`icon` picks a file instead; `400` if it is missing).
   Re-running keeps what the user changed ([../MCP.md](../MCP.md#agents-as-issuers)). `cli` installs the `herald` tool into `/usr/local/bin`.
+
+## Replies
+
+A `reply` action (the agent default's Reply, or any issuer's) shows a text field inside the banner; the text lands on the history record (`reply`, `repliedAt`) and in a per-app queue (at most 200 per app).
+
+- `GET /v1/replies?app=&since=&consume=`: `{"replies":[{notificationId, app, text, repliedAt, title}], "count"}`, oldest first. `since` is ISO 8601 or epoch seconds. `consume=true` removes the returned replies from the queue.
+- `GET /v1/replies/wait?id=&app=&timeout=&consume=`: long-polls up to `timeout` seconds (1 to 300, default 60). `{"replied":true,"reply":{...}}` as soon as it exists (also from History), else `{"replied":false,"timedOut":true}`. `consume` defaults to true. `400` without `id`.
+
+`/v1/preview` also takes `"replying": true` (and `"replySample"`) to draw the reply field instead of the buttons. `PUT /v1/apps/settings` takes `opens` (bundle id or `.app` path): what Open brings to the front. `POST /v1/mcp/install` takes `opens` and `detectedHost`.
 
 ## Approvals
 

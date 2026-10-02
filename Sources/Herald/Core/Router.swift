@@ -77,6 +77,9 @@ public struct PreviewSpec: Sendable, Equatable {
     /// An inline confirmation to draw on the banner, replacing its actions row (DESIGN 8), so a pending
     /// "Run this command?" can be checked without driving the UI. nil draws the banner as usual.
     public var confirmation: BannerConfirmation?
+    /// Draws the inline reply field in place of the actions row (a `reply` action pressed), with `replySample` typed in it.
+    public var replying: Bool
+    public var replySample: String
     /// Draws the banner as the top card of a stack of this many notifications (DESIGN section 9): the stacked-card
     /// edges, the count badge and `{stack.count}`. 1 draws the banner as usual.
     public var stackCount: Int
@@ -86,7 +89,9 @@ public struct PreviewSpec: Sendable, Equatable {
 
     public init(template: PreviewTemplateChoice? = nil, app: String, data: HeraldNotification? = nil,
                 appearance: PreviewAppearance = .light, scale: Double = PreviewSpec.defaultScale,
-                confirmation: BannerConfirmation? = nil, stackCount: Int = 1, stackExpanded: Bool = false) {
+                confirmation: BannerConfirmation? = nil, stackCount: Int = 1, stackExpanded: Bool = false,
+                replying: Bool = false, replySample: String = "") {
+        self.replying = replying; self.replySample = replySample
         self.template = template; self.app = app; self.data = data
         self.appearance = appearance; self.scale = scale; self.confirmation = confirmation
         self.stackCount = stackCount; self.stackExpanded = stackExpanded
@@ -487,8 +492,15 @@ public final class Router: @unchecked Sendable {
         case let b as Bool: stackExpanded = b
         default: throw BackendError(400, "invalid field: stackExpanded (true or false)")
         }
+        var replying = false
+        switch obj["replying"] {
+        case nil, is NSNull: break
+        case let b as Bool: replying = b
+        default: throw BackendError(400, "invalid field: replying (true or false)")
+        }
         return PreviewSpec(template: template, app: app, data: data, appearance: appearance, scale: scale,
-                           confirmation: confirmation, stackCount: stackCount, stackExpanded: stackExpanded)
+                           confirmation: confirmation, stackCount: stackCount, stackExpanded: stackExpanded,
+                           replying: replying, replySample: (obj["replySample"] as? String) ?? "")
     }
 
     /// The `data` object as a notification, by the same rules as `/v1/notify`: its notification keys are

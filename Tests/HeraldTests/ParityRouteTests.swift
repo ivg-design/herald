@@ -13,6 +13,7 @@ final class ParityRouteTests: XCTestCase {
         var closed: [(String, String)] = []
         var changes = 0
         var installs: [(String, Bool, String?, String?)] = []
+        var installOpens: [(String?, String?)] = []
         var voiceActions: [String] = []
         func settingValue(_ key: String) async -> JSONValue? { values[key] }
         func applySetting(_ key: String, _ value: JSONValue) async throws { applied.append((key, value)); values[key] = value }
@@ -22,7 +23,7 @@ final class ParityRouteTests: XCTestCase {
         func voiceState() async throws -> JSONValue { .object(["engine": .string("system")]) }
         func voiceInstall(action: String) async throws -> JSONValue { voiceActions.append(action); return .object(["ok": .bool(true)]) }
         func mcpStatus() async throws -> JSONValue { .object(["server": .string("/x/herald-mcp")]) }
-        func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue { installs.append((client, reinstall, name, icon)); return .object(["ok": .bool(true)]) }
+        func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?, opens: String?, detectedHost: String?) async throws -> JSONValue { installs.append((client, reinstall, name, icon)); installOpens.append((opens, detectedHost)); return .object(["ok": .bool(true)]) }
         func reshow(_ n: HeraldNotification) async throws -> String { reshown.append(n); return "again" }
         func closeBanner(app: String, id: String) async { closed.append((app, id)) }
         func changed() async { changes += 1 }

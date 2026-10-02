@@ -16,7 +16,7 @@ merged payload. The short guide is [../ACTIONS.md](../ACTIONS.md); this page is 
 |---|---|---|---|
 | `id` | string | all | Stable name. Rules (`match`) and components (`actionRef`) refer to it. Defaults to a slug of the label (`"Mark as Read"` becomes `mark-as-read`). |
 | `label` | string | all | Button text; `{tokens}` are filled; falls back to the `id` if that leaves nothing. Required (defaults to `id` if omitted). |
-| `kind` | string | all | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `dismiss`, `snooze`. May be omitted when exactly one of `shortcut`, `script`, `command`, `callback`, `url`, `bundleId`/`path` is present (checked in that order). |
+| `kind` | string | all | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `reply`, `dismiss`, `snooze`. May be omitted when exactly one of `shortcut`, `script`, `command`, `callback`, `url`, `bundleId`/`path` is present (checked in that order). |
 | `style` | string | all | `normal`, `prominent`, `destructive` (asks for confirmation before running), `cancel`; `default` means `normal`. |
 | `url` | string | `url` | An http, https or mailto URL; may contain `{tokens}` in a template action. |
 | `callback` | object | `callback` | `{url?, payload?}`; `url` defaults to the app's registered `callbackURL`. |
@@ -40,6 +40,7 @@ v1 buttons (`label` plus one of `url`, `command`, `callback`) are accepted every
 | `command` | Runs `/bin/zsh -lc "<command>"` in your home folder. The command text is **never interpolated**; the data arrives on stdin and in `HERALD_*` variables. |
 | `script` | Runs a file from the scripts folder with the merged payload JSON on stdin. `.sh`/`.zsh` run through zsh, `.bash` bash, `.py` python3, `.rb` ruby, `.pl` perl, `.scpt`/`.applescript` osascript; otherwise the file must be executable. |
 | `shortcut` | `/usr/bin/shortcuts run "<name>" --input-path <temp file>`; the file holds `input` (filled with fields, `.txt`) or the merged payload JSON (`.json`). |
+| `reply` | Swaps the buttons for a text field inside the banner; the text is stored (`reply`, `repliedAt`, reply queue) and POSTed to `callback` when there is one. Any issuer may declare it. |
 | `openApp` | Brings an application to the front. See [Open app](#open-app). |
 | `dismiss` | Closes the banner; the notification stays in History. |
 | `snooze` | Hides the banner and brings it back after `snoozeMinutes`, or opens the menu when there are none. |

@@ -107,6 +107,8 @@ public enum ActionPlan: Equatable, Sendable {
     /// Bring an application to the front. `bundleId` and `path` are the action's own, already checked for shape; the
     /// controller adds the manifest, the registration and the app name behind them (`HeraldOpenAppResolver`).
     case openApp(bundleId: String?, path: String?)
+    /// Show the inline reply field on the banner (`HeraldReply` carries the placeholder and an optional callback).
+    case reply(HeraldReply)
 }
 
 // MARK: - Launching processes
@@ -305,6 +307,7 @@ public final class ActionRunner: Sendable {
         case .dismiss: return "dismiss"
         case .snooze: return "snooze \(action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes) min"
         case .openApp: return "open app: " + (action.bundleId ?? action.path ?? "the issuing application")
+        case .reply: return "reply"
         }
     }
 
@@ -335,7 +338,7 @@ public final class ActionRunner: Sendable {
             guard !n.isEmpty else { return nil }
             let input = (action.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return "shortcut: \(n) input: " + (input.isEmpty ? "<full notification JSON>" : input)
-        case .url, .callback, .dismiss, .snooze, .openApp:
+        case .url, .callback, .dismiss, .snooze, .openApp, .reply:
             return nil
         }
     }
@@ -381,9 +384,11 @@ public final class ActionRunner: Sendable {
 
     /// The legacy v1 button as an action, with v1's precedence (url, then command, then callback, else dismiss).
     public static func legacyAction(_ b: HeraldButton) -> HeraldAction {
-        let kind: HeraldActionKind = b.url != nil ? .url : b.command != nil ? .command : b.callback != nil ? .callback : .dismiss
+        let kind: HeraldActionKind = b.reply != nil ? .reply : b.url != nil ? .url : b.command != nil ? .command
+            : b.callback != nil ? .callback : b.openApp != nil ? .openApp : .dismiss
         return HeraldAction(id: HeraldAction.slug(b.label), label: b.label, kind: kind, style: b.style,
-                            url: b.url, callback: b.callback, command: b.command)
+                            url: b.url, callback: b.callback, command: b.command, bundleId: b.openApp?.bundleId,
+                            path: b.openApp?.path, reply: b.reply)
     }
 
     /// Every action a banner for `notification` can offer, with its origin: the issuer's buttons after the
@@ -456,6 +461,7 @@ public final class ActionRunner: Sendable {
         case .shortcut: return planShortcut(action, inv)
         case .dismiss: return .success(.dismiss)
         case .openApp: return planOpenApp(action)
+        case .reply: return .success(.reply(action.reply ?? HeraldReply()))
         case .snooze:
             let minutes = Double(action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes)
             guard Snooze.isValid(minutes: minutes) else { return .failure(ActionError("invalid snooze time")) }

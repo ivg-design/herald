@@ -84,9 +84,11 @@ extension CLIArguments {
             guard sub == "install" else { throw CLIParseError("mcp needs status or install CLIENT") }
             let (w, flags) = words(Array(rest.dropFirst()))
             guard w.count == 1 else { throw CLIParseError("mcp install needs one client: \(["claudeCode", "codex", "claudeDesktop", "cli", "generic"].joined(separator: ", "))") }
-            let o = try Options(flags, values: ["--name", "--icon"], bools: ["--reinstall"])
-            var body: [String: Any] = ["client": w[0], "reinstall": o.flag("--reinstall")]
+            let o = try Options(flags, values: ["--name", "--icon", "--opens"], bools: ["--reinstall"])
+            var body: [String: Any] = ["client": w[0], "reinstall": o.flag("--reinstall"),
+                                       "detectedHost": HeraldHostApp.detectCurrent()]
             if let n = o.value("--name") { body["name"] = n }
+            if let a = o.value("--opens") { body["opens"] = a }
             if let i = o.value("--icon") { body["icon"] = absolute(i) }
             return .request(CLIRequest(method: "POST", path: "/v1/mcp/install", body: body))
         case "approvals":

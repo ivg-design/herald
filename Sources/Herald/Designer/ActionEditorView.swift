@@ -19,6 +19,7 @@ extension HeraldActionKind {
         case .dismiss: return "Dismiss"
         case .snooze: return "Snooze"
         case .openApp: return "Open app"
+        case .reply: return "Reply inside the banner"
         }
     }
 
@@ -32,6 +33,7 @@ extension HeraldActionKind {
         case .dismiss: return "xmark.circle"
         case .snooze: return "moon.zzz"
         case .openApp: return "arrow.up.forward.app"
+        case .reply: return "arrowshape.turn.up.left"
         }
     }
 }
@@ -49,6 +51,7 @@ extension HeraldAction {
         case .dismiss: return "Closes the banner"
         case .snooze: return "Snoozes for \(snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes) min"
         case .openApp: return "Brings \(bundleId ?? path.map { ($0 as NSString).lastPathComponent } ?? "the issuing app") to the front"
+        case .reply: return "Asks for a reply inside the banner"
         }
     }
 }
@@ -132,6 +135,7 @@ private struct ActionRowView: View {
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
                 if isIssuer {
+                    Text("Button style").font(.caption2).foregroundStyle(.secondary)
                     Menu {
                         ForEach(ActionStyleCopy.options, id: \.value) { s in
                             Button { model.setActionStyle(row.id, style: s.value, original: row.base?.style) } label: {
@@ -269,7 +273,7 @@ struct ActionFormView: View {
                     Picker("Does this", selection: kindBinding) {
                         ForEach(HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
                     }.heraldHelp(.designerEditorKind)
-                    Picker("Style", selection: Binding(get: { HeraldActionStyle.parse(request.action.style).rawValue },
+                    Picker("Button style", selection: Binding(get: { HeraldActionStyle.parse(request.action.style).rawValue },
                                                        set: { request.action.style = $0 == "normal" ? nil : $0 })) {
                         ForEach(ActionStyleCopy.options, id: \.value) { Text($0.title).tag($0.value) }
                     }.heraldHelp(.designerEditorStyle)
@@ -344,6 +348,7 @@ struct ActionFormView: View {
         case .callback: if payloadError { return "The payload is not valid JSON." }
         case .snooze: break
         case .dismiss: break
+        case .reply: break
         case .openApp:
             if let b = a.bundleId?.trimmingCharacters(in: .whitespaces), !b.isEmpty, !HeraldManifest.isBundleId(b) { return "That is not a bundle identifier (for example com.example.App)." }
             if let p = a.path?.trimmingCharacters(in: .whitespaces), !p.isEmpty, !p.lowercased().hasSuffix(".app") { return "The path must be an application, ending in .app." }
@@ -395,6 +400,8 @@ struct ActionFormView: View {
         case .dismiss:
             Section { note("Closes the banner.") }
         case .openApp: openAppSection
+        case .reply:
+            Section { note("Swaps the buttons for a text field inside the banner. The text goes to the notification's history record and the app's reply queue (get_replies, wait_for_reply).") }
         }
     }
 

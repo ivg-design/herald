@@ -25,11 +25,19 @@ enum AgentInstall {
             if let id = identity { o["agent"] = .object(["app": .string(id.appID), "name": .string(id.name), "server": .string("--agent \(id.slug)")]) }
             if let r = report {
                 o["issuer"] = .object(["app": .string(r.appID), "manifestWritten": .bool(r.manifestWritten), "templateCreated": .bool(r.templateCreated),
-                                       "template": .string(AgentIdentity.templateName), "icon": r.iconPath.map { .string($0) } ?? .null,
+                                       "template": .string(AgentIdentity.templateName), "templateUpgraded": .bool(r.templateUpgraded),
+                                       "opens": r.opens.map { AgentInstall.targetJSON($0) } ?? .null, "icon": r.iconPath.map { .string($0) } ?? .null,
                                        "iconMissing": .bool(r.iconMissing)])
             }
             if let e = registrationError { o["registrationError"] = .string(e) }
             return .object(o)
+        }
+    }
+
+    static func targetJSON(_ t: HeraldHostApp.Target) -> JSONValue {
+        switch t {
+        case .bundleId(let b): return .string(b)
+        case .path(let p): return .string(p)
         }
     }
 
@@ -60,7 +68,10 @@ enum AgentInstall {
         return await Task.detached { AgentIconSources.png(for: identity.kind, roots: roots)?.data }.value
     }
 
-    static func run(client: String, genericName: String?, iconFile: URL?, reinstall: Bool, env: Environment) async -> Outcome {
+    /// `opens` is the application the user chose for "Open" (a bundle id or an `.app` path); `detectedHost` is the
+    /// terminal or editor the install was asked from, used only when nothing was chosen and none is set yet.
+    static func run(client: String, genericName: String?, iconFile: URL?, reinstall: Bool, opens: String? = nil,
+                    detectedHost: String? = nil, env: Environment) async -> Outcome {
         guard let identity = AgentIdentity.client(client, genericName: genericName) else {
             let why = client == "generic" ? "Give a name for the client (for example \"My Bot\")." : "Unknown client \(client)."
             return Outcome(install: MCPInstallResult(ok: false, message: why, touched: ""))
@@ -81,7 +92,11 @@ enum AgentInstall {
 
         let png = await iconPNG(for: identity, picked: iconFile)
         do {
-            let report = try AgentIssuer.register(identity, iconPNG: png, supportDirectory: env.support, registry: env.registry,
+            let host = detectedHost.flatMap { HeraldHostApp.parseTarget($0) }.flatMap { t -> String? in
+                if case .bundleId(let b) = t { return b } else { return nil }
+            } ?? HeraldHostApp.detectCurrent()
+            let report = try AgentIssuer.register(identity, iconPNG: png, opens: opens.flatMap { HeraldHostApp.parseTarget($0) },
+                                                  detectedHost: host, supportDirectory: env.support, registry: env.registry,
                                                   manifests: env.manifests, templates: env.templates)
             return Outcome(install: install, identity: identity, report: report)
         } catch {

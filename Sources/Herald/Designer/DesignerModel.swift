@@ -1854,6 +1854,7 @@ final class DesignerModel: ObservableObject {
         case .dismiss: return "Dismiss"
         case .snooze: return "Snooze"
         case .openApp: return "Open app"
+        case .reply: return "Reply"
         }
     }
 

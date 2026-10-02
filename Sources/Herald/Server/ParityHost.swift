@@ -165,7 +165,7 @@ final class AppParityHost: ParityHost, @unchecked Sendable {
         }.value
     }
 
-    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue {
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?, opens: String?, detectedHost: String?) async throws -> JSONValue {
         if client == "cli" {
             let r = await Task.detached { MCPInstaller().installCLI() }.value
             guard r.ok else { throw BackendError(400, r.message) }
@@ -177,7 +177,7 @@ final class AppParityHost: ParityHost, @unchecked Sendable {
                                      support: controller.supportDirectory)
         }
         let outcome = await AgentInstall.run(client: client, genericName: name, iconFile: icon.map { URL(fileURLWithPath: $0) },
-                                             reinstall: reinstall, env: env)
+                                             reinstall: reinstall, opens: opens, detectedHost: detectedHost, env: env)
         guard outcome.install.ok else { throw BackendError(outcome.install.alreadyExists ? 409 : 400, outcome.install.message) }
         await MainActor.run { controller.changed() }
         var json = outcome.json

@@ -25,6 +25,9 @@ final class BannerModel: ObservableObject {
     /// place of the actions row (`GridBannerView` hides the action cells, `BannerView` draws the question under
     /// the grid) and the panel re-measures. Answered by `answerConfirmation`; never a modal alert (DESIGN 8).
     @Published var confirmation: BannerConfirmation?
+    /// The inline reply field (a `reply` action was pressed). Like `confirmation` it takes the actions row's place; only one
+    /// of the two is up at a time. Sent through `onReplySend`, dropped through `onReplyCancel`.
+    @Published var reply: BannerReplyPrompt?
     @Published var hovering = false
     /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
     /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
@@ -76,6 +79,9 @@ final class BannerModel: ObservableObject {
     var onExpandStack: () -> Void = {}
     /// A button of the inline confirmation was pressed: the id of the question it belongs to, and the choice.
     var onConfirmationAnswer: (UUID, ConfirmationChoice) -> Void = { _, _ in }
+    /// The reply field's Send (the id of its prompt, the text) and its cancel button.
+    var onReplySend: (UUID, String) -> Void = { _, _ in }
+    var onReplyCancel: (UUID) -> Void = { _ in }
     var onHeight: (CGFloat) -> Void = { _ in }
 
     init(item: HeraldHistoryItem, appName: String, icon: NSImage, image: NSImage?,
@@ -96,6 +102,9 @@ final class BannerModel: ObservableObject {
     func accent(dark: Bool) -> Color? {
         accentColor.map { Color(nsColor: BannerView.legible($0, dark: dark)) }
     }
+
+    /// A question or the reply field is on the banner in place of its actions row.
+    var replacesActions: Bool { confirmation != nil || reply != nil }
 
     /// A button on the confirmation row was pressed (a preview leaves `onConfirmationAnswer` a no-op).
     func answerConfirmation(_ confirmation: BannerConfirmation, _ choice: ConfirmationChoice) {
@@ -301,6 +310,10 @@ struct BannerView: View {
                                        scrolls: model.liveAnimations, accent: model.accent(dark: scheme == .dark)) {
                     model.answerConfirmation(confirmation, $0)
                 }
+            } else if let prompt = model.reply {
+                BannerReplyView(prompt: prompt, inset: model.grid.grid?.padding ?? 14, accent: model.accent(dark: scheme == .dark),
+                                editable: model.liveAnimations,
+                                send: { model.onReplySend(prompt.id, $0) }, cancel: { model.onReplyCancel(prompt.id) })
             } else if let line = model.failureLine {
                 FailureLine(text: line, inset: model.grid.grid?.padding ?? 14)
             }
