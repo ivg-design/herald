@@ -45,12 +45,18 @@ create a token, and approve a connector on the Mac.
 
 1. `relay_status`: read `setup.state`. `online` means it is done (go to step 7). `token-needed` or `ready` means continue.
 2. `relay_token_url`: tell the user to open `url` (the sign-up link is `signUpURL` if they have no Cloudflare account), press Continue to
-   summary, then Create Token, and paste the token to you. The page already has the three permissions.
+   summary, then Create Token, and paste the token to you. The page already has the permissions (three for the deploy, six Zone ones for the custom domain in step 6).
 3. `relay_set_cloudflare_token {token}`. Do not echo the token anywhere.
 4. Optional: `relay_settings` to read the Advanced values, `relay_settings {settings: {...}}` to change them before deploying.
 5. `relay_deploy`: takes up to about a minute; the reply is the step log. On failure the error is Cloudflare's message (for example a
    missing permission): fix it and call `relay_deploy` again, which is safe to repeat and upgrades in place.
-6. `relay_test`: `roundTrip: true` means a notification went through the relay and reached this Mac.
+6. Custom domain (REQUIRED for ChatGPT / OpenAI cloud agents, which Cloudflare blocks with Error 1010 on workers.dev; skip it for Claude/Codex
+   if their calls already work): `relay_zones`, ask the user which zone, then `relay_settings {settings: {customDomain: {zone, hostname}}}`
+   (suggest `herald.<zone>`; it redeploys, attaches the hostname, switches Browser Integrity Check off for it and re-points Herald, the Mac
+   stays paired). Read `warnings` in the reply (Bot Fight Mode on the zone must be turned off by the user). "Token is missing Zone
+   permissions" means: have the user create a new token from `relay_token_url` and repeat from step 3. Connectors added earlier must be
+   re-added with the new `mcpURL`.
+6b. `relay_test`: `roundTrip: true` means a notification went through the relay and reached this Mac.
 7. Connect the agent: `relay_instructions {client: "chatgpt"}` (OAuth: the user adds the URL as a connector in ChatGPT and approves on the Mac;
    `list_connectors` shows pending requests and who is connected) or `relay_instructions {client: "claude"|"codex"}` plus
    `create_agent_key {name, client}` (the key is shown once; hand over the connector block).

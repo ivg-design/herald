@@ -4,6 +4,7 @@ import AppKit
 /// Settings > Cloud > Advanced: every setting of the relay, visible and editable. A value that lives in the Worker redeploys it.
 struct CloudAdvancedView: View {
     let controller: AppController
+    @Binding var expanded: Bool
     @State private var draft = RelayCloudConfig()
     @State private var urlText = ""
     @State private var pairingText = ""
@@ -36,8 +37,10 @@ struct CloudAdvancedView: View {
     ]
 
     var body: some View {
-        DisclosureGroup("Advanced") {
+        DisclosureGroup("Advanced", isExpanded: $expanded) {
             VStack(alignment: .leading, spacing: 10) {
+                CloudCustomDomainView(controller: controller)
+                Divider()
                 row("Relay URL", help: "The relay this Mac connects to: yours on Cloudflare, or any other relay", error: nil) {
                     TextField("https://\u{2026}", text: $urlText).textFieldStyle(.roundedBorder)
                 }

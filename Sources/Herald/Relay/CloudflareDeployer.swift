@@ -98,6 +98,8 @@ public struct CloudflareError: Error, LocalizedError, Equatable, Sendable {
 
 public enum DeployStep: String, CaseIterable, Sendable {
     case verifyToken, account, subdomain, bucket, lifecycle, upload, route, health, delete
+    // The custom domain (only when one is set): see docs/CLOUD.md "Custom domain".
+    case zone, domain, configRule, wafSkip, botMode, domainHealth
 
     public var title: String {
         switch self {
@@ -110,6 +112,12 @@ public enum DeployStep: String, CaseIterable, Sendable {
         case .route: return "Switch on the workers.dev address"
         case .health: return "Wait for the relay to answer"
         case .delete: return "Delete the relay"
+        case .zone: return "Find the zone"
+        case .domain: return "Attach the custom domain"
+        case .configRule: return "Switch off Browser Integrity Check for it"
+        case .wafSkip: return "Skip the security-level challenge for it"
+        case .botMode: return "Check Bot Fight Mode"
+        case .domainHealth: return "Wait for the custom domain to answer"
         }
     }
 }
@@ -127,7 +135,13 @@ public struct DeployResult: Equatable, Sendable {
     public var workerURL: String
     public var bundleHash: String
     public var upgraded: Bool
+    /// https://<hostname> once the custom domain is attached and answering.
+    public var customURL: String? = nil
+    /// Not fatal, but the user must know (Bot Fight Mode on the zone, a rule that could not be written).
+    public var warnings: [String] = []
 }
+
+public struct CloudflareZoneInfo: Equatable, Sendable { public var id: String; public var name: String; public var status: String }
 
 // MARK: - Deployer
 
@@ -331,7 +345,139 @@ public struct CloudflareDeployer: Sendable {
             }
             throw CloudflareError(step: .health, status: 0, message: "\(url) did not answer in time (\(last)). It can take a minute after the first deploy; press Retry.")
         }
-        return DeployResult(accountId: accountId, subdomain: subdomain, workerURL: url, bundleHash: bundle.sourceHash, upgraded: upgraded)
+
+        // 9. The custom domain: Cloudflare's Browser Integrity Check blocks non-browser clients (cloud agents) on workers.dev and
+        //    cannot be switched off there, so the relay also answers on a hostname in a zone the user controls.
+        var customURL: String?
+        var warnings: [String] = []
+        if let cd = config.customDomain, !cd.hostname.isEmpty {
+            let zone: CloudflareZoneInfo = try await run(.zone) { () -> (CloudflareZoneInfo, String) in
+                let r = try await call("GET", "/zones?name=\(cd.zone)&account.id=\(accountId)", token: token)
+                guard r.ok else { throw zoneFail(.zone, r) }
+                guard let z = Self.zoneList(r).first(where: { $0.name == cd.zone }) else {
+                    throw CloudflareError(step: .zone, status: 404, message: "No zone named \(cd.zone) in this Cloudflare account. Pick one of the zones Herald lists, or skip the custom domain.")
+                }
+                return (z, z.name)
+            }
+            try await run(.domain) { () -> (Void, String) in
+                let body: [String: Any] = ["hostname": cd.hostname, "service": config.workerName, "environment": "production", "zone_id": zone.id, "zone_name": zone.name]
+                let r = try await call("PUT", "/accounts/\(accountId)/workers/domains", token: token, json: body)
+                guard r.ok else { throw zoneFail(.domain, r) }
+                return ((), cd.hostname)
+            }
+            let expression = "(http.host eq \"\(cd.hostname)\")"
+            try await run(.configRule) { () -> (Void, String) in
+                let rule: [String: Any] = ["description": Self.ruleDescription, "expression": expression, "enabled": true,
+                                           "action": "set_config", "action_parameters": ["bic": false]]
+                return ((), try await upsertRule(step: .configRule, zoneId: zone.id, phase: "http_config_settings", rule: rule, token: token))
+            }
+            // The WAF skip and the Bot Fight Mode check are helpful, not the fix itself: a token without Zone WAF still gets the rest.
+            do {
+                try await run(.wafSkip) { () -> (Void, String) in
+                    let rule: [String: Any] = ["description": Self.ruleDescription, "expression": expression, "enabled": true,
+                                               "action": "skip", "action_parameters": ["products": ["bic", "securityLevel"]]]
+                    return ((), try await upsertRule(step: .wafSkip, zoneId: zone.id, phase: "http_request_firewall_custom", rule: rule, token: token))
+                }
+            } catch let e as CloudflareError { warnings.append("The WAF skip rule was not written: \(e.message)") }
+            do {
+                try await run(.botMode) { () -> (Void, String) in
+                    let r = try await call("GET", "/zones/\(zone.id)/bot_management", token: token)
+                    guard r.ok else { throw zoneFail(.botMode, r) }
+                    let o = (r.result as? [String: Any]) ?? [:]
+                    var found: [String] = []
+                    if o["fight_mode"] as? Bool == true {
+                        found.append("Bot Fight Mode is on for \(zone.name). On the free plan no rule can bypass it, so it can still challenge cloud agents: turn it off under Security > Bots in the Cloudflare dashboard.")
+                    }
+                    if let m = o["sbfm_definitely_automated"] as? String, m != "allow" {
+                        found.append("Super Bot Fight Mode is set to \(m) for definitely automated traffic on \(zone.name): set it to Allow under Security > Bots, or cloud agents are still blocked.")
+                    }
+                    warnings += found
+                    return ((), found.isEmpty ? "off" : "ON: see the note")
+                }
+            } catch let e as CloudflareError { warnings.append("Could not check Bot Fight Mode: \(e.message)") }
+            let host = "https://" + cd.hostname
+            try await run(.domainHealth) { () -> (Void, String) in
+                var last = "no answer yet"
+                for attempt in 0..<healthAttempts {
+                    if attempt > 0 { await sleep(healthInterval) }
+                    switch await Self.health(url: host, http: http) {
+                    case .success: return ((), host)
+                    case .failure(let e): last = e.localizedDescription
+                    }
+                }
+                throw CloudflareError(step: .domainHealth, status: 0, message: "\(host) did not answer in time (\(last)). Cloudflare issues the certificate in a minute or two; press Retry.")
+            }
+            customURL = host
+        }
+        return DeployResult(accountId: accountId, subdomain: subdomain, workerURL: url, bundleHash: bundle.sourceHash, upgraded: upgraded, customURL: customURL, warnings: warnings)
+    }
+
+    // MARK: Custom domain helpers
+
+    public static let ruleDescription = "Herald relay: allow non-browser clients"
+
+    private static let permissionHint = "Token is missing Zone permissions (Zone: Read, DNS: Edit, Workers Routes: Edit, Zone Settings: Edit, Config Settings: Edit, Zone WAF: Edit). Create a new token from the pre-filled page in Herald and paste it, or turn off the custom domain."
+
+    /// A 401/403 on a zone call means the token lacks the Zone permissions; say so instead of Cloudflare's bare message.
+    private func zoneFail(_ step: DeployStep, _ r: Reply) -> CloudflareError {
+        if r.status == 401 || r.status == 403 || r.errors.contains(where: { [9109, 10000].contains($0.code) }) {
+            let detail = r.errors.map(\.message).filter { !$0.isEmpty }.joined(separator: "; ")
+            return CloudflareError(step: step, status: r.status, message: Self.permissionHint + (detail.isEmpty ? "" : " (Cloudflare: \(detail))"))
+        }
+        return fail(step, r)
+    }
+
+    private static func zoneList(_ r: Reply) -> [CloudflareZoneInfo] {
+        ((r.result as? [[String: Any]]) ?? []).compactMap {
+            guard let id = $0["id"] as? String, let name = $0["name"] as? String else { return nil }
+            return CloudflareZoneInfo(id: id, name: name, status: ($0["status"] as? String) ?? "")
+        }
+    }
+
+    /// Creates the phase's entry-point ruleset with the rule, or adds / updates the one rule (found by description) in it, leaving
+    /// every other rule alone. Returns "created" / "updated" / "added".
+    private func upsertRule(step: DeployStep, zoneId: String, phase: String, rule: [String: Any], token: String) async throws -> String {
+        let base = "/zones/\(zoneId)/rulesets"
+        let entry = try await call("GET", "\(base)/phases/\(phase)/entrypoint", token: token)
+        if !entry.ok {
+            if entry.status == 404 || entry.errors.contains(where: { $0.code == 10003 }) {
+                let made = try await call("PUT", "\(base)/phases/\(phase)/entrypoint", token: token, json: ["rules": [rule]])
+                guard made.ok else { throw zoneFail(step, made) }
+                return "created"
+            }
+            throw zoneFail(step, entry)
+        }
+        let o = (entry.result as? [String: Any]) ?? [:]
+        guard let rulesetId = o["id"] as? String else { throw CloudflareError(step: step, status: entry.status, message: "Cloudflare returned no ruleset for \(phase).") }
+        let existing = ((o["rules"] as? [[String: Any]]) ?? []).first { $0["description"] as? String == Self.ruleDescription }
+        if let rid = existing?["id"] as? String {
+            let r = try await call("PATCH", "\(base)/\(rulesetId)/rules/\(rid)", token: token, json: rule)
+            guard r.ok else { throw zoneFail(step, r) }
+            return "updated"
+        }
+        let r = try await call("POST", "\(base)/\(rulesetId)/rules", token: token, json: rule)
+        guard r.ok else { throw zoneFail(step, r) }
+        return "added"
+    }
+
+    /// The zones this token can see in the account, for the custom-domain picker.
+    public func zones(config: RelayCloudConfig) async throws -> [CloudflareZoneInfo] {
+        guard let token = secrets.get(.apiToken), !token.isEmpty else {
+            throw CloudflareError(step: .zone, status: 0, message: "Paste your Cloudflare API token first.")
+        }
+        var account = config.accountId
+        if account.isEmpty {
+            let r = try await call("GET", "/accounts", token: token)
+            guard r.ok else { throw fail(.account, r) }
+            let list = (r.result as? [[String: Any]]) ?? []
+            guard list.count == 1, let id = list[0]["id"] as? String else {
+                throw CloudflareError(step: .account, status: r.status, message: "Enter the account id in Advanced first (the token sees \(list.count) accounts).")
+            }
+            account = id
+        }
+        let r = try await call("GET", "/zones?account.id=\(account)&per_page=50", token: token)
+        guard r.ok else { throw zoneFail(.zone, r) }
+        return Self.zoneList(r).sorted { $0.name < $1.name }
     }
 
     // MARK: Health
@@ -388,6 +534,13 @@ public enum CloudflareLinks {
         ("workers_scripts", "edit", "Workers Scripts: Edit", "upload the relay, switch on its workers.dev address, set its variables"),
         ("workers_r2", "edit", "Workers R2 Storage: Edit", "create the bucket that holds voice replies and its 7-day expiry"),
         ("account_settings", "read", "Account Settings: Read", "find your account id"),
+        // Custom domain (needed by cloud agents such as ChatGPT: Cloudflare blocks them on workers.dev). Zone scope.
+        ("zone", "read", "Zone: Read", "list your zones and find the one for the custom domain"),
+        ("dns", "edit", "DNS: Edit", "Cloudflare creates the DNS record for the custom domain"),
+        ("workers_routes", "edit", "Workers Routes: Edit", "attach the relay to the custom domain"),
+        ("zone_settings", "edit", "Zone Settings: Edit", "read the zone's settings"),
+        ("config_settings", "edit", "Config Settings: Edit", "the Configuration Rule that switches Browser Integrity Check off for the relay hostname"),
+        ("waf", "edit", "Zone WAF: Edit", "a narrow rule that skips the security-level challenge for the relay hostname"),
     ]
 
     /// Cloudflare's "create a token from a link" page, pre-filled with the permissions above and the name "Herald relay".

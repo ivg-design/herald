@@ -7,6 +7,7 @@ struct CloudSettingsView: View {
     let controller: AppController
     @StateObject private var ticker = ChangeTicker()
     @State private var showDeploy = false
+    @State private var advancedOpen = false
     @State private var confirmOff = false
     @State private var busy = false
     @State private var message: String?
@@ -27,6 +28,9 @@ struct CloudSettingsView: View {
                     .disabled(relay.deployRunning || relay.relaySwitch.isBusy) .heraldHelp(.cloudEnable)
                 statusRow
                 if !relay.relayURL.isEmpty { connectorURLRow }
+                if relay.isPaired, relay.cloudConfig.value.customDomain == nil {
+                    CustomDomainBanner { advancedOpen = true }
+                }
                 if relay.isPaired, relay.updateAvailable {
                     HStack {
                         Text("A newer relay is bundled with this Herald (running \(relay.deployedVersion ?? "unknown"), new \(relay.bundledVersion)).").font(.caption)
@@ -70,7 +74,7 @@ struct CloudSettingsView: View {
                     }
                 }
             }
-            Section { CloudAdvancedView(controller: controller) }
+            Section { CloudAdvancedView(controller: controller, expanded: $advancedOpen) }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showDeploy) { DeployRelaySheet(controller: controller, isPresented: $showDeploy) }

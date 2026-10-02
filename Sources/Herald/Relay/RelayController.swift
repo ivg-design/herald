@@ -28,6 +28,10 @@ final class RelayController: RelayHost, RelayBackend {
     var deployFailure: String?
     var healthBundle: String?
     private var issuerKeys = Set<String>()
+    /// Addresses of this same Worker that settings just moved away from (a changed custom hostname), so the next deploy keeps the pairing.
+    var ownPreviousURLs: [String] = []
+    /// What the last deploy asked the user to know (Bot Fight Mode, reconnecting connectors).
+    var lastDeployWarnings: [String] = []
     private var monitor: NWPathMonitor?
     private var observers: [NSObjectProtocol] = []
 

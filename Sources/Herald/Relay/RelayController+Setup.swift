@@ -91,21 +91,56 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
                 log.add(e)
                 DispatchQueue.main.async { self?.controller.changed() }
             }
-            cloudConfig.update { $0.accountId = r.accountId; $0.subdomain = r.subdomain; $0.deployedHash = r.bundleHash; $0.deployedAt = Date() }
+            let previousCustom = cloudConfig.value.customURL
+            defer { ownPreviousURLs = [] }
+            cloudConfig.update {
+                $0.accountId = r.accountId; $0.subdomain = r.subdomain; $0.deployedHash = r.bundleHash; $0.deployedAt = Date()
+                if $0.customDomain != nil { $0.customDomain?.attached = r.customURL != nil }
+            }
             healthBundle = r.bundleHash
-            // A different relay than the one we were paired with: forget the old pairing before pairing with this one.
-            if relayURL != r.workerURL {
-                if isPaired { try? await relayUnpair(force: true) }
-                relayURL = r.workerURL
+            var warnings = r.warnings
+            let target = r.customURL ?? r.workerURL
+            if relayURL != target {
+                // The same Worker answers on both addresses and the device token is signed by the Worker, not tied to a hostname:
+                // moving between them keeps this Mac paired. Only a different relay (or a token the relay refuses) re-pairs.
+                let sameWorker = isPaired && ([r.workerURL, r.customURL, previousCustom].compactMap { $0 } + ownPreviousURLs).contains(relayURL)
+                if sameWorker {
+                    client.stop(); relayURL = target; healthBundle = r.bundleHash
+                    client.start()
+                    if await !deviceTokenWorks() {
+                        try? await relayUnpair(force: true)
+                    } else if r.customURL != nil {
+                        warnings.append("Connectors already added to a cloud agent are bound to the old address. Reconnect them with the new one: \(ConnectorConfig.mcpURL(relay: target)).")
+                    }
+                } else {
+                    if isPaired { try? await relayUnpair(force: true) }
+                    relayURL = target
+                }
             }
             await relaySwitch.turnOn()
             if case .failed(let m) = relaySwitch.state { deployFailure = m; throw BackendError(502, m) }
             await refreshKeys()
-            return RelayDeployReply(deployed: true, upgraded: r.upgraded, relayURL: r.workerURL, paired: isPaired, online: isOnline,
-                                    steps: log.events.map(RelayStepReport.init))
+            lastDeployWarnings = warnings
+            return RelayDeployReply(deployed: true, upgraded: r.upgraded, relayURL: target, paired: isPaired, online: isOnline,
+                                    steps: log.events.map(RelayStepReport.init), workersDevURL: r.workerURL, customURL: r.customURL, warnings: warnings)
         } catch let e as BackendError { throw e }
         catch let e as CloudflareError { deployFailure = e.message; throw BackendError(e.status == 0 ? 502 : e.status, e.errorDescription ?? e.message) }
         catch { deployFailure = error.localizedDescription; throw error }
+    }
+
+    /// Does the relay at the current URL accept this Mac's device token? (A 401 means pair again.)
+    private func deviceTokenWorks() async -> Bool {
+        guard let api = client.api else { return false }
+        do { _ = try await api.listKeys(); return true }
+        catch RelayError.http(let code, _) where code == 401 { return false }
+        catch { return true }   // unreachable for now is not a token problem
+    }
+
+    func relayZones() async throws -> RelayZonesReply {
+        do {
+            let z = try await CloudflareDeployer(secrets: cloudSecrets).zones(config: cloudConfig.value)
+            return RelayZonesReply(zones: z.map { RelayZone(id: $0.id, name: $0.name, status: $0.status) })
+        } catch let e as CloudflareError { throw BackendError(e.status == 0 ? 502 : e.status, e.errorDescription ?? e.message) }
     }
 
     func deleteRelay() async throws -> RelayDeleteReply {
@@ -113,7 +148,7 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
         do {
             try? await relayUnpair(force: true)
             let note = try await deployer.deleteRelay(config: cloudConfig.value)
-            cloudConfig.update { $0.deployedHash = ""; $0.deployedAt = nil }
+            cloudConfig.update { $0.deployedHash = ""; $0.deployedAt = nil; $0.customDomain?.attached = false }
             cloudSecrets.remove(.pairingSecret); cloudSecrets.remove(.relaySecret)
             relayURL = ""; healthBundle = nil
             relaySwitch.sync()
@@ -146,6 +181,7 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
         let new = try old.applying(patch)
         let errors = new.validate()
         guard errors.isEmpty else { throw BackendError(400, errors.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value)" }.joined(separator: "; ")) }
+        ownPreviousURLs = [old.canonicalURL].compactMap { $0 }
         cloudConfig.update { $0 = new.with(deployedHash: old.deployedHash, deployedAt: old.deployedAt) }
         client.pingSeconds = TimeInterval(new.pingSeconds)
         if let newURL, newURL != relayURL { relayURL = newURL; healthBundle = nil }
@@ -158,7 +194,7 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
             steps = r.steps; redeployed = true
         }
         controller.changed()
-        return RelaySettingsReply(settings: cloudConfig.value, pairingSecretSet: pairingSecretValue != nil, errors: [:], redeployed: redeployed, steps: steps)
+        return RelaySettingsReply(settings: cloudConfig.value, pairingSecretSet: pairingSecretValue != nil, errors: [:], redeployed: redeployed, steps: steps, warnings: redeployed ? lastDeployWarnings : [])
     }
 
     // MARK: Status
@@ -174,7 +210,9 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
         else { state = isOnline ? "online" : (client.state == .connecting ? "connecting" : "offline") }
         return RelaySetupStatus(
             state: state, hasToken: hasCloudflareToken, paired: isPaired, online: isOnline, relayURL: url,
-            mcpURL: url.isEmpty ? "" : ConnectorConfig.mcpURL(relay: url), bundledVersion: bundledVersion, deployedVersion: deployedVersion,
+            mcpURL: url.isEmpty ? "" : ConnectorConfig.mcpURL(relay: url),
+            workersDevURL: cloudConfig.value.workerURL, customURL: cloudConfig.value.customURL,
+            customDomainRecommended: isPaired && cloudConfig.value.customDomain == nil, bundledVersion: bundledVersion, deployedVersion: deployedVersion,
             updateAvailable: updateAvailable, message: deployFailure ?? lastError, steps: deployEvents.map(RelayStepReport.init), usage: usage)
     }
 

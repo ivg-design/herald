@@ -70,6 +70,7 @@ struct PairReply: Encodable { var paired: Bool; var code: String; var deviceId: 
 ///   POST /v1/relay/token           {token} stores the API token in the Keychain (never read back)
 ///   POST /v1/relay/deploy          deploys or upgrades the Worker in the user's Cloudflare account, pairs; returns the step log
 ///   GET|PUT /v1/relay/settings     every Advanced field; a change to a Worker value redeploys
+///   GET  /v1/relay/zones           the Cloudflare zones the token can see (for the custom domain; needs Zone: Read)
 ///   POST /v1/relay/delete          {confirm: true} deletes the Worker (and every mailbox) from Cloudflare
 ///   POST /v1/relay/test            health, then a notification through the relay and its receipt
 ///   GET  /v1/relay/instructions?client=chatgpt|claude|codex   the exact text to give that agent
@@ -149,6 +150,7 @@ extension RelayRoutes {
         case ("PUT", "settings"):
             guard case .object(let o)? = try? HeraldJSON.decoder().decode(JSONValue.self, from: req.body) else { throw BackendError(400, "body must be a JSON object of settings") }
             return HTTPResponse.json(200, try await setup.updateRelaySettings(o))
+        case ("GET", "zones"): return HTTPResponse.json(200, try await setup.relayZones())
         case ("POST", "delete"):
             struct Body: Decodable { var confirm: Bool? }
             guard ((try? HeraldJSON.decoder().decode(Body.self, from: req.body)) ?? Body()).confirm == true else {

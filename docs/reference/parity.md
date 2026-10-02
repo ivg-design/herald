@@ -125,6 +125,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Deploy / upgrade (Deploy, Update the relay, Redeploy), with the step log | `POST /v1/relay/deploy` | `relay_deploy` |
 | Enable relay off (unpair, revokes everything); Pair with a code | `POST /v1/relay/unpair`, `POST /v1/relay/pair` | `relay_unpair`, `relay_pair` |
 | Every Advanced field, read and write (a Worker value redeploys) | `GET`, `PUT /v1/relay/settings` | `relay_settings` |
+| Custom domain: list zones, set `customDomain {zone, hostname}` (attach, Browser Integrity Check rule, re-point) | `GET /v1/relay/zones`, `PUT /v1/relay/settings` | `relay_zones`, `relay_settings` |
 | Delete relay from Cloudflare (confirmation = `confirm: true`) | `POST /v1/relay/delete` | `relay_delete` |
 | Test connection | `POST /v1/relay/test` | `relay_test` |
 | ChatGPT / Claude / Codex instruction blocks | `GET /v1/relay/instructions` | `relay_instructions` |

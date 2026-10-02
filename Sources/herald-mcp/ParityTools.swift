@@ -242,7 +242,7 @@ enum ParityTools {
         // MARK: Relay setup (Settings > Cloud > Enable relay; docs/CLOUD.md, docs/AGENT-QUICKSTART.md "Set up the cloud relay")
         ParityTool(definition: MCPToolDefinition(
             name: "relay_token_url", title: "Cloudflare token page for the relay",
-            description: "The pre-filled Cloudflare page where the USER creates the API token Herald deploys the relay with (permissions Workers Scripts: Edit, Workers R2 Storage: Edit, Account Settings: Read; token name \"Herald relay\"), the sign-up link for a free Cloudflare account, and the permission list with the reason for each. Tell the user to open it, create the token and give it to you; then call relay_set_cloudflare_token.",
+            description: "The pre-filled Cloudflare page where the USER creates the API token Herald deploys the relay with (permissions Workers Scripts: Edit, Workers R2 Storage: Edit, Account Settings: Read, and for the custom domain Zone: Read, DNS: Edit, Workers Routes: Edit, Zone Settings: Edit, Config Settings: Edit, Zone WAF: Edit; token name \"Herald relay\"), the sign-up link for a free Cloudflare account, and the permission list with the reason for each. Tell the user to open it, create the token and give it to you; then call relay_set_cloudflare_token.",
             inputSchema: Schema.input(), readOnly: true, idempotent: true),
             route: { _ in RouteCall(method: "GET", path: "/v1/relay/token-url") }),
 
@@ -258,7 +258,7 @@ enum ParityTools {
 
         ParityTool(definition: MCPToolDefinition(
             name: "relay_deploy", title: "Deploy or upgrade the relay on Cloudflare",
-            description: "Deploys the relay Worker to the user's own Cloudflare account through the Cloudflare API (needs relay_set_cloudflare_token first), waits until it answers on its workers.dev address, then pairs this Mac with it. Returns the step log. Running it again upgrades the Worker in place (same name, secrets and data). Takes up to about a minute.",
+            description: "Deploys the relay Worker to the user's own Cloudflare account through the Cloudflare API (needs relay_set_cloudflare_token first), waits until it answers on its workers.dev address (and applies the custom domain from relay_settings when one is set), then pairs this Mac with it. Returns the step log. Running it again upgrades the Worker in place (same name, secrets and data). Takes up to about a minute.",
             inputSchema: Schema.input(), idempotent: true),
             route: { _ in RouteCall(method: "POST", path: "/v1/relay/deploy", timeout: 180) }),
 
@@ -278,9 +278,12 @@ enum ParityTools {
             name: "relay_settings", title: "Read or change the relay's Advanced settings",
             description: """
             Without arguments: every Advanced setting (relayURL, accountId, workerName, subdomain, bucket, audioRetentionDays, queueTTLHours, notificationsPerDay, maxQueue, \
-            bodyLimitBytes, ratePerKey, maxDevices, deviceName, pingSeconds), whether a pairing secret is set, and the deployed state. With `settings`: validate and \
-            save the listed ones; a change to a value that lives in the Worker redeploys it, and the reply says so with the step log. \
-            Never returns the Cloudflare token.
+            bodyLimitBytes, ratePerKey, maxDevices, deviceName, pingSeconds, customDomain {zone, hostname, attached}), whether a pairing secret is set, and the deployed state. With `settings`: validate and \
+            save the listed ones; a change to a value that lives in the Worker (or the custom domain) redeploys it, and the reply says so with the step log. \
+            Never returns the Cloudflare token. \
+            customDomain {zone, hostname} (null removes it) puts the relay on a hostname in the user's own Cloudflare zone, switches Browser Integrity Check off for that host and \
+            re-points Herald at it: REQUIRED for OpenAI/ChatGPT cloud agents, which Cloudflare blocks on workers.dev (Error 1010). Use relay_zones to pick the zone; connectors \
+            already added to an agent must be re-added with the new URL. Needs the token's Zone permissions (relay_token_url).
             """,
             inputSchema: Schema.input(["settings": Schema.object("Settings to change, by name, for example {\"maxQueue\": 50}.")]),
             idempotent: true),
@@ -288,6 +291,12 @@ enum ParityTools {
                 if case .object(let o)? = a.value("settings"), !o.isEmpty { return RouteCall(method: "PUT", path: "/v1/relay/settings", body: .object(o), timeout: 180) }
                 return RouteCall(method: "GET", path: "/v1/relay/settings")
             }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_zones", title: "Cloudflare zones for the custom domain",
+            description: "The zones (domains) in the user's Cloudflare account that the stored token can see, each with a suggested hostname (herald.<zone>). Pick one for relay_settings customDomain {zone, hostname}. Fails with a clear message when the token lacks Zone: Read (the user then creates a new token from relay_token_url).",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/zones", timeout: 60) }),
 
         ParityTool(definition: MCPToolDefinition(
             name: "relay_delete", title: "Delete the relay from Cloudflare",

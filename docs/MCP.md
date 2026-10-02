@@ -127,7 +127,7 @@ image, by path or base64) and `delete_asset`, `list_symbols` (SF Symbol names an
 `list_approvals` and `revoke_approval`, and `designer_snapshot` (the Designer drawn offscreen). Each is a thin wrapper
 over one HTTP route; arguments and routes are in [reference/mcp-tools.md](reference/mcp-tools.md#parity-tools).
 The whole cloud relay setup (Settings > Cloud > Enable relay) is reachable too: `relay_token_url`, `relay_set_cloudflare_token`, `relay_deploy`,
-`relay_pair`, `relay_unpair`, `relay_settings`, `relay_delete`, `relay_instructions` and `relay_test`, with `relay_status`, `list_connectors`,
+`relay_pair`, `relay_unpair`, `relay_settings`, `relay_zones`, `relay_delete`, `relay_instructions` and `relay_test`, with `relay_status`, `list_connectors`,
 `create_agent_key` and `revoke_agent_key`; the scripted walkthrough is in [AGENT-QUICKSTART.md](AGENT-QUICKSTART.md#set-up-the-cloud-relay-scripted-walkthrough).
 Grid, cell, component and action-rule edits are `put_template` (the template is one document), checked by the same
 validation the Designer uses. **Not exposed on purpose:** granting an app permission to run commands or call a remote

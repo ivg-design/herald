@@ -22,13 +22,35 @@ public struct RelayCloudConfig: Codable, Equatable, Sendable {
     /// The bundle hash that was last deployed, and when.
     public var deployedHash: String = ""
     public var deployedAt: Date?
+    /// A hostname in a zone of the user's own Cloudflare account that the relay also answers on. Needed by cloud agents (ChatGPT,
+    /// OpenAI sandboxes) that Cloudflare's Browser Integrity Check blocks on workers.dev. `attached` is set once Herald has done it.
+    public var customDomain: CustomDomain?
+
+    public struct CustomDomain: Codable, Equatable, Sendable {
+        public var zone: String
+        public var hostname: String
+        public var attached: Bool = false
+        public init(zone: String, hostname: String, attached: Bool = false) { self.zone = zone; self.hostname = hostname; self.attached = attached }
+        /// What Herald suggests for a zone.
+        public static func suggestedHostname(zone: String) -> String { "herald." + zone }
+    }
 
     public init() {}
 
+    /// The relay's workers.dev address (always on; the custom domain is in addition).
     public var workerURL: String? {
         guard !subdomain.isEmpty else { return nil }
         return "https://\(workerName).\(subdomain).workers.dev"
     }
+
+    /// The custom address once Herald has set it up.
+    public var customURL: String? {
+        guard let c = customDomain, c.attached, !c.hostname.isEmpty else { return nil }
+        return "https://" + c.hostname
+    }
+
+    /// The address Herald and agents should use: the custom one when set up, else workers.dev.
+    public var canonicalURL: String? { customURL ?? workerURL }
 
     /// Field name -> what is wrong. Empty means the form is valid.
     public func validate() -> [String: String] {
@@ -46,6 +68,12 @@ public struct RelayCloudConfig: Codable, Equatable, Sendable {
         if !(1...10_000).contains(ratePerKey) { e["ratePerKey"] = "Between 1 and 10000 per 10 minutes." }
         if !(1...1000).contains(maxDevices) { e["maxDevices"] = "Between 1 and 1000." }
         if !(30...3600).contains(pingSeconds) { e["pingSeconds"] = "Between 30 and 3600 seconds." }
+        if let c = customDomain {
+            let host = "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$"
+            if c.zone.isEmpty { e["customDomain"] = "Pick the zone the hostname belongs to." }
+            else if !match(c.hostname, host) { e["customDomain"] = "Enter a hostname such as herald.example.com (lowercase)." }
+            else if c.hostname != c.zone, !c.hostname.hasSuffix("." + c.zone) { e["customDomain"] = "The hostname must be the zone \(c.zone) or end with .\(c.zone)." }
+        }
         if deviceName.count > 60 { e["deviceName"] = "At most 60 characters." }
         return e
     }
@@ -67,6 +95,7 @@ public struct RelayCloudConfig: Codable, Equatable, Sendable {
     public func needsRedeploy(comparedTo old: RelayCloudConfig) -> Bool {
         workerVars(bundleHash: "") != old.workerVars(bundleHash: "") || workerName != old.workerName
             || bucket != old.bucket || audioRetentionDays != old.audioRetentionDays
+            || customDomain?.zone != old.customDomain?.zone || customDomain?.hostname != old.customDomain?.hostname
     }
 }
 

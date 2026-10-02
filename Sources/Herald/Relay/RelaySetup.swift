@@ -18,7 +18,7 @@ public struct RelayTokenLink: Codable, Equatable, Sendable {
             permissions: CloudflareLinks.tokenPermissions.map { .init(key: $0.key, type: $0.type, title: $0.title, why: $0.why) },
             steps: [
                 "Open the link (a free Cloudflare account is enough; sign up first if you have none).",
-                "Cloudflare shows the token page with the three permissions already filled in and the name \"Herald relay\". Press Continue to summary, then Create Token.",
+                "Cloudflare shows the token page with the permissions already filled in and the name \"Herald relay\". Press Continue to summary, then Create Token.",
                 "Copy the token it shows once, and give it to Herald (Settings > Cloud > Enable relay, or relay_set_cloudflare_token).",
             ])
     }
@@ -41,6 +41,11 @@ public struct RelaySetupStatus: Codable, Equatable, Sendable {
     public var online: Bool
     public var relayURL: String
     public var mcpURL: String
+    /// The always-on workers.dev address and the custom one (when set up); `relayURL` is the one in use.
+    public var workersDevURL: String? = nil
+    public var customURL: String? = nil
+    /// True when no custom domain is set: cloud agents such as ChatGPT are blocked by Cloudflare on workers.dev (Error 1010).
+    public var customDomainRecommended: Bool = false
     public var bundledVersion: String
     public var deployedVersion: String?
     public var updateAvailable: Bool
@@ -55,6 +60,8 @@ public struct RelaySettingsReply: Codable, Equatable, Sendable {
     public var errors: [String: String]
     public var redeployed: Bool
     public var steps: [RelayStepReport]
+    /// From the deploy a custom-domain change ran (Bot Fight Mode, reconnecting connectors).
+    public var warnings: [String] = []
 }
 
 public struct RelayDeployReply: Codable, Equatable, Sendable {
@@ -64,7 +71,22 @@ public struct RelayDeployReply: Codable, Equatable, Sendable {
     public var paired: Bool
     public var online: Bool
     public var steps: [RelayStepReport]
+    /// The always-on workers.dev address and, when a custom domain is set up, its address (which is then `relayURL`).
+    public var workersDevURL: String? = nil
+    public var customURL: String? = nil
+    /// Things the user should know: Bot Fight Mode on the zone, connectors that must reconnect, a skipped rule.
+    public var warnings: [String] = []
 }
+
+public struct RelayZone: Codable, Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var status: String
+    public var suggestedHostname: String
+    public init(id: String, name: String, status: String) { self.id = id; self.name = name; self.status = status; suggestedHostname = RelayCloudConfig.CustomDomain.suggestedHostname(zone: name) }
+}
+
+public struct RelayZonesReply: Codable, Equatable, Sendable { public var zones: [RelayZone] }
 
 public struct RelayDeleteReply: Codable, Equatable, Sendable {
     public var deleted: Bool
@@ -87,6 +109,8 @@ public protocol RelaySetupBackend: Sendable {
     func relaySettings() async -> RelaySettingsReply
     func updateRelaySettings(_ patch: [String: JSONValue]) async throws -> RelaySettingsReply
     func deleteRelay() async throws -> RelayDeleteReply
+    /// The zones the Cloudflare token can see (for the custom domain).
+    func relayZones() async throws -> RelayZonesReply
     func testRelay() async throws -> RelayTestReply
     func relayInstructions(client: String) async throws -> String
 }
@@ -118,6 +142,19 @@ extension RelayCloudConfig {
             case "ratePerKey": c.ratePerKey = try int(v, k)
             case "maxDevices": c.maxDevices = try int(v, k)
             case "pingSeconds": c.pingSeconds = try int(v, k)
+            case "customDomain":
+                switch v {
+                case .null: c.customDomain = nil
+                case .object(let o):
+                    let zone = try o["zone"].map { try str($0, "customDomain.zone") } ?? ""
+                    let host = try o["hostname"].map { try str($0, "customDomain.hostname").lowercased() } ?? ""
+                    if zone.isEmpty, host.isEmpty { c.customDomain = nil }
+                    else {
+                        let same = c.customDomain?.zone == zone && c.customDomain?.hostname == host
+                        c.customDomain = .init(zone: zone, hostname: host, attached: same && c.customDomain?.attached == true)
+                    }
+                default: throw BackendError(400, "customDomain must be an object {zone, hostname} or null")
+                }
             default: throw BackendError(400, "unknown setting \(k)")
             }
         }

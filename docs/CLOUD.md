@@ -41,6 +41,17 @@ you press *Delete relay from Cloudflare* (Advanced).
 | Workers Scripts: Edit (`workers_scripts`) | upload the relay, switch on its workers.dev address, set its variables and secrets |
 | Workers R2 Storage: Edit (`workers_r2`) | create the voice-reply bucket and its expiry rule |
 | Account Settings: Read (`account_settings`) | find your account id |
+| Zone: Read (`zone`) | custom domain: list your zones, find the one you pick |
+| DNS: Edit (`dns`) | custom domain: Cloudflare creates the DNS record |
+| Workers Routes: Edit (`workers_routes`) | custom domain: attach the relay to the hostname |
+| Zone Settings: Edit (`zone_settings`) | custom domain: read the zone's settings |
+| Config Settings: Edit (`config_settings`) | custom domain: the Configuration Rule that switches Browser Integrity Check off |
+| Zone WAF: Edit (`waf`) | custom domain: a narrow skip rule for the relay hostname |
+
+The last six are only used for the [custom domain](#custom-domain-required-for-openaichatgpt-cloud-agents--error-1010). A token without
+them still deploys the relay on workers.dev; asking for a custom domain with such a token stops with "Token is missing Zone
+permissions ..." (create a new token from the pre-filled page, or skip the custom domain). Group names are Cloudflare's; the template
+keys in the page link are Herald's best match, and the page lists any it does not know, so check the six zone rows are ticked.
 
 The page Herald opens is `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[...]&accountId=*&zoneId=all&name=Herald relay`
 (Cloudflare's "create a token from a link" format, [docs](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/)).
@@ -72,6 +83,38 @@ largest request (32 KB), per key per 10 minutes (60), Macs that may pair (5), th
 secret; plus **Apply settings**, **Redeploy**, **Test connection** (health, then a notification through the relay and its receipt),
 **Pair with a code** (for a relay Herald did not deploy), **Unpair**, **Forget token** and **Delete relay from Cloudflare**.
 The same fields are `relay_settings` in the local MCP and `GET|PUT /v1/relay/settings`.
+
+### Custom domain (required for OpenAI/ChatGPT cloud agents: Error 1010)
+
+Symptom: a cloud agent (an OpenAI sandbox, ChatGPT) calling `https://<worker>.<account>.workers.dev` gets **403 / Error 1010**
+("the owner of this website has banned your access based on your browser's signature"). That is Cloudflare's **Browser Integrity
+Check** on the workers.dev hostname, which cannot be switched off there. From a Mac every User-Agent gets 200, so the relay is fine.
+The fix is a hostname in a zone you control, with the check off for that hostname only.
+
+Settings > Cloud > Advanced > Custom domain (or `relay_zones`, then `relay_settings {settings: {customDomain: {zone, hostname}}}`):
+
+1. **Load zones** lists the zones the token sees (`GET /zones`; `relay_zones`). Pick one; Herald suggests `herald.<zone>`.
+2. Herald deploys (idempotent, same Worker) and then: **attaches a Workers Custom Domain**
+   (`PUT /accounts/{id}/workers/domains {hostname, service, environment: "production", zone_id, zone_name}`; Cloudflare creates the DNS
+   record and the certificate); **creates a Configuration Rule** in the zone, phase `http_config_settings`, action `set_config` with
+   `bic: false`, expression `(http.host eq "<hostname>")`, description "Herald relay: allow non-browser clients" (found by that
+   description and updated on a re-run; other rules in the zone are never touched); **adds a WAF custom-rule skip** in phase
+   `http_request_firewall_custom` for the same host (products `bic`, `securityLevel`); **checks Bot Fight Mode**; and waits until
+   `https://<hostname>/health` answers (the certificate can take a minute or two; press Retry).
+3. Herald points this Mac at `https://<hostname>`. The relay is the same Worker, and a device token is signed by the Worker, not
+   tied to a hostname, so **this Mac stays paired** (Herald verifies the token and re-pairs silently only if the relay refuses it).
+   Agent keys keep working on both addresses. Settings shows both addresses, the custom one as canonical.
+4. **Existing OAuth connectors (ChatGPT) are bound to the old `/mcp` URL: add them again with the new URL.** Discovery, issuer and the
+   OAuth `resource` follow the request's Host, so the relay needs no redeploy for a new hostname.
+
+**Bot Fight Mode.** If the zone has Bot Fight Mode (free plan) on, Herald says so: no rule can bypass it on the free plan, so turn it off
+in the Cloudflare dashboard (Security > Bots), or it can still challenge cloud agents. Super Bot Fight Mode with "Definitely
+automated" not set to Allow is reported the same way. These are warnings, not failures. A missing Zone WAF permission is a warning
+too; a missing Zone, DNS, Workers Routes or Config Settings permission stops the deploy with a clear message.
+
+After a deploy without a custom domain, Settings > Cloud shows "Cloud agents such as ChatGPT need a custom domain" with **Set up...**.
+"Use workers.dev again" removes the setting and points Herald back at workers.dev; the hostname, DNS record and rules stay in your
+Cloudflare account (delete them there if you want them gone).
 
 ### Your own relay without Herald's deploy
 
@@ -307,6 +350,7 @@ Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST
 
 | Symptom | Cause |
 |---|---|
+| A cloud agent gets 403 / Error 1010 on the workers.dev address | Cloudflare's Browser Integrity Check blocks it on workers.dev. Set up a [custom domain](#custom-domain-required-for-openaichatgpt-cloud-agents--error-1010). |
 | Settings shows "Offline" and keeps retrying | No network; Herald retries 1 s, 2 s, 4 s ... up to 5 minutes and at once on wake or when the network returns. |
 | "the relay rejected this Mac's token" | The pairing was removed (Unpair) or the relay was reset. Pair again. |
 | The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked, or its refresh token was used twice; connect it again. |

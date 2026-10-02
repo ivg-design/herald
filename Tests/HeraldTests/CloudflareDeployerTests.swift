@@ -17,7 +17,19 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
     var forced: [String: (Int, String)] = [:]
     var healthBundle: String? = nil   // nil: echo the uploaded BUNDLE_HASH
     var healthFailures = 0
+    /// After this many successful health answers every later one fails (nil: never).
+    var failHealthAfter: Int?
+    private var healthAnswered = 0
     private var uploadedHash: String?
+    // Custom domain
+    var zones: [[String: Any]] = [["id": "zone1", "name": "example.com", "status": "active"], ["id": "zone2", "name": "other.org", "status": "active"]]
+    var zonePermissionsMissing = false       // every /zones call answers 403
+    var wafPermissionMissing = false         // only the firewall phase answers 403
+    var botManagement: [String: Any] = ["fight_mode": false, "sbfm_definitely_automated": "allow"]
+    private(set) var attachedDomains: [[String: Any]] = []
+    /// phase -> rules (each has an id), the entry-point rulesets that exist
+    private(set) var rulesets: [String: [[String: Any]]] = [:]
+    private var ruleCounter = 0
 
     func send(_ r: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let url = r.url!
@@ -32,6 +44,12 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
         if url.host == "api.cloudflare.com" {
             precondition(r.value(forHTTPHeaderField: "Authorization") == "Bearer tok", "token missing")
             let p = path.replacingOccurrences(of: "/client/v4", with: "")
+            if p.hasPrefix("/zones") || p.contains("/workers/domains") {
+                let denied = reply(403, #"{"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}"#)
+                if zonePermissionsMissing { return denied }
+                if wafPermissionMissing, p.contains("http_request_firewall_custom") { return denied }
+                return zoneApi(method, p, r, reply, ok)
+            }
             switch (method, p) {
             case ("GET", "/user/tokens/verify"): return ok(#"{"status":"\#(tokenStatus)"}"#)
             case ("GET", "/accounts"): return ok(String(data: try JSONSerialization.data(withJSONObject: accounts), encoding: .utf8)!)
@@ -61,10 +79,46 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
         }
         // the workers.dev health check
         if healthFailures > 0 { healthFailures -= 1; throw RelayError.transport("could not resolve host") }
+        if let n = failHealthAfter, healthAnswered >= n { throw RelayError.transport("could not resolve host") }
+        healthAnswered += 1
         let bundle = healthBundle ?? uploadedHash
         return reply(200, #"{"service":"herald-relay","ok":true\#(bundle.map { #","bundle":"\#($0)""# } ?? "")}"#)
     }
 
+    private func json(_ r: URLRequest) -> [String: Any] { ((try? JSONSerialization.jsonObject(with: r.httpBody ?? Data())) as? [String: Any]) ?? [:] }
+    private func str(_ v: Any) -> String { String(decoding: (try? JSONSerialization.data(withJSONObject: v)) ?? Data(), as: UTF8.self) }
+
+    private func zoneApi(_ method: String, _ p: String, _ r: URLRequest, _ reply: (Int, String) -> (Data, HTTPURLResponse), _ ok: (String) -> (Data, HTTPURLResponse)) -> (Data, HTTPURLResponse) {
+        let path = p.components(separatedBy: "?")[0]
+        if method == "GET", path == "/zones" { return ok(str(zones)) }
+        if method == "PUT", path.hasSuffix("/workers/domains") {
+            attachedDomains.removeAll { $0["hostname"] as? String == json(r)["hostname"] as? String }
+            attachedDomains.append(json(r)); return ok(str(json(r)))
+        }
+        if method == "GET", path.hasSuffix("/bot_management") { return ok(str(botManagement)) }
+        // /zones/{z}/rulesets/phases/{phase}/entrypoint and /zones/{z}/rulesets/{id}/rules[/{rid}]
+        if path.contains("/rulesets/phases/"), let phase = path.components(separatedBy: "/phases/").last?.components(separatedBy: "/").first {
+            if method == "GET" {
+                guard rulesets[phase] != nil else { return reply(404, #"{"success":false,"errors":[{"code":10003,"message":"could not find entrypoint"}]}"#) }
+                return ok(str(["id": "rs-" + phase, "rules": rulesets[phase]!]))
+            }
+            if method == "PUT" {
+                rulesets[phase] = ((json(r)["rules"] as? [[String: Any]]) ?? []).map { var x = $0; ruleCounter += 1; x["id"] = "rule\(ruleCounter)"; return x }
+                return ok(str(["id": "rs-" + phase, "rules": rulesets[phase]!]))
+            }
+        }
+        if path.contains("/rulesets/rs-"), let phase = path.components(separatedBy: "/rulesets/rs-").last?.components(separatedBy: "/").first {
+            if method == "POST" {
+                ruleCounter += 1; var x = json(r); x["id"] = "rule\(ruleCounter)"; rulesets[phase, default: []].append(x); return ok(str(x))
+            }
+            if method == "PATCH", let rid = path.components(separatedBy: "/rules/").last, let i = rulesets[phase]?.firstIndex(where: { $0["id"] as? String == rid }) {
+                var x = json(r); x["id"] = rid; rulesets[phase]![i] = x; return ok(str(x))
+            }
+        }
+        return reply(404, #"{"success":false,"errors":[{"code":7003,"message":"No route"}]}"#)
+    }
+
+    func seedRuleset(_ phase: String, _ rules: [[String: Any]]) { rulesets[phase] = rules }
     func paths(_ method: String) -> [String] { calls.filter { $0.method == method }.map(\.path) }
 }
 
@@ -215,6 +269,175 @@ final class CloudflareDeployerTests: XCTestCase {
     }
 }
 
+final class CloudflareCustomDomainTests: XCTestCase {
+    private let bundle = WorkerBundle(script: Data("export default {}".utf8), sourceHash: String(repeating: "c", count: 64), compatibilityDate: "2026-08-01")
+    private func make(_ http: FakeCloudflare) -> CloudflareDeployer {
+        let m = MemoryCloudflareSecrets(); m.set(.apiToken, "tok")
+        var d = CloudflareDeployer(http: http, secrets: m, sleep: { _ in }); d.healthAttempts = 3; return d
+    }
+    private func config() -> RelayCloudConfig {
+        var c = RelayCloudConfig(); c.customDomain = .init(zone: "example.com", hostname: "herald.example.com"); return c
+    }
+    private final class Log: @unchecked Sendable {
+        private let lock = NSLock(); var events: [DeployEvent] = []
+        func add(_ e: DeployEvent) { lock.lock(); events.append(e); lock.unlock() }
+    }
+
+    func testDomainAttachCreatesTheWorkersCustomDomainAndReturnsTheCanonicalURL() async throws {
+        let http = FakeCloudflare(); let log = Log()
+        let r = try await make(http).deploy(config: config(), bundle: bundle, progress: log.add)
+        XCTAssertEqual(r.customURL, "https://herald.example.com")
+        XCTAssertEqual(r.workerURL, "https://herald-relay.acme.workers.dev")
+        XCTAssertEqual(log.events.filter { $0.phase == .done }.map(\.step),
+                       [.verifyToken, .account, .subdomain, .bucket, .lifecycle, .upload, .route, .health, .zone, .domain, .configRule, .wafSkip, .botMode, .domainHealth])
+        let d = try XCTUnwrap(http.attachedDomains.first)
+        XCTAssertEqual(d["hostname"] as? String, "herald.example.com"); XCTAssertEqual(d["service"] as? String, "herald-relay")
+        XCTAssertEqual(d["environment"] as? String, "production"); XCTAssertEqual(d["zone_id"] as? String, "zone1")
+        XCTAssertTrue(http.calls.contains { $0.method == "PUT" && $0.path.hasSuffix("/workers/domains") })
+        XCTAssertTrue(http.calls.contains { $0.path == "/health" })
+    }
+
+    func testNoCustomDomainRunsNoZoneStep() async throws {
+        let http = FakeCloudflare()
+        let r = try await make(http).deploy(config: RelayCloudConfig(), bundle: bundle)
+        XCTAssertNil(r.customURL)
+        XCTAssertFalse(http.calls.contains { $0.path.hasPrefix("/client/v4/zones") || $0.path.contains("/workers/domains") })
+    }
+
+    func testConfigRuleSwitchesBrowserIntegrityCheckOffForThatHostOnly() async throws {
+        let http = FakeCloudflare()
+        _ = try await make(http).deploy(config: config(), bundle: bundle)
+        let rules = try XCTUnwrap(http.rulesets["http_config_settings"])
+        XCTAssertEqual(rules.count, 1)
+        let rule = rules[0]
+        XCTAssertEqual(rule["description"] as? String, "Herald relay: allow non-browser clients")
+        XCTAssertEqual(rule["action"] as? String, "set_config")
+        XCTAssertEqual((rule["action_parameters"] as? [String: Any])?["bic"] as? Bool, false)
+        XCTAssertEqual(rule["expression"] as? String, "(http.host eq \"herald.example.com\")")
+    }
+
+    func testConfigRuleIsIdempotentAndLeavesOtherRulesAlone() async throws {
+        let http = FakeCloudflare()
+        http.seedRuleset("http_config_settings", [["id": "keep", "description": "mine", "expression": "true", "action": "set_config", "action_parameters": ["rocket_loader": false]]])
+        let d = make(http)
+        _ = try await d.deploy(config: config(), bundle: bundle)
+        XCTAssertEqual(http.rulesets["http_config_settings"]?.count, 2)   // added next to the user's rule
+        _ = try await d.deploy(config: config(), bundle: bundle)
+        XCTAssertEqual(http.rulesets["http_config_settings"]?.count, 2)   // second run: updated, not duplicated
+        XCTAssertTrue(http.calls.contains { $0.method == "PATCH" && $0.path.contains("/rulesets/rs-http_config_settings/rules/") })
+        XCTAssertEqual(http.rulesets["http_config_settings"]?.first?["id"] as? String, "keep")
+        // a new hostname updates the same rule
+        var c = config(); c.customDomain = .init(zone: "example.com", hostname: "relay.example.com")
+        _ = try await d.deploy(config: c, bundle: bundle)
+        let mine = http.rulesets["http_config_settings"]!.first { $0["description"] as? String == CloudflareDeployer.ruleDescription }!
+        XCTAssertEqual(mine["expression"] as? String, "(http.host eq \"relay.example.com\")")
+        XCTAssertEqual(http.rulesets["http_config_settings"]?.count, 2)
+    }
+
+    func testWafSkipRuleIsNarrowToTheHost() async throws {
+        let http = FakeCloudflare()
+        let r = try await make(http).deploy(config: config(), bundle: bundle)
+        let rule = try XCTUnwrap(http.rulesets["http_request_firewall_custom"]?.first)
+        XCTAssertEqual(rule["action"] as? String, "skip")
+        XCTAssertEqual((rule["action_parameters"] as? [String: Any])?["products"] as? [String], ["bic", "securityLevel"])
+        XCTAssertEqual(rule["expression"] as? String, "(http.host eq \"herald.example.com\")")
+        XCTAssertTrue(r.warnings.isEmpty)
+    }
+
+    func testMissingWafPermissionIsAWarningNotAFailure() async throws {
+        let http = FakeCloudflare(); http.wafPermissionMissing = true
+        let r = try await make(http).deploy(config: config(), bundle: bundle)
+        XCTAssertEqual(r.customURL, "https://herald.example.com")
+        XCTAssertTrue(r.warnings.contains { $0.contains("WAF skip rule was not written") && $0.contains("Zone permissions") })
+        XCTAssertNotNil(http.rulesets["http_config_settings"])   // the fix itself still went in
+    }
+
+    func testBotFightModeIsDetectedAndSurfaced() async throws {
+        let http = FakeCloudflare(); http.botManagement = ["fight_mode": true, "sbfm_definitely_automated": "block"]
+        let r = try await make(http).deploy(config: config(), bundle: bundle)
+        XCTAssertTrue(r.warnings.contains { $0.contains("Bot Fight Mode is on") })
+        XCTAssertTrue(r.warnings.contains { $0.contains("Super Bot Fight Mode") && $0.contains("block") })
+    }
+
+    func testTokenWithoutZonePermissionsGetsAClearError() async throws {
+        let http = FakeCloudflare(); http.zonePermissionsMissing = true
+        let log = Log()
+        do { _ = try await make(http).deploy(config: config(), bundle: bundle, progress: log.add); XCTFail("should throw") }
+        catch let e as CloudflareError {
+            XCTAssertEqual(e.step, .zone); XCTAssertEqual(e.status, 403)
+            XCTAssertTrue(e.message.hasPrefix("Token is missing Zone permissions"))
+            XCTAssertTrue(e.message.contains("turn off the custom domain"))
+        }
+        // the relay itself was deployed before the zone step failed
+        XCTAssertTrue(log.events.contains { $0.step == .health && $0.phase == .done })
+        XCTAssertFalse(http.calls.contains { $0.path.contains("/workers/domains") })
+    }
+
+    func testUnknownZoneIsAnError() async throws {
+        let http = FakeCloudflare(); var c = config(); c.customDomain = .init(zone: "nope.dev", hostname: "herald.nope.dev")
+        do { _ = try await make(http).deploy(config: c, bundle: bundle); XCTFail() }
+        catch let e as CloudflareError { XCTAssertEqual(e.step, .zone); XCTAssertTrue(e.message.contains("nope.dev")) }
+    }
+
+    func testDomainThatDoesNotAnswerIsReportedWithRetryAdvice() async throws {
+        let http = FakeCloudflare()
+        // workers.dev answers (3 failures would break it first), so fail only after it: make health fail forever after the first call
+        http.failHealthAfter = 1
+        do { _ = try await make(http).deploy(config: config(), bundle: bundle); XCTFail() }
+        catch let e as CloudflareError { XCTAssertEqual(e.step, .domainHealth); XCTAssertTrue(e.message.contains("press Retry")) }
+    }
+
+    func testZonesListsWhatTheTokenSeesAndExplainsAMissingPermission() async throws {
+        let http = FakeCloudflare()
+        let z = try await make(http).zones(config: RelayCloudConfig())
+        XCTAssertEqual(z.map(\.name), ["example.com", "other.org"])
+        XCTAssertEqual(RelayZone(id: "1", name: "example.com", status: "active").suggestedHostname, "herald.example.com")
+        http.zonePermissionsMissing = true
+        do { _ = try await make(http).zones(config: RelayCloudConfig()); XCTFail() }
+        catch let e as CloudflareError { XCTAssertTrue(e.message.hasPrefix("Token is missing Zone permissions")) }
+    }
+
+    func testTokenPageAsksForTheZonePermissionsToo() {
+        let keys = CloudflareLinks.tokenPermissions.map(\.key)
+        for k in ["zone", "dns", "workers_routes", "zone_settings", "config_settings", "waf"] { XCTAssertTrue(keys.contains(k), k) }
+        let url = CloudflareLinks.prefilledTokenURL().absoluteString
+        XCTAssertTrue(url.contains("config_settings"))
+    }
+
+    func testCustomDomainPersistsAndValidates() {
+        let f = FileManager.default.temporaryDirectory.appendingPathComponent("cfg-\(UUID().uuidString).json")
+        let store = RelayCloudConfigStore(file: f)
+        store.update { $0.customDomain = .init(zone: "example.com", hostname: "herald.example.com", attached: true) }
+        let again = RelayCloudConfigStore(file: f).value
+        XCTAssertEqual(again.customDomain, .init(zone: "example.com", hostname: "herald.example.com", attached: true))
+        XCTAssertEqual(again.customURL, "https://herald.example.com"); XCTAssertEqual(again.canonicalURL, "https://herald.example.com")
+        try? FileManager.default.removeItem(at: f)
+        var c = RelayCloudConfig(); c.subdomain = "acme"
+        XCTAssertEqual(c.canonicalURL, "https://herald-relay.acme.workers.dev")
+        c.customDomain = .init(zone: "example.com", hostname: "herald.other.org"); XCTAssertNotNil(c.validate()["customDomain"])
+        c.customDomain = .init(zone: "example.com", hostname: "Bad Host"); XCTAssertNotNil(c.validate()["customDomain"])
+        c.customDomain = .init(zone: "example.com", hostname: "herald.example.com"); XCTAssertTrue(c.validate().isEmpty)
+        XCTAssertNil(c.customURL)   // not attached yet
+        // an old file without the key still loads
+        let old = try? HeraldJSONCoding.decoder.decode(RelayCloudConfig.self, from: Data(#"{"workerName":"x"}"#.utf8))
+        XCTAssertNil(old?.customDomain)
+    }
+
+    func testSettingsPatchSetsAndClearsTheCustomDomain() throws {
+        var c = RelayCloudConfig()
+        c = try c.applying(["customDomain": .object(["zone": .string("example.com"), "hostname": .string("Herald.Example.com")])])
+        XCTAssertEqual(c.customDomain, .init(zone: "example.com", hostname: "herald.example.com"))
+        c.customDomain?.attached = true
+        c = try c.applying(["customDomain": .object(["zone": .string("example.com"), "hostname": .string("herald.example.com")])])
+        XCTAssertEqual(c.customDomain?.attached, true)   // unchanged: stays attached
+        c = try c.applying(["customDomain": .object(["zone": .string("example.com"), "hostname": .string("relay.example.com")])])
+        XCTAssertEqual(c.customDomain?.attached, false)
+        XCTAssertTrue(c.needsRedeploy(comparedTo: RelayCloudConfig()))
+        c = try c.applying(["customDomain": .null]); XCTAssertNil(c.customDomain)
+        XCTAssertThrowsError(try c.applying(["customDomain": .string("x")]))
+    }
+}
+
 final class RelayCloudConfigTests: XCTestCase {
     func testDefaultsAreValidAndMatchTheWorkersDefaults() {
         let c = RelayCloudConfig()
@@ -291,8 +514,8 @@ final class RelayBundleTests: XCTestCase {
         let c = URLComponents(url: u, resolvingAgainstBaseURL: false)!
         let perms = c.queryItems!.first { $0.name == "permissionGroupKeys" }!.value!
         let arr = try JSONSerialization.jsonObject(with: Data(perms.utf8)) as! [[String: String]]
-        XCTAssertEqual(arr.map { $0["key"]! }, ["workers_scripts", "workers_r2", "account_settings"])
-        XCTAssertEqual(arr.map { $0["type"]! }, ["edit", "edit", "read"])
+        XCTAssertEqual(arr.map { $0["key"]! }, ["workers_scripts", "workers_r2", "account_settings", "zone", "dns", "workers_routes", "zone_settings", "config_settings", "waf"])
+        XCTAssertEqual(arr.map { $0["type"]! }, ["edit", "edit", "read", "read", "edit", "edit", "edit", "edit", "edit"])
         XCTAssertEqual(c.queryItems!.first { $0.name == "name" }!.value, "Herald relay")
         XCTAssertFalse(u.absoluteString.contains("{"))   // fully percent-encoded
     }
@@ -419,6 +642,7 @@ final class RelaySetupRoutesTests: XCTestCase {
         }
         func deleteRelay() async throws -> RelayDeleteReply { deleted += 1; return RelayDeleteReply(deleted: true, note: nil) }
         func testRelay() async throws -> RelayTestReply { RelayTestReply(healthy: true, paired: true, online: true, roundTrip: true, receipt: "displayed", detail: "ok") }
+        func relayZones() async throws -> RelayZonesReply { RelayZonesReply(zones: [RelayZone(id: "z1", name: "example.com", status: "active")]) }
         func relayInstructions(client: String) async throws -> String {
             guard ["chatgpt", "claude", "codex"].contains(client) else { throw BackendError(400, "client must be chatgpt, claude or codex") }
             return "instructions for \(client)"
@@ -445,7 +669,7 @@ final class RelaySetupRoutesTests: XCTestCase {
         XCTAssertEqual(obj(r)["state"] as? String, "token-needed")
         r = await call("GET", "/v1/relay/token-url", setup: s)
         XCTAssertTrue((obj(r)["url"] as? String ?? "").hasPrefix("https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys="))
-        XCTAssertEqual((obj(r)["permissions"] as? [[String: Any]])?.count, 3)
+        XCTAssertEqual((obj(r)["permissions"] as? [[String: Any]])?.count, 9)
         r = await call("POST", "/v1/relay/token", body: #"{"token":"cf-secret-token-123456"}"#, setup: s)
         XCTAssertEqual(r?.status, 200); XCTAssertEqual(s.token, "cf-secret-token-123456")
         XCTAssertFalse(String(decoding: r!.body, as: UTF8.self).contains("cf-secret"))   // never echoed
@@ -460,6 +684,11 @@ final class RelaySetupRoutesTests: XCTestCase {
         r = await call("PUT", "/v1/relay/settings", body: #"{"maxQueue":0}"#, setup: s); XCTAssertEqual(r?.status, 400)
         r = await call("GET", "/v1/relay/settings", setup: s)
         XCTAssertEqual(obj(r)["pairingSecretSet"] as? Bool, true); XCTAssertNil(obj(r)["pairingSecret"])
+        r = await call("GET", "/v1/relay/zones", setup: s)
+        XCTAssertEqual((obj(r)["zones"] as? [[String: Any]])?.first?["suggestedHostname"] as? String, "herald.example.com")
+        r = await call("PUT", "/v1/relay/settings", body: #"{"customDomain":{"zone":"example.com","hostname":"herald.example.com"}}"#, setup: s)
+        XCTAssertEqual(r?.status, 200)
+        if case .object(let cd)? = s.patches.last?["customDomain"] { XCTAssertEqual(cd["hostname"], .string("herald.example.com")) } else { XCTFail("customDomain not passed") }
         r = await call("POST", "/v1/relay/test", setup: s); XCTAssertEqual(obj(r)["roundTrip"] as? Bool, true)
         r = await call("GET", "/v1/relay/instructions", query: ["client": "chatgpt"], setup: s); XCTAssertEqual(obj(r)["text"] as? String, "instructions for chatgpt")
         r = await call("GET", "/v1/relay/instructions", query: ["client": "bing"], setup: s); XCTAssertEqual(r?.status, 400)
