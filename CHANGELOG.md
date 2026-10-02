@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 (Build 9) - 2026-10-02
 
 ### Added
 
@@ -9,6 +9,9 @@
   `get_receipt`, `wait_for_reply`, `herald_status`). Mute and quiet hours are enforced on the Mac; receipts are separate for
   received, displayed, spoken, replied and suppressed. Settings > Cloud pairs the Mac, mints and revokes keys and shows usage.
   Cloud banners have Reply and a Record button (on-device transcript, m4a to the agent). See docs/CLOUD.md.
+- The app entitlement `com.apple.security.device.audio-input` is set so Record works under the hardened runtime.
+
+1069 tests.
 
 ## 1.4.1 (Build 8) - 2026-10-02
 
