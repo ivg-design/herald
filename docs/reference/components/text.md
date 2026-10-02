@@ -34,8 +34,10 @@ Bound text: a title, a subtitle, a body, a caption, a monospaced value. The work
 dotted metadata names (`{customer.name}`). Numbers print without a trailing `.0`, booleans as `true` and
 `false`, lists joined with `, `.
 
-Mixed bindings degrade gracefully: `"{sender}: {subject}"` with no `sender` shows just the subject (the
-result is trimmed), and only when both are absent is the component empty.
+In a mixed binding an absent token becomes empty text and the literal text stays: `"{sender}: {subject}"`
+without `sender` reads `: Invoice`. The result is trimmed of surrounding whitespace. Only when **every** token is
+absent is the component empty (literal text alone does not keep it alive), so `"{count} new"` with no count
+collapses instead of showing "new". Prefer two components when the parts should collapse independently.
 
 ## Sizing
 
@@ -76,7 +78,7 @@ A two-line title:
 {"type":"text","binding":"{title}","style":"title","maxLines":2}
 ```
 
-A sender and subject that degrades when the sender is missing:
+A sender and subject (note that without `sender` it reads `: subject`; split it if that matters):
 
 ```json
 {"type":"text","binding":"{sender}: {subject}","style":"body","maxLines":3,"emptyBehavior":"collapse"}
