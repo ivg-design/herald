@@ -155,6 +155,7 @@ export class Mailbox extends DurableObject<Env> {
     try {
       if (path === "/internal/init" && m === "POST") return this.internalInit(req);
       if (path === "/internal/wipe" && m === "POST") return this.internalWipe();
+      if (path === "/internal/status" && m === "POST") return json(200, { valid: !!this.getMeta("device_hash"), online: this.online(), lastSeen: this.lastSeenMs() });
       if (path.startsWith("/internal/oauth/") && m === "POST") return this.oauthInternal(path.slice("/internal/oauth/".length), req);
 
       if (path.startsWith("/v1/device")) {
@@ -176,6 +177,12 @@ export class Mailbox extends DurableObject<Env> {
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
         if (km && m === "DELETE") return this.revokeKey(km[1]);
         if (path === "/v1/device" && m === "DELETE") return this.unpair();
+        // The Macs on this relay. A Mac may list them, drop its own same-name or stale siblings (prune), and remove one entry
+        // that is same-name, rotated or idle. The Registry enforces that; a different active Mac is never removable from here.
+        if (path === "/v1/device/devices" && m === "GET") return this.registryCall("/internal/list", {});
+        if (path === "/v1/device/prune" && m === "POST") return this.registryCall("/internal/prune", {});
+        const dm = /^\/v1\/device\/devices\/([0-9a-f]{48})$/.exec(path);
+        if (dm && m === "DELETE") return this.registryCall("/internal/delete", { target: dm[1] });
         return err(404, "not_found", "no such device endpoint");
       }
 
@@ -260,6 +267,20 @@ export class Mailbox extends DurableObject<Env> {
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id); // a revoked connector's tokens die with its key
     return json(200, { revoked: true, id });
   }
+
+  private registryCall(path: string, body: Record<string, unknown>): Promise<Response> {
+    return this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry")).fetch("https://registry" + path, { method: "POST", body: JSON.stringify({ deviceId: this.getMeta("device_id"), ...body }) });
+  }
+
+  /** Tells the Registry this Mac connected or disconnected (not on every ping), so it can drop devices idle for a month. */
+  private reportSeen() {
+    const now = Date.now();
+    if (now - this.reportedAt < 60_000) return;
+    this.reportedAt = now;
+    const id = this.getMeta("device_id");
+    if (id) this.ctx.waitUntil(this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry")).fetch("https://registry/internal/seen", { method: "POST", body: JSON.stringify({ deviceId: id }) }).catch(() => {}));
+  }
+  private reportedAt = 0;
 
   private async unpair(): Promise<Response> {
     const id = this.getMeta("device_id");
@@ -511,6 +532,8 @@ export class Mailbox extends DurableObject<Env> {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
     this.setMeta("last_seen", String(Date.now()));
+    this.reportedAt = 0;
+    this.reportSeen();
     pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: this.lim.ttlMs / 1000 }));
     this.expireSweep(Date.now());
     this.flush(true);
@@ -541,6 +564,7 @@ export class Mailbox extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket, code: number, reason: string): Promise<void> {
     this.setMeta("last_seen", String(Date.now()));
+    if (this.getMeta("device_id")) this.reportSeen();
     try { ws.close(code, reason); } catch { /* already closed */ }
   }
 

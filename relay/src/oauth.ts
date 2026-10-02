@@ -37,6 +37,25 @@ async function readForm(req: Request): Promise<URLSearchParams> {
 function registry(env: Env, path: string, body: unknown): Promise<Response> {
   return env.REGISTRY.get(env.REGISTRY.idFromName("registry")).fetch(new Request("https://registry" + path, { method: "POST", body: JSON.stringify(body) }));
 }
+type DeviceView = { id: string; name: string | null; online?: boolean; lastSeenAt?: string };
+
+/**
+ * The Mac an approval goes to. An explicit `device` (1-based, in pairing order) wins. Without one: the Mac that is connected
+ * right now, else the one seen most recently; never just the first entry in the registry.
+ */
+async function chooseDevice(env: Env, pickRaw: string | null): Promise<{ error: string } | { devices: DeviceView[]; device: DeviceView; index: number }> {
+  const r = (await (await registry(env, "/devices", { status: true })).json()) as { devices: DeviceView[]; preferred: string | null };
+  const devices = r.devices;
+  if (devices.length === 0) return { error: "none" };
+  if (pickRaw === null || pickRaw === "") {
+    const i = Math.max(0, devices.findIndex((d) => d.id === r.preferred));
+    return { devices, device: devices[i], index: i + 1 };
+  }
+  const pick = Number(pickRaw);
+  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return { error: `device must be 1 to ${devices.length}` };
+  return { devices, device: devices[pick - 1], index: pick };
+}
+
 function mailbox(env: Env, deviceId: string, path: string, body: unknown): Promise<Response> {
   return env.MAILBOX.get(env.MAILBOX.idFromName(deviceId)).fetch(new Request("https://mailbox/internal/oauth/" + path, { method: "POST", body: JSON.stringify(body) }));
 }
@@ -170,14 +189,15 @@ function page(status: number, title: string, body: string, script = ""): Respons
 
 const errorPage = (message: string, status = 400) => page(status, "Herald", `<h1>Can't connect</h1><div class="card">${esc(message)}</div><p class="mut">Nothing was approved. Close this tab and start again from the app.</p>`);
 
-function consentPage(rid: string, client: Client, redirectHost: string, online: boolean, note = ""): Response {
+function consentPage(rid: string, client: Client, redirectHost: string, online: boolean, note = "", macName = "your Mac", others: { name: string; href: string; current: boolean }[] = []): Response {
   const name = esc(client.name);
   const body = `<h1>${name} wants to connect to Herald</h1>
 <p class="mut">It will return to <b>${esc(redirectHost)}</b> after you decide.</p>
 <div class="card"><h2>It will be able to</h2><ul><li>send notifications to your Mac</li><li>read receipts and your replies</li></ul>
 <p class="mut" style="margin:.6rem 0 0">Nothing else: no commands, no files, no settings. You can revoke it any time in Herald, Settings, Cloud.</p></div>
 <div class="card"><h2>Approve in Herald</h2>
-<p id="wait"><span class="dot"></span>${online ? `A banner is waiting on your Mac. Click <b>Approve</b> there.` : `Herald does not look connected right now. Open Herald on your Mac; the request will appear there.`} This page continues by itself.</p></div>
+<p id="wait"><span class="dot"></span>${online ? `A banner is waiting on <b>${esc(macName)}</b>. Click <b>Approve</b> there.` : `Herald does not look connected on <b>${esc(macName)}</b> right now. Open Herald on that Mac; the request will appear there.`} This page continues by itself.</p>
+${others.length ? `<p class="mut">Not this Mac? ${others.filter((o) => !o.current).map((o) => `<a href="${esc(o.href)}">${esc(o.name)}</a>`).join(", ")}</p>` : ""}</div>
 <div class="card"><h2>Or enter the code</h2><p class="mut" style="margin-top:0">Herald, Settings, Cloud, Connector approvals shows a 6-digit code.</p>
 ${note ? `<p class="bad">${esc(note)}</p>` : ""}
 <form method="post" action="/authorize/code"><input type="hidden" name="rid" value="${rid}"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required>
@@ -216,25 +236,20 @@ async function authorize(env: Env, req: Request, url: URL): Promise<Response> {
   const scope = (q.get("scope") ?? "").trim();
   if (scope && scope.split(/\s+/).some((s) => s !== SCOPE)) return errorRedirect(redirect, "invalid_scope", "the only scope is notify", state);
 
-  const devices = ((await (await registry(env, "/devices", {})).json()) as { devices: { id: string; name: string | null }[] }).devices;
-  if (devices.length === 0) return page(200, "Pair Herald first", `<h1>Pair Herald first</h1><div class="card">This relay is not paired with a Mac yet. In Herald, open Settings, Cloud and pair this relay, then connect ${esc(client.name)} again.</div>`);
-  let device = devices[0];
-  if (devices.length > 1) {
-    const pick = Number(q.get("device"));
-    if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) {
-      const next = new URL(url);
-      const links = devices.map((d, i) => { next.searchParams.set("device", String(i + 1)); return `<li><a href="${esc(next.pathname + next.search)}">${esc(d.name ?? "Mac " + (i + 1))}</a></li>`; }).join("");
-      return page(200, "Choose a Mac", `<h1>Which Mac?</h1><p class="mut">${esc(client.name)} will notify the Mac you choose.</p><div class="card"><ul>${links}</ul></div>`);
-    }
-    device = devices[pick - 1];
+  const chosen = await chooseDevice(env, q.get("device"));
+  if ("error" in chosen) {
+    if (chosen.error === "none") return page(200, "Pair Herald first", `<h1>Pair Herald first</h1><div class="card">This relay is not paired with a Mac yet. In Herald, open Settings and Cloud and pair this relay, then connect ${esc(client.name)} again.</div>`);
+    return errorPage(chosen.error);
   }
+  const { devices, device } = chosen;
+  const others = devices.length > 1 ? devices.map((d, i) => { const next = new URL(url); next.searchParams.set("device", String(i + 1)); return { name: d.name ?? "Mac " + (i + 1), href: next.pathname + next.search, current: d.id === device.id }; }) : [];
   const r = await mailbox(env, device.id, "begin", { clientId: client.id, clientName: client.name, redirectUri: redirect, challenge: chal, state, scope: SCOPE, resource: mcp });
   if (r.status === 429) return errorPage("Approvals are already waiting in Herald (or too many were requested). Answer them there, or wait a few minutes.", 429);
   if (!r.ok) return errorPage("Could not start the approval.", 502);
   const { id, online } = (await r.json()) as { id: string; online: boolean };
   let host = redirect;
   try { host = new URL(redirect).host || new URL(redirect).protocol; } catch { /* keep the raw string */ }
-  return consentPage(id, client, host, online);
+  return consentPage(id, client, host, online, "", device.name ?? "your Mac", others);
 }
 
 async function ridDevice(env: Env, rid: string): Promise<string | null> {
@@ -316,12 +331,10 @@ async function deviceAuthorization(env: Env, req: Request, url: URL): Promise<Re
   if (c instanceof Response) return c;
   const scope = (form.get("scope") ?? "").trim();
   if (scope && scope.split(/\s+/).some((x) => x !== SCOPE)) return oerr(400, "invalid_scope", "the only scope is notify");
-  const devices = ((await (await registry(env, "/devices", {})).json()) as { devices: { id: string }[] }).devices;
-  if (devices.length === 0) return oerr(400, "invalid_request", "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first");
-  // Several Macs: the optional `device` (1-based) picks one; the first is the default.
-  const pick = form.get("device") === null ? 1 : Number(form.get("device"));
-  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return oerr(400, "invalid_request", `device must be 1 to ${devices.length}`);
-  const r = await mailbox(env, devices[pick - 1].id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
+  // Several Macs: the optional `device` (1-based) picks one; without it the connected (else most recently seen) Mac is used.
+  const chosen = await chooseDevice(env, form.get("device"));
+  if ("error" in chosen) return oerr(400, "invalid_request", chosen.error === "none" ? "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first" : chosen.error);
+  const r = await mailbox(env, chosen.device.id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
   if (r.status === 429) return oerr(429, "slow_down", "approvals are already waiting in Herald (or too many were requested); answer them there or wait a few minutes", { "retry-after": "60" });
   if (!r.ok) return oerr(502, "temporarily_unavailable", "could not start the approval");
   const d = (await r.json()) as { deviceCode: string; userCode: string; expiresIn: number; interval: number; online: boolean };
@@ -329,6 +342,7 @@ async function deviceAuthorization(env: Env, req: Request, url: URL): Promise<Re
   return cors(json(200, {
     device_code: d.deviceCode, user_code: d.userCode, verification_uri: verification,
     verification_uri_complete: verification + "?user_code=" + encodeURIComponent(d.userCode), expires_in: d.expiresIn, interval: d.interval,
+    device_name: chosen.device.name ?? "Mac " + chosen.index, device_count: chosen.devices.length, device_index: chosen.index, device_online: d.online,
   }));
 }
 

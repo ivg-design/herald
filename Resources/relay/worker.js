@@ -492,6 +492,7 @@ var Mailbox = class extends DurableObject {
     try {
       if (path === "/internal/init" && m === "POST") return this.internalInit(req);
       if (path === "/internal/wipe" && m === "POST") return this.internalWipe();
+      if (path === "/internal/status" && m === "POST") return json(200, { valid: !!this.getMeta("device_hash"), online: this.online(), lastSeen: this.lastSeenMs() });
       if (path.startsWith("/internal/oauth/") && m === "POST") return this.oauthInternal(path.slice("/internal/oauth/".length), req);
       if (path.startsWith("/v1/device")) {
         const a2 = await this.authenticate(req, "device");
@@ -512,6 +513,10 @@ var Mailbox = class extends DurableObject {
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
         if (km && m === "DELETE") return this.revokeKey(km[1]);
         if (path === "/v1/device" && m === "DELETE") return this.unpair();
+        if (path === "/v1/device/devices" && m === "GET") return this.registryCall("/internal/list", {});
+        if (path === "/v1/device/prune" && m === "POST") return this.registryCall("/internal/prune", {});
+        const dm = /^\/v1\/device\/devices\/([0-9a-f]{48})$/.exec(path);
+        if (dm && m === "DELETE") return this.registryCall("/internal/delete", { target: dm[1] });
         return err(404, "not_found", "no such device endpoint");
       }
       const a = await this.authenticate(req, "agent");
@@ -604,6 +609,19 @@ var Mailbox = class extends DurableObject {
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
     return json(200, { revoked: true, id });
   }
+  registryCall(path, body) {
+    return this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry")).fetch("https://registry" + path, { method: "POST", body: JSON.stringify({ deviceId: this.getMeta("device_id"), ...body }) });
+  }
+  /** Tells the Registry this Mac connected or disconnected (not on every ping), so it can drop devices idle for a month. */
+  reportSeen() {
+    const now = Date.now();
+    if (now - this.reportedAt < 6e4) return;
+    this.reportedAt = now;
+    const id = this.getMeta("device_id");
+    if (id) this.ctx.waitUntil(this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry")).fetch("https://registry/internal/seen", { method: "POST", body: JSON.stringify({ deviceId: id }) }).catch(() => {
+    }));
+  }
+  reportedAt = 0;
   async unpair() {
     const id = this.getMeta("device_id");
     await this.internalWipe();
@@ -866,6 +884,8 @@ var Mailbox = class extends DurableObject {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
     this.setMeta("last_seen", String(Date.now()));
+    this.reportedAt = 0;
+    this.reportSeen();
     pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: this.lim.ttlMs / 1e3 }));
     this.expireSweep(Date.now());
     this.flush(true);
@@ -898,6 +918,7 @@ var Mailbox = class extends DurableObject {
   }
   async webSocketClose(ws, code, reason) {
     this.setMeta("last_seen", String(Date.now()));
+    if (this.getMeta("device_id")) this.reportSeen();
     try {
       ws.close(code, reason);
     } catch {
@@ -1602,6 +1623,19 @@ function registry(env, path, body) {
   return env.REGISTRY.get(env.REGISTRY.idFromName("registry")).fetch(new Request("https://registry" + path, { method: "POST", body: JSON.stringify(body) }));
 }
 __name(registry, "registry");
+async function chooseDevice(env, pickRaw) {
+  const r = await (await registry(env, "/devices", { status: true })).json();
+  const devices = r.devices;
+  if (devices.length === 0) return { error: "none" };
+  if (pickRaw === null || pickRaw === "") {
+    const i = Math.max(0, devices.findIndex((d) => d.id === r.preferred));
+    return { devices, device: devices[i], index: i + 1 };
+  }
+  const pick = Number(pickRaw);
+  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return { error: `device must be 1 to ${devices.length}` };
+  return { devices, device: devices[pick - 1], index: pick };
+}
+__name(chooseDevice, "chooseDevice");
 function mailbox(env, deviceId, path, body) {
   return env.MAILBOX.get(env.MAILBOX.idFromName(deviceId)).fetch(new Request("https://mailbox/internal/oauth/" + path, { method: "POST", body: JSON.stringify(body) }));
 }
@@ -1742,14 +1776,15 @@ function page(status, title, body, script = "") {
 }
 __name(page, "page");
 var errorPage = /* @__PURE__ */ __name((message, status = 400) => page(status, "Herald", `<h1>Can't connect</h1><div class="card">${esc(message)}</div><p class="mut">Nothing was approved. Close this tab and start again from the app.</p>`), "errorPage");
-function consentPage(rid, client, redirectHost, online, note = "") {
+function consentPage(rid, client, redirectHost, online, note = "", macName = "your Mac", others = []) {
   const name = esc(client.name);
   const body = `<h1>${name} wants to connect to Herald</h1>
 <p class="mut">It will return to <b>${esc(redirectHost)}</b> after you decide.</p>
 <div class="card"><h2>It will be able to</h2><ul><li>send notifications to your Mac</li><li>read receipts and your replies</li></ul>
 <p class="mut" style="margin:.6rem 0 0">Nothing else: no commands, no files, no settings. You can revoke it any time in Herald, Settings, Cloud.</p></div>
 <div class="card"><h2>Approve in Herald</h2>
-<p id="wait"><span class="dot"></span>${online ? `A banner is waiting on your Mac. Click <b>Approve</b> there.` : `Herald does not look connected right now. Open Herald on your Mac; the request will appear there.`} This page continues by itself.</p></div>
+<p id="wait"><span class="dot"></span>${online ? `A banner is waiting on <b>${esc(macName)}</b>. Click <b>Approve</b> there.` : `Herald does not look connected on <b>${esc(macName)}</b> right now. Open Herald on that Mac; the request will appear there.`} This page continues by itself.</p>
+${others.length ? `<p class="mut">Not this Mac? ${others.filter((o) => !o.current).map((o) => `<a href="${esc(o.href)}">${esc(o.name)}</a>`).join(", ")}</p>` : ""}</div>
 <div class="card"><h2>Or enter the code</h2><p class="mut" style="margin-top:0">Herald, Settings, Cloud, Connector approvals shows a 6-digit code.</p>
 ${note ? `<p class="bad">${esc(note)}</p>` : ""}
 <form method="post" action="/authorize/code"><input type="hidden" name="rid" value="${rid}"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required>
@@ -1786,21 +1821,17 @@ async function authorize(env, req, url) {
   if (resource !== null && resource.replace(/\/+$/, "") !== mcp) return errorRedirect(redirect, "invalid_target", `resource must be ${mcp}`, state);
   const scope = (q.get("scope") ?? "").trim();
   if (scope && scope.split(/\s+/).some((s) => s !== SCOPE)) return errorRedirect(redirect, "invalid_scope", "the only scope is notify", state);
-  const devices = (await (await registry(env, "/devices", {})).json()).devices;
-  if (devices.length === 0) return page(200, "Pair Herald first", `<h1>Pair Herald first</h1><div class="card">This relay is not paired with a Mac yet. In Herald, open Settings, Cloud and pair this relay, then connect ${esc(client.name)} again.</div>`);
-  let device = devices[0];
-  if (devices.length > 1) {
-    const pick = Number(q.get("device"));
-    if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) {
-      const next = new URL(url);
-      const links = devices.map((d, i) => {
-        next.searchParams.set("device", String(i + 1));
-        return `<li><a href="${esc(next.pathname + next.search)}">${esc(d.name ?? "Mac " + (i + 1))}</a></li>`;
-      }).join("");
-      return page(200, "Choose a Mac", `<h1>Which Mac?</h1><p class="mut">${esc(client.name)} will notify the Mac you choose.</p><div class="card"><ul>${links}</ul></div>`);
-    }
-    device = devices[pick - 1];
+  const chosen = await chooseDevice(env, q.get("device"));
+  if ("error" in chosen) {
+    if (chosen.error === "none") return page(200, "Pair Herald first", `<h1>Pair Herald first</h1><div class="card">This relay is not paired with a Mac yet. In Herald, open Settings and Cloud and pair this relay, then connect ${esc(client.name)} again.</div>`);
+    return errorPage(chosen.error);
   }
+  const { devices, device } = chosen;
+  const others = devices.length > 1 ? devices.map((d, i) => {
+    const next = new URL(url);
+    next.searchParams.set("device", String(i + 1));
+    return { name: d.name ?? "Mac " + (i + 1), href: next.pathname + next.search, current: d.id === device.id };
+  }) : [];
   const r = await mailbox(env, device.id, "begin", { clientId: client.id, clientName: client.name, redirectUri: redirect, challenge: chal, state, scope: SCOPE, resource: mcp });
   if (r.status === 429) return errorPage("Approvals are already waiting in Herald (or too many were requested). Answer them there, or wait a few minutes.", 429);
   if (!r.ok) return errorPage("Could not start the approval.", 502);
@@ -1810,7 +1841,7 @@ async function authorize(env, req, url) {
     host = new URL(redirect).host || new URL(redirect).protocol;
   } catch {
   }
-  return consentPage(id, client, host, online);
+  return consentPage(id, client, host, online, "", device.name ?? "your Mac", others);
 }
 __name(authorize, "authorize");
 async function ridDevice(env, rid) {
@@ -1886,11 +1917,9 @@ async function deviceAuthorization(env, req, url) {
   if (c instanceof Response) return c;
   const scope = (form.get("scope") ?? "").trim();
   if (scope && scope.split(/\s+/).some((x) => x !== SCOPE)) return oerr(400, "invalid_scope", "the only scope is notify");
-  const devices = (await (await registry(env, "/devices", {})).json()).devices;
-  if (devices.length === 0) return oerr(400, "invalid_request", "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first");
-  const pick = form.get("device") === null ? 1 : Number(form.get("device"));
-  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return oerr(400, "invalid_request", `device must be 1 to ${devices.length}`);
-  const r = await mailbox(env, devices[pick - 1].id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
+  const chosen = await chooseDevice(env, form.get("device"));
+  if ("error" in chosen) return oerr(400, "invalid_request", chosen.error === "none" ? "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first" : chosen.error);
+  const r = await mailbox(env, chosen.device.id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
   if (r.status === 429) return oerr(429, "slow_down", "approvals are already waiting in Herald (or too many were requested); answer them there or wait a few minutes", { "retry-after": "60" });
   if (!r.ok) return oerr(502, "temporarily_unavailable", "could not start the approval");
   const d = await r.json();
@@ -1901,7 +1930,11 @@ async function deviceAuthorization(env, req, url) {
     verification_uri: verification,
     verification_uri_complete: verification + "?user_code=" + encodeURIComponent(d.userCode),
     expires_in: d.expiresIn,
-    interval: d.interval
+    interval: d.interval,
+    device_name: chosen.device.name ?? "Mac " + chosen.index,
+    device_count: chosen.devices.length,
+    device_index: chosen.index,
+    device_online: d.online
   }));
 }
 __name(deviceAuthorization, "deviceAuthorization");
@@ -2025,6 +2058,9 @@ var ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 var MAX_PENDING_PER_IP = 3;
 var MAX_PENDING_TOTAL = 60;
 var FAILS_PER_10_MIN = 10;
+var DAY = 864e5;
+var STALE_AUTO_DAYS = 30;
+var STALE_REMOVABLE_DAYS = 7;
 var STARTS_PER_HOUR_TOTAL = 300;
 function newCode() {
   const b = crypto.getRandomValues(new Uint8Array(8));
@@ -2041,10 +2077,14 @@ var Registry = class extends DurableObject2 {
     super(ctx, env);
     ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, name TEXT, ip TEXT);
-      CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER NOT NULL, last_seen INTEGER);
       CREATE TABLE IF NOT EXISTS events (kind TEXT NOT NULL, at INTEGER NOT NULL, ip TEXT);
       CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, secret_hash TEXT, created_at INTEGER NOT NULL);
     `);
+    try {
+      ctx.storage.sql.exec("ALTER TABLE devices ADD COLUMN last_seen INTEGER");
+    } catch {
+    }
     for (const t of ["codes", "events"]) {
       try {
         ctx.storage.sql.exec(`ALTER TABLE ${t} ADD COLUMN ip TEXT`);
@@ -2055,12 +2095,115 @@ var Registry = class extends DurableObject2 {
   q(sql, ...b) {
     return this.ctx.storage.sql.exec(sql, ...b).toArray();
   }
+  // ---------- device hygiene
+  mailboxOf(id) {
+    return this.env.MAILBOX.get(this.env.MAILBOX.idFromName(id));
+  }
+  /** What a mailbox says about its Mac. A mailbox that was wiped (or never initialised) is reported as not valid. */
+  async statusOf(id) {
+    try {
+      const r = await this.mailboxOf(id).fetch("https://mailbox/internal/status", { method: "POST", body: "{}" });
+      if (r.ok) return await r.json();
+    } catch {
+    }
+    return { valid: true, online: false, lastSeen: 0 };
+  }
+  /** Drops the registry row and purges the mailbox (sockets closed, keys, queue, consents and audio deleted). */
+  async dropDevice(id) {
+    this.q("DELETE FROM devices WHERE id = ?", id);
+    try {
+      await this.mailboxOf(id).fetch("https://mailbox/internal/wipe", { method: "POST", body: "{}" });
+    } catch {
+    }
+  }
+  async credentialsValid(id) {
+    return !!this.env.RELAY_SECRET && await deviceIdValid(this.env.RELAY_SECRET, id);
+  }
+  /**
+   * Removes entries nobody can use: credentials rotated (the id no longer verifies against RELAY_SECRET), mailbox wiped, or not
+   * connected for 30 days. `keep` is never removed. Run lazily on every lookup that wants the list and by the daily alarm.
+   */
+  async pruneStale(now, keep) {
+    const gone = [];
+    const rows = this.q("SELECT id, created_at, last_seen FROM devices");
+    for (const d of rows) {
+      if (d.id === keep) continue;
+      let dead = !await this.credentialsValid(d.id);
+      if (!dead && now - (d.last_seen ?? d.created_at) > STALE_AUTO_DAYS * DAY) {
+        const st = await this.statusOf(d.id);
+        dead = !st.valid || !st.online && now - Math.max(st.lastSeen, d.last_seen ?? 0, d.created_at) > STALE_AUTO_DAYS * DAY;
+      }
+      if (dead) {
+        await this.dropDevice(d.id);
+        gone.push(d.id);
+      }
+    }
+    return gone;
+  }
+  async ensureAlarm() {
+    if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + DAY);
+  }
+  async alarm() {
+    await this.pruneStale(Date.now());
+    await this.ctx.storage.setAlarm(Date.now() + DAY);
+  }
+  /** The device list as one Mac may see it: every entry with its liveness, and whether this Mac may remove it. */
+  async describe(selfId, now) {
+    const rows = this.q("SELECT id, name, created_at, last_seen FROM devices ORDER BY created_at, rowid");
+    const self = rows.find((d) => d.id === selfId);
+    return Promise.all(rows.map(async (d) => {
+      const st = await this.statusOf(d.id);
+      const lastSeen = Math.max(st.lastSeen, d.last_seen ?? 0, d.created_at);
+      const credentialsOk = await this.credentialsValid(d.id);
+      const idle = !st.online && now - lastSeen > STALE_REMOVABLE_DAYS * DAY;
+      const sameName = !!self && d.id !== self.id && !!self.name && self.name === d.name;
+      const reason = d.id === selfId ? null : sameName ? "same_name" : !credentialsOk ? "credentials_rotated" : idle ? "idle" : null;
+      return {
+        id: d.id,
+        name: d.name,
+        online: st.online,
+        lastSeenAt: new Date(lastSeen).toISOString(),
+        createdAt: new Date(d.created_at).toISOString(),
+        thisDevice: d.id === selfId,
+        removable: reason !== null,
+        ...reason ? { removableReason: reason } : {}
+      };
+    }));
+  }
   async fetch(req) {
     const path = new URL(req.url).pathname;
     if (req.method !== "POST") return err(405, "method_not_allowed", "POST only");
     const now = Date.now();
     this.q("DELETE FROM codes WHERE expires_at < ?", now);
     this.q("DELETE FROM events WHERE at < ?", now - 36e5);
+    await this.ensureAlarm();
+    if (path === "/internal/seen") {
+      const { deviceId } = await req.json();
+      this.q("UPDATE devices SET last_seen = ? WHERE id = ?", now, deviceId);
+      return json(200, { ok: true });
+    }
+    if (path === "/internal/prune" || path === "/internal/list" || path === "/internal/delete") {
+      const b = await req.json();
+      if (!this.q("SELECT 1 FROM devices WHERE id = ?", b.deviceId).length) return err(404, "not_found", "this device is not in the registry");
+      if (path === "/internal/delete") {
+        const t = (await this.describe(b.deviceId, now)).find((d) => d.id === b.target);
+        if (!t) return err(404, "not_found", "no such device");
+        if (t.thisDevice) return err(400, "invalid_request", "use unpair to remove this Mac");
+        if (!t.removable) return err(403, "not_removable", `only an entry with the same name, rotated credentials or no connection for ${STALE_REMOVABLE_DAYS} days can be removed by another Mac`);
+        await this.dropDevice(t.id);
+        return json(200, { removed: [t.id] });
+      }
+      let removed = [];
+      if (path === "/internal/prune") {
+        const self = this.q("SELECT name FROM devices WHERE id = ?", b.deviceId)[0];
+        if (self.name) for (const d of this.q("SELECT id FROM devices WHERE name = ? AND id != ?", self.name, b.deviceId)) {
+          await this.dropDevice(d.id);
+          removed.push(d.id);
+        }
+        removed = removed.concat(await this.pruneStale(now, b.deviceId));
+      }
+      return json(200, { removed, devices: await this.describe(b.deviceId, now) });
+    }
     if (path === "/internal/remove") {
       const { deviceId } = await req.json();
       this.q("DELETE FROM devices WHERE id = ?", deviceId);
@@ -2088,7 +2231,16 @@ var Registry = class extends DurableObject2 {
       return json(200, { id: row.id, name: row.name, redirectUris: JSON.parse(row.redirect_uris), secretHash: row.secret_hash });
     }
     if (path === "/devices") {
-      return json(200, { devices: this.q("SELECT id, name FROM devices ORDER BY created_at, rowid") });
+      await this.pruneStale(now);
+      const rows = this.q("SELECT id, name FROM devices ORDER BY created_at, rowid");
+      if (!body.status) return json(200, { devices: rows });
+      const info = await this.describe(null, now);
+      const devices = rows.map((r) => {
+        const i = info.find((x) => x.id === r.id);
+        return { ...r, online: i.online, lastSeenAt: i.lastSeenAt };
+      });
+      const best = [...devices].sort((a, b) => Number(b.online) - Number(a.online) || Date.parse(b.lastSeenAt) - Date.parse(a.lastSeenAt))[0];
+      return json(200, { devices, preferred: best?.id ?? null });
     }
     const ip = (await sha256Hex("ip:" + (req.headers.get("x-client-ip") || "unknown"))).slice(0, 16);
     if (path === "/pair/start") {
@@ -2097,7 +2249,9 @@ var Registry = class extends DurableObject2 {
         return err(401, "unauthorized", "this relay requires its pairing secret (X-Pairing-Secret)");
       }
       const max = Number(this.env.MAX_DEVICES ?? "5") || 5;
-      if (this.q("SELECT COUNT(*) AS n FROM devices")[0].n >= max) {
+      const startName = typeof body.deviceName === "string" ? body.deviceName.slice(0, 60) : null;
+      const replaces = startName ? this.q("SELECT COUNT(*) AS n FROM devices WHERE name = ?", startName)[0].n : 0;
+      if (this.q("SELECT COUNT(*) AS n FROM devices")[0].n - replaces >= max) {
         return err(403, "device_limit", `this relay already has ${max} paired Macs`);
       }
       if (this.q("SELECT COUNT(*) AS n FROM events WHERE kind = 'start' AND ip = ?", ip)[0].n >= (Number(this.env.PAIR_STARTS_PER_HOUR ?? "6") || 6)) {
@@ -2132,7 +2286,8 @@ var Registry = class extends DurableObject2 {
       const stub = this.env.MAILBOX.get(this.env.MAILBOX.idFromName(deviceId));
       await stub.fetch("https://mailbox/internal/init", { method: "POST", body: JSON.stringify({ tokenHash: await sha256Hex(secret), deviceId }) });
       const name = typeof body.deviceName === "string" ? body.deviceName.slice(0, 60) : row.name;
-      this.q("INSERT INTO devices (id, name, created_at) VALUES (?, ?, ?)", deviceId, name, now);
+      this.q("INSERT INTO devices (id, name, created_at, last_seen) VALUES (?, ?, ?, ?)", deviceId, name, now, now);
+      if (name) for (const d of this.q("SELECT id FROM devices WHERE name = ? AND id != ?", name, deviceId)) await this.dropDevice(d.id);
       return json(200, { deviceId, deviceToken: deviceToken(deviceId, secret) });
     }
     return err(404, "not_found", "no such endpoint");
