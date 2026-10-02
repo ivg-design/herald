@@ -67,7 +67,11 @@ struct RichTextLines: View {
             var a = links ? GridMarkdown.parse(r.text) : AttributedString(r.text)
             a.font = GridStyle.runFont(component.style, size: r.size ?? component.fontSize,
                                        weight: r.weight ?? component.weight, family: r.font, italic: r.italic)
-            a.foregroundColor = color(r.color) ?? base
+            // A link keeps the link colour unless the run names its own.
+            let tint = color(r.color)
+            for piece in a.runs where piece.link == nil || tint != nil {
+                a[piece.range].foregroundColor = tint ?? base
+            }
             if r.underline { a.underlineStyle = .single }
             if r.strike { a.strikethroughStyle = .single }
             out += a
