@@ -12,7 +12,7 @@ final class ParityRouteTests: XCTestCase {
         var reshown: [HeraldNotification] = []
         var closed: [(String, String)] = []
         var changes = 0
-        var installs: [(String, Bool)] = []
+        var installs: [(String, Bool, String?, String?)] = []
         var voiceActions: [String] = []
         func settingValue(_ key: String) async -> JSONValue? { values[key] }
         func applySetting(_ key: String, _ value: JSONValue) async throws { applied.append((key, value)); values[key] = value }
@@ -22,7 +22,7 @@ final class ParityRouteTests: XCTestCase {
         func voiceState() async throws -> JSONValue { .object(["engine": .string("system")]) }
         func voiceInstall(action: String) async throws -> JSONValue { voiceActions.append(action); return .object(["ok": .bool(true)]) }
         func mcpStatus() async throws -> JSONValue { .object(["server": .string("/x/herald-mcp")]) }
-        func mcpInstall(client: String, reinstall: Bool) async throws -> JSONValue { installs.append((client, reinstall)); return .object(["ok": .bool(true)]) }
+        func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue { installs.append((client, reinstall, name, icon)); return .object(["ok": .bool(true)]) }
         func reshow(_ n: HeraldNotification) async throws -> String { reshown.append(n); return "again" }
         func closeBanner(app: String, id: String) async { closed.append((app, id)) }
         func changed() async { changes += 1 }
@@ -271,6 +271,13 @@ final class ParityRouteTests: XCTestCase {
         r = await call("POST", "/v1/mcp/install", ["client": "codex", "reinstall": true])
         XCTAssertEqual(r.status, 200)
         XCTAssertEqual(host.installs.first?.0, "codex"); XCTAssertEqual(host.installs.first?.1, true)
+        r = await call("POST", "/v1/mcp/install", ["client": "generic", "name": "My Bot"])
+        XCTAssertEqual(r.status, 200)
+        XCTAssertEqual(host.installs.last?.2, "My Bot")
+        r = await call("POST", "/v1/mcp/install", ["client": "generic"])
+        XCTAssertEqual(r.status, 400, "a generic client needs a name")
+        r = await call("POST", "/v1/mcp/install", ["client": "codex", "icon": "/no/such/icon.png"])
+        XCTAssertEqual(r.status, 400)
         r = await call("POST", "/v1/mcp/install", ["client": "vim"])
         XCTAssertEqual(r.status, 400)
         r = await call("POST", "/v1/mcp/install", [:])

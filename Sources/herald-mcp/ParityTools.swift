@@ -139,17 +139,23 @@ enum ParityTools {
             name: "install_mcp", title: "Install the MCP server in a client",
             description: """
             Settings > MCP. Without `client`: the status of each client (Claude Code, Codex, Claude Desktop) and the server path. With \
-            `client` (claudeCode, codex, claudeDesktop, cli, generic): add herald-mcp to that client's configuration (a backup of the \
-            file is kept; claudeCode runs `claude mcp add`), or install the `herald` command line tool (cli), or return the generic \
-            config. It edits another application's configuration: do it only when the user asked.
+            `client` (claudeCode, codex, claudeDesktop, cli, generic): add herald-mcp to that client's configuration with `--agent <client>` (a backup of the \
+            file is kept; claudeCode runs `claude mcp add`) and register the agent as an issuer: app agent.claude-code, agent.codex, \
+            agent.claude-desktop or agent.<slug> (generic needs `name`), with a manifest, a default template and the product's icon. \
+            Re-running keeps the user's edits. `cli` installs the `herald` command line tool. It edits another application's \
+            configuration: do it only when the user asked.
             """,
             inputSchema: Schema.input([
                 "client": Schema.string("Which client to install into; omit for the status.", values: ["claudeCode", "codex", "claudeDesktop", "cli", "generic"]),
                 "reinstall": Schema.boolean("Replace an existing registration (claudeCode)."),
+                "name": Schema.string("generic only: the client's name; its notifications arrive as agent.<slug of the name>."),
+                "icon": Schema.string("An image file on this Mac to use as the agent's icon (otherwise the product's own icon is used)."),
             ]), idempotent: true),
             route: { a in
                 guard let client = try text(a, "client") else { return RouteCall(method: "GET", path: "/v1/mcp") }
-                return RouteCall(method: "POST", path: "/v1/mcp/install", body: .object(["client": .string(client), "reinstall": .bool(try a.bool("reinstall") ?? false)]))
+                var body: [String: JSONValue] = ["client": .string(client), "reinstall": .bool(try a.bool("reinstall") ?? false)]
+                for k in ["name", "icon"] { if let v = a.value(k) { body[k] = v } }
+                return RouteCall(method: "POST", path: "/v1/mcp/install", body: .object(body))
             }),
 
         ParityTool(definition: MCPToolDefinition(

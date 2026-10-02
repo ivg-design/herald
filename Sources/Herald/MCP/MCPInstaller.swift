@@ -108,8 +108,8 @@ public struct MCPInstaller {
     }
 
     /// Replaces an existing `[mcp_servers.herald]` table (up to the next header) or appends one.
-    public static func codexMerge(_ text: String, command: String) -> String {
-        let table = ["[mcp_servers.herald]", "command = \(tomlQuote(command))", "args = []"]
+    public static func codexMerge(_ text: String, command: String, args: [String] = []) -> String {
+        let table = ["[mcp_servers.herald]", "command = \(tomlQuote(command))", "args = [\(args.map(tomlQuote).joined(separator: ", "))]"]
         var lines = text.components(separatedBy: "\n")
         if let start = lines.firstIndex(where: isHeraldHeader) {
             var end = start + 1
@@ -141,20 +141,31 @@ public struct MCPInstaller {
     }
 
     /// Merges the herald server into a Claude Desktop config, keeping every other key and server.
-    public static func desktopMerge(_ data: Data?, command: String) throws -> Data {
+    public static func desktopMerge(_ data: Data?, command: String, args: [String] = []) throws -> Data {
         var root = try parseObject(data ?? Data())
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
-        servers["herald"] = ["command": command]
+        servers["herald"] = args.isEmpty ? ["command": command] as [String: Any] : ["command": command, "args": args] as [String: Any]
         root["mcpServers"] = servers
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     }
 
-    public var genericJSON: String {
-        let o: [String: Any] = ["mcpServers": ["herald": ["command": serverPath, "args": [String]()]]]
+    public var genericJSON: String { genericJSON(agent: nil) }
+    /// The config any MCP client can use; with `agent` (a slug) the server sends as `agent.<slug>` (issue #62).
+    public func genericJSON(agent: String?) -> String {
+        let o: [String: Any] = ["mcpServers": ["herald": ["command": serverPath, "args": Self.agentArguments(agent)]]]
         let d = (try? JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])) ?? Data()
         return String(decoding: d, as: UTF8.self)
     }
-    public var genericCommandLine: String { "claude mcp add --scope user herald -- \(serverPath)" }
+    public var genericCommandLine: String { genericCommandLine(agent: nil) }
+    public func genericCommandLine(agent: String?) -> String {
+        "claude mcp add --scope user herald -- " + ([serverPath] + Self.agentArguments(agent)).joined(separator: " ")
+    }
+
+    /// `--agent <slug>`: the identity the server sends as when a call names no app.
+    public static func agentArguments(_ agent: String?) -> [String] {
+        guard let agent, !agent.isEmpty else { return [] }
+        return ["--agent", agent]
+    }
     public var genericClipboardText: String {
         "\(genericJSON)\n\nstdio command: \(serverPath)\n\(genericCommandLine)\n"
     }
@@ -190,13 +201,14 @@ public struct MCPInstaller {
         try fm.copyItem(at: url, to: bak)
     }
 
-    public func installClaudeCode(reinstall: Bool = false) -> MCPInstallResult {
+    public func installClaudeCode(reinstall: Bool = false, agent: String? = nil) -> MCPInstallResult {
         guard let claude = claudeBinary() else {
             return .init(ok: false, message: "The claude command was not found.", touched: "claude mcp add")
         }
-        let addCmd = "claude mcp add --scope user herald -- \(serverPath)"
+        let serverCommand = [serverPath] + Self.agentArguments(agent)
+        let addCmd = "claude mcp add --scope user herald -- " + serverCommand.joined(separator: " ")
         if reinstall { _ = run(claude, ["mcp", "remove", "herald", "--scope", "user"]) }
-        let (st, out) = run(claude, ["mcp", "add", "--scope", "user", "herald", "--", serverPath])
+        let (st, out) = run(claude, ["mcp", "add", "--scope", "user", "herald", "--"] + serverCommand)
         if st == 0 { return .init(ok: true, message: "Registered with Claude Code (user scope).", touched: addCmd) }
         if out.lowercased().contains("already exists") {
             return .init(ok: false, message: "herald is already registered in Claude Code. Use Reinstall to replace it.",
@@ -205,13 +217,13 @@ public struct MCPInstaller {
         return .init(ok: false, message: out.isEmpty ? "claude exited with status \(st)." : out, touched: addCmd)
     }
 
-    public func installCodex() -> MCPInstallResult {
+    public func installCodex(agent: String? = nil) -> MCPInstallResult {
         do {
             let fm = FileManager.default
             let old = (try? String(contentsOf: codexConfig, encoding: .utf8)) ?? ""
             try fm.createDirectory(at: codexConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
             try backup(codexConfig)
-            try Self.codexMerge(old, command: serverPath).write(to: codexConfig, atomically: true, encoding: .utf8)
+            try Self.codexMerge(old, command: serverPath, args: Self.agentArguments(agent)).write(to: codexConfig, atomically: true, encoding: .utf8)
             return .init(ok: true, message: "Added [mcp_servers.herald]. Restart Codex to pick it up. Backup: config.toml.bak.",
                          touched: codexConfig.path)
         } catch {
@@ -219,11 +231,11 @@ public struct MCPInstaller {
         }
     }
 
-    public func installClaudeDesktop() -> MCPInstallResult {
+    public func installClaudeDesktop(agent: String? = nil) -> MCPInstallResult {
         do {
             let fm = FileManager.default
             let old = try? Data(contentsOf: desktopConfig)
-            let merged = try Self.desktopMerge(old, command: serverPath)
+            let merged = try Self.desktopMerge(old, command: serverPath, args: Self.agentArguments(agent))
             try fm.createDirectory(at: desktopConfig.deletingLastPathComponent(), withIntermediateDirectories: true)
             try backup(desktopConfig)
             try merged.write(to: desktopConfig, options: .atomic)

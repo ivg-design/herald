@@ -133,6 +133,14 @@ once, for example `actions[1].kind: 'shortcut' actions are authored in templates
 
 There is no `herald` CLI command for manifests; use the API.
 
+## Agents as issuers
+
+Installing an MCP client registers a manifest for it ([../MCP.md](../MCP.md#agents-as-issuers)): app `agent.claude-code`,
+`agent.codex`, `agent.claude-desktop` or `agent.<slug>`, `family: "agent"`, `defaultTemplate: "agent"`. It declares `title` (required),
+`body`, `status` (`done`, `failed`, `waiting`, `question`: the badge), `project`, `session`, `task`, `tool`, `duration`, `link` (a
+`url`) and `needsInput` (a `bool`), each with a sample, and the actions `open` (a link), `reply` (a callback) and `dismiss`. Herald
+rewrites it on every install; edit the **template**, not the manifest, because the template is kept.
+
 ## A good manifest
 
 - Declare every field a template might bind, with a realistic `sample`, so previews look like the real thing.

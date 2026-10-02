@@ -31,7 +31,9 @@ public protocol ParityHost: AnyObject, Sendable {
     func voiceInstall(action: String) async throws -> JSONValue
     /// Per client (Claude Code, Codex, Claude Desktop, CLI): installed or not, and the server path.
     func mcpStatus() async throws -> JSONValue
-    func mcpInstall(client: String, reinstall: Bool) async throws -> JSONValue
+    /// `name` is the generic client's name (its app becomes `agent.<slug>`); `icon` a file to use as its icon. Installing also
+    /// registers the agent as an issuer (app, manifest, default template, icon): see `AgentIssuer`.
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue
     /// Shows a stored notification again as a new banner. Returns its id.
     func reshow(_ n: HeraldNotification) async throws -> String
     /// Closes the banner of a notification that is being deleted from History.
@@ -49,7 +51,7 @@ public extension ParityHost {
     func voiceState() async throws -> JSONValue { throw BackendError(501, "voice is not supported") }
     func voiceInstall(action: String) async throws -> JSONValue { throw BackendError(501, "voice is not supported") }
     func mcpStatus() async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
-    func mcpInstall(client: String, reinstall: Bool) async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue { throw BackendError(501, "MCP install is not supported") }
     func reshow(_ n: HeraldNotification) async throws -> String { throw BackendError(501, "re-show is not supported") }
     func closeBanner(app: String, id: String) async {}
     func changed() async {}
@@ -355,7 +357,11 @@ public final class ParityService: @unchecked Sendable {
         let client = try requiredString(o, "client")
         guard Self.mcpClients.contains(client) else { throw BackendError(400, "client must be one of \(Self.mcpClients.joined(separator: ", "))") }
         let reinstall = (o["reinstall"] as? Bool) ?? false
-        return Self.reply(try await host.mcpInstall(client: client, reinstall: reinstall))
+        let name = try optionalString(o, "name"), icon = try optionalString(o, "icon")
+        if client == "generic", name == nil { throw BackendError(400, "name is required for the generic client (its app becomes agent.<slug>)") }
+        if let icon, !FileManager.default.fileExists(atPath: (icon as NSString).expandingTildeInPath) { throw BackendError(400, "no such icon file: \(icon)") }
+        return Self.reply(try await host.mcpInstall(client: client, reinstall: reinstall, name: name,
+                                                    icon: icon.map { ($0 as NSString).expandingTildeInPath }))
     }
 }
 

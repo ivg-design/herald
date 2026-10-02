@@ -273,6 +273,13 @@ No arguments. The scheduled windows, any ad hoc silence, and `status` (what is s
 
 Tell the user before silencing them.
 
+## Agent identity
+
+`herald-mcp --agent claude-code` (or `HERALD_AGENT=claude-code`; `agent.claude-code` is the same) makes the server send as that app:
+`send_notification`, `send_test`, `speak`, `dismiss`, `list_history` and `list_stacks` use `agent.claude-code` when `app` is omitted, and
+`tools/list` shows `app` as optional with the default in the description. An explicit `app` still wins; every other tool is
+unchanged. The Settings > MCP install writes the flag into the client's configuration ([../MCP.md](../MCP.md#agents-as-issuers)).
+
 ## Parity tools
 
 Everything the Designer, History and Settings can do is also a tool ([parity.md](parity.md) lists each one
@@ -291,7 +298,7 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `register_app` | `app`, `appName?`, `icon?`, `bundleId?`, `callbackURL?`, `allowCommands?`, `defaults?` | `POST /v1/register` | `allowCommands` is only a request; the user confirms it in Settings. |
 | `voice_status` | none | `GET /v1/voice` | Engine, Kokoro installed or missing, progress, voices. |
 | `install_voice` | `action`: `install`, `cancel`, `useExisting` | `POST /v1/voice/install` | `install` downloads about 340 MB: ask first. |
-| `install_mcp` | `client?`, `reinstall?` | `GET /v1/mcp`, `POST /v1/mcp/install` | Without `client`: status. Edits another application's configuration. |
+| `install_mcp` | `client?`, `reinstall?`, `name?`, `icon?` | `GET /v1/mcp`, `POST /v1/mcp/install` | Without `client`: status. Edits another application's configuration, writes `--agent`, and registers the agent as an issuer ([MCP.md](../MCP.md#agents-as-issuers)). |
 | `list_approvals` | none | `GET /v1/actions/approvals` | Template commands, scripts and Shortcuts the user approved. |
 | `revoke_approval` | `app`, `template` | `DELETE /v1/actions/approvals` | Destructive. There is no tool that grants one. |
 

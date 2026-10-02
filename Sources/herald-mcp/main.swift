@@ -32,9 +32,9 @@ case .run:
 }
 
 let client = HeraldClient(supportDirectory: config.supportDirectory, port: config.port, token: config.token)
-let server = MCPServer(client: client, previewDirectory: config.previewDirectory,
+let server = MCPServer(client: client, previewDirectory: config.previewDirectory, defaultApp: config.agentApp,
                        log: config.debug ? { logLine($0) } : { _ in })
-logLine("\(MCPServer.serverVersion) ready (Herald at 127.0.0.1:\(client.port), support directory \(config.supportDirectory.path))")
+logLine("\(MCPServer.serverVersion) ready (Herald at 127.0.0.1:\(client.port), support directory \(config.supportDirectory.path)" + (config.agentApp.map { ", sending as \($0)" } ?? "") + ")")
 
 while let line = readLine(strippingNewline: true) {
     if line.allSatisfy(\.isWhitespace) { continue }

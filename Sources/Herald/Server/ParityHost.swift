@@ -165,25 +165,27 @@ final class AppParityHost: ParityHost, @unchecked Sendable {
         }.value
     }
 
-    func mcpInstall(client: String, reinstall: Bool) async throws -> JSONValue {
-        let result: MCPInstallResult = await Task.detached {
-            let installer = MCPInstaller()
-            switch client {
-            case "claudeCode": return installer.installClaudeCode(reinstall: reinstall)
-            case "codex": return installer.installCodex()
-            case "claudeDesktop": return installer.installClaudeDesktop()
-            case "cli": return installer.installCLI()
-            default: return MCPInstallResult(ok: true, message: "Add this to any MCP client.", touched: installer.genericCommandLine)
-            }
-        }.value
-        var out: [String: JSONValue] = ["ok": .bool(result.ok), "message": .string(result.message), "touched": .string(result.touched),
-                                        "alreadyExists": .bool(result.alreadyExists)]
-        if client == "generic" {
-            let installer = MCPInstaller()
-            out["config"] = .string(installer.genericJSON)
+    func mcpInstall(client: String, reinstall: Bool, name: String?, icon: String?) async throws -> JSONValue {
+        if client == "cli" {
+            let r = await Task.detached { MCPInstaller().installCLI() }.value
+            guard r.ok else { throw BackendError(400, r.message) }
+            return .object(["ok": .bool(true), "message": .string(r.message), "touched": .string(r.touched)])
         }
-        guard result.ok || result.alreadyExists else { throw BackendError(400, result.message) }
-        return .object(out)
+        // The client's configuration gets `--agent <slug>`, and the agent is registered as an issuer (issue #62).
+        let env = await MainActor.run {
+            AgentInstall.Environment(registry: controller.registry, manifests: controller.manifests, templates: controller.templates,
+                                     support: controller.supportDirectory)
+        }
+        let outcome = await AgentInstall.run(client: client, genericName: name, iconFile: icon.map { URL(fileURLWithPath: $0) },
+                                             reinstall: reinstall, env: env)
+        guard outcome.install.ok else { throw BackendError(outcome.install.alreadyExists ? 409 : 400, outcome.install.message) }
+        await MainActor.run { controller.changed() }
+        var json = outcome.json
+        if client == "generic", let slug = outcome.identity?.slug, case .object(var o) = json {
+            o["config"] = .string(env.installer.genericJSON(agent: slug))
+            json = .object(o)
+        }
+        return json
     }
 
     // MARK: History and banners

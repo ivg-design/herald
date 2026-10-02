@@ -84,8 +84,11 @@ extension CLIArguments {
             guard sub == "install" else { throw CLIParseError("mcp needs status or install CLIENT") }
             let (w, flags) = words(Array(rest.dropFirst()))
             guard w.count == 1 else { throw CLIParseError("mcp install needs one client: \(["claudeCode", "codex", "claudeDesktop", "cli", "generic"].joined(separator: ", "))") }
-            let o = try Options(flags, values: [], bools: ["--reinstall"])
-            return .request(CLIRequest(method: "POST", path: "/v1/mcp/install", body: ["client": w[0], "reinstall": o.flag("--reinstall")]))
+            let o = try Options(flags, values: ["--name", "--icon"], bools: ["--reinstall"])
+            var body: [String: Any] = ["client": w[0], "reinstall": o.flag("--reinstall")]
+            if let n = o.value("--name") { body["name"] = n }
+            if let i = o.value("--icon") { body["icon"] = absolute(i) }
+            return .request(CLIRequest(method: "POST", path: "/v1/mcp/install", body: body))
         case "approvals":
             guard let sub = rest.first else { return get("/v1/actions/approvals") }
             guard sub == "revoke" else { throw CLIParseError("approvals needs revoke --app ID --template NAME (or nothing, to list)") }

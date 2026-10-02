@@ -119,6 +119,8 @@ final class CLIParityTests: XCTestCase {
         XCTAssertEqual(try request(["mcp"]).path, "/v1/mcp")
         let r = try request(["mcp", "install", "codex", "--reinstall"])
         XCTAssertEqual(r.path, "/v1/mcp/install"); XCTAssertEqual(r.body?["client"] as? String, "codex"); XCTAssertEqual(r.body?["reinstall"] as? Bool, true)
+        let g = try request(["mcp", "install", "generic", "--name", "My Bot", "--icon", "/tmp/bot.png"])
+        XCTAssertEqual(g.body?["name"] as? String, "My Bot"); XCTAssertEqual(g.body?["icon"] as? String, "/tmp/bot.png")
         XCTAssertThrowsError(try request(["mcp", "install"]))
         XCTAssertEqual(try request(["approvals"]).path, "/v1/actions/approvals")
         let rv = try request(["approvals", "revoke", "--app", "a", "--template", "t"])

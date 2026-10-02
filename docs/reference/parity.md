@@ -110,7 +110,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Per app: grant command or callback approval | none | none | none | by design | by design |
 | Template commands, scripts and Shortcuts: list and revoke approvals | `GET`, `DELETE /v1/actions/approvals` | `approvals` | `list_approvals`, `revoke_approval` | gap | ok |
 | Template commands: grant approval | none | none | none | by design | by design |
-| Install `herald-mcp` into Claude Code, Codex, Claude Desktop; the `herald` CLI | `GET`, `POST /v1/mcp` | `mcp` | `install_mcp` | gap | ok |
+| Install `herald-mcp` into Claude Code, Codex, Claude Desktop (each also becomes an issuer `agent.*`, #62); the `herald` CLI | `GET`, `POST /v1/mcp` | `mcp` | `install_mcp` | gap | ok |
 | Reveal token file / scripts folder / log in Finder, test sound | none | none | none | UI (opens Finder or plays on the speakers) | UI |
 | Tooltips level (`tooltipLevel`) | `PUT /v1/settings` | `settings set` | `set_settings` | gap | ok |
 | Cmd-Tab presence while windows are open (#55) | none | none | none | automatic, not a setting | n/a |

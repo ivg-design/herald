@@ -151,6 +151,7 @@ herald assets rm --app webwatcher.email --file bell.riv
 herald symbols bell --category communication --limit 20
 herald voice status;  herald voice use-existing
 herald mcp status;  herald mcp install claudeCode --reinstall
+herald mcp install generic --name "My Bot" --icon ~/Pictures/bot.png    # app agent.my-bot, config printed
 herald approvals;  herald approvals revoke --app webwatcher.email --template email-accumulated
 ```
 

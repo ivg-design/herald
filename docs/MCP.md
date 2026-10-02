@@ -250,6 +250,42 @@ herald< { "sent": true, "id": "mcp-test-email-accumulated", "template": "email-a
 A banner appears on your screen with the sample values. Pressing Mark as Read there calls WebWatcher's
 callback with the test notification's id, so the agent tells you before you click.
 
+## Agents as issuers
+
+Installing a client from Settings > MCP (or `install_mcp`, `herald mcp install`) does two things. It writes the server entry
+with `--agent <slug>`, and it registers the agent as an issuer, so the agent's notifications arrive under their own name,
+icon and sound and you design their look like any other app (Settings > Apps lists it, the Designer opens on it).
+
+| Client | App id | Symbol | Icon taken from |
+|---|---|---|---|
+| Claude Code | `agent.claude-code` | `terminal` | `Claude.app` (as Finder draws it), else the `claude` package's files |
+| Codex | `agent.codex` | `sparkles` | `Codex.app`, else an icon file in the `@openai/codex` package |
+| Claude Desktop | `agent.claude-desktop` | `message.circle` | `Claude.app` |
+| Generic | `agent.<slug of the name you type>` | `bolt.circle` | the file you pick in the install row |
+
+The icon is copied into Herald's own folder (`<support>/agent-icons/`) at install time and the app's `icon` points there, so
+moving or updating the product does not break it. When no icon can be found on this Mac, the client's row shows **No icon
+found** with a Choose button; nothing generated is put in its place.
+
+What gets registered: the app (display name, icon, default sound), a **manifest** (`title`, `body`, `status`, `project`,
+`session`, `task`, `tool`, `duration`, `link`, `needsInput`, with samples; actions `open`, `reply`, `dismiss`), and a default
+template named `agent` built from `builtin.compact`: the agent's icon, title, time and close button, the body (two lines), a
+**status badge** carrying the agent's symbol, the project, and the action row. Send `status` as `done`, `failed`, `waiting` or
+`question`. Fields that are not sent collapse.
+
+With `--agent` (or `HERALD_AGENT`) in its configuration, `herald-mcp` uses that app when a call leaves `app` out
+(`send_notification`, `send_test`, `speak`, `dismiss`, `list_history`, `list_stacks`; an explicit `app` still wins), so an agent
+can just call:
+
+```text
+agent> send_notification {"title": "Build finished", "body": "214 tests passed", "status": "done", "project": "herald"}
+herald< {"app": "agent.claude-code", "id": "...", "sent": true}
+```
+
+Installing again is safe. The manifest is brought up to date, but your template (it is never overwritten once it exists),
+the app's sound, name and icon, and a default template you chose all stay as you set them. The manifest format is in
+[reference/manifests.md](reference/manifests.md#agents-as-issuers).
+
 ## Troubleshooting
 
 | Symptom | Cause |

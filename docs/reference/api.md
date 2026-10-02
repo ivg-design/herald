@@ -350,8 +350,11 @@ otherwise); `limit` defaults to 100 (at most 1000). Use the names for a componen
   `~/.claude/tts`. Poll `GET /v1/voice`.
 - `GET /v1/mcp`: the server path and the status of Claude Code, Codex and Claude Desktop (`Installed`, `Not installed`,
   `Client not found`).
-- `POST /v1/mcp/install` `{"client":"claudeCode"|"codex"|"claudeDesktop"|"cli"|"generic","reinstall?"}`: the Settings > MCP button.
-  It edits that client's own configuration (a `.bak` is kept) and `cli` installs the `herald` tool into `/usr/local/bin`.
+- `POST /v1/mcp/install` `{"client":"claudeCode"|"codex"|"claudeDesktop"|"cli"|"generic","reinstall?","name?","icon?"}`: the Settings > MCP
+  button. It edits that client's own configuration (a `.bak` is kept), writes `--agent <slug>` into the server entry, and registers
+  the agent as an issuer: app `agent.claude-code`, `agent.codex`, `agent.claude-desktop` or `agent.<slug of name>` (`generic` needs
+  `name`), a manifest, a default template `agent` and the product's icon (`icon` picks a file instead; `400` if it is missing).
+  Re-running keeps what the user changed ([../MCP.md](../MCP.md#agents-as-issuers)). `cli` installs the `herald` tool into `/usr/local/bin`.
 
 ## Approvals
 

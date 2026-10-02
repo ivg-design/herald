@@ -9,16 +9,38 @@ final class MCPTools: @unchecked Sendable {
     let previewDirectory: URL
     static let keepPreviews = 40
 
-    init(client: HeraldClient, previewDirectory: URL) {
+    /// The app a call uses when it leaves `app` out (`--agent`, issue #62); nil means `app` is required where it was.
+    let defaultApp: String?
+
+    init(client: HeraldClient, previewDirectory: URL, defaultApp: String? = nil) {
         self.client = client
         self.previewDirectory = previewDirectory
+        self.defaultApp = defaultApp
+    }
+
+    /// The tools whose `app` falls back to the agent's own app.
+    static let appDefaulting: Set<String> = ["send_notification", "send_test", "speak", "dismiss", "list_history", "list_stacks"]
+
+    /// The definition as `tools/list` shows it with a default app: `app` is optional and the description says what it defaults to.
+    static func withDefaultApp(_ d: MCPToolDefinition, _ app: String?) -> MCPToolDefinition {
+        guard let app, appDefaulting.contains(d.name), case .object(var schema) = d.inputSchema else { return d }
+        if case .array(let req)? = schema["required"] { schema["required"] = .array(req.filter { $0.stringValue != "app" }) }
+        var out = d
+        out.inputSchema = .object(schema)
+        out.description += " `app` is optional here: it defaults to \(app), this agent's own app."
+        return out
     }
 
     /// Runs a tool. An unknown tool name is a protocol error (`-32602`); everything else is a tool result.
     func call(_ name: String, arguments: JSONValue?) async throws -> MCPToolResult {
         guard MCPToolCatalog.byName[name] != nil else { throw RPCError.invalidParams("Unknown tool: \(name)") }
         do {
-            let args = try MCPArgs(arguments)
+            var args = try MCPArgs(arguments)
+            if let app = defaultApp, Self.appDefaulting.contains(name), args.value("app") == nil {
+                var values = args.values
+                values["app"] = .string(app)
+                args = try MCPArgs(.object(values))
+            }
             switch name {
             case "herald_status": return await status()
             case "list_manifests": return try await listManifests()

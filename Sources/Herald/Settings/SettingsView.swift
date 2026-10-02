@@ -9,7 +9,7 @@ struct SettingsView: View {
             AppsSettingsView(controller: controller).tabItem { Label("Apps", systemImage: "square.grid.2x2") }
             ActionsSettingsView(controller: controller).tabItem { Label("Actions", systemImage: "bolt") }
             VoiceSettingsView(controller: controller).tabItem { Label("Voice", systemImage: "waveform") }
-            MCPSettingsView().tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }
+            MCPSettingsView(controller: controller).tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }
         }
         .padding(16)
         .frame(minWidth: 600, minHeight: 420)

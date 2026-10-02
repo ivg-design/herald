@@ -29,8 +29,12 @@ final class MCPServer: @unchecked Sendable {
     let tools: MCPTools
     let resources: MCPResources
 
-    init(client: HeraldClient, previewDirectory: URL, log: @escaping (String) -> Void = { _ in }) {
-        let tools = MCPTools(client: client, previewDirectory: previewDirectory)
+    /// The app id tools use when a call leaves `app` out (`--agent`); nil keeps `app` required.
+    let defaultApp: String?
+
+    init(client: HeraldClient, previewDirectory: URL, defaultApp: String? = nil, log: @escaping (String) -> Void = { _ in }) {
+        let tools = MCPTools(client: client, previewDirectory: previewDirectory, defaultApp: defaultApp)
+        self.defaultApp = defaultApp
         self.tools = tools
         self.resources = MCPResources(client: client, describe: { tools.describe($0) })
         self.log = log
@@ -82,7 +86,7 @@ final class MCPServer: @unchecked Sendable {
         case "initialize": return try initialize(params)
         case "ping": return .object([:])
         case "tools/list":
-            return .object(["tools": .array(MCPToolCatalog.all.map(\.jsonValue))])
+            return .object(["tools": .array(MCPToolCatalog.all.map { MCPTools.withDefaultApp($0, defaultApp).jsonValue })])
         case "tools/call":
             guard case .string(let name)? = params?["name"] else { throw RPCError.invalidParams("tools/call needs a tool 'name'") }
             let arguments = params?["arguments"]
