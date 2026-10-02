@@ -56,13 +56,14 @@ struct ComposerIdentitySection: View {
                     ForEach(apps, id: \.id) { a in Button(a.name) { model.app = a.id } }
                 } label: { Image(systemName: "chevron.up.chevron.down") }
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-                    .help("Registered apps. Any other id is accepted too.")
+                    .heraldHelp(.appPicker)
             }
             Picker("Template", selection: Binding(get: { model.template?.name ?? "" },
                                                   set: { name in model.applyTemplate(templates.first { $0.name == name }) })) {
                 Text("None").tag("")
                 ForEach(templates) { Text($0.name).tag($0.name) }
             }
+            .heraldHelp(.template)
             TextField("ID", text: $model.notificationID, prompt: Text("optional, replaces the banner with this id"))
         }
     }
@@ -80,6 +81,7 @@ struct ComposerContentSection: View {
             HStack {
                 TextField("Image", text: $model.imageSpec, prompt: Text("file path, https URL or data: URI"))
                 Button("Browse\u{2026}") { if let p = FormPanels.chooseFile(types: [.image]) { model.imageSpec = p } }
+                    .heraldHelp(.browseImage)
             }
             TextField("Click URL", text: $model.clickURL, prompt: Text("opened when the banner is clicked"))
         } header: { Text("Content") } footer: {
@@ -108,14 +110,15 @@ struct ComposerBehaviorSection: View {
                 Text("Until dismissed").tag(1)
                 Text("Auto-dismiss").tag(0)
             }
+            .heraldHelp(.stayOnScreen)
             TextField("Auto-dismiss after", text: $model.timeoutText, prompt: Text("seconds; empty for the default"))
-            Toggle("Snooze menu", isOn: $model.snooze)
-            Toggle("Add to Reminders button", isOn: $model.reminderOn)
+            Toggle("Snooze menu", isOn: $model.snooze).heraldHelp(.snoozeMenu)
+            Toggle("Add to Reminders button", isOn: $model.reminderOn).heraldHelp(.reminderButton)
             if model.reminderOn {
                 TextField("Reminder title", text: $model.reminderTitle, prompt: Text("defaults to the notification title"))
-                Toggle("Reminder due date", isOn: $model.reminderHasDue)
+                Toggle("Reminder due date", isOn: $model.reminderHasDue).heraldHelp(.reminderDueToggle)
                 if model.reminderHasDue {
-                    DatePicker("Due", selection: $model.reminderDue, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("Due", selection: $model.reminderDue, displayedComponents: [.date, .hourAndMinute]).heraldHelp(.reminderDue)
                 }
             }
             Picker("Priority", selection: $model.priority) {
@@ -124,6 +127,7 @@ struct ComposerBehaviorSection: View {
                 Text("Normal").tag("normal")
                 Text("High").tag("high")
             }
+            .heraldHelp(.priority)
         }
     }
 }
@@ -138,11 +142,11 @@ struct ComposerMetadataSection: View {
                     TextField("Key", text: $row.key, prompt: Text("key")).labelsHidden()
                     TextField("Value", text: $row.value, prompt: Text("value")).labelsHidden()
                     Button { model.metadata.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless).help("Remove")
+                        .buttonStyle(.borderless).heraldHelp(.removeMetadata)
                 }
             }
             Button { model.metadata.append(MetadataRow()) } label: { Label("Add Row", systemImage: "plus") }
-                .buttonStyle(.borderless)
+                .buttonStyle(.borderless).heraldHelp(.addMetadata)
         } header: { Text("Metadata") } footer: {
             Text("Sent with the notification. Each key fills the {placeholder} of the same name in a template or in the text above.")
         }
@@ -175,14 +179,16 @@ struct SoundPickerRows: View {
                 Divider()
                 Text("Custom file\u{2026}").tag(ComposerModel.customSoundTag)
             }
+            .heraldHelp(.sound)
             if let play {
-                Button(action: play) { Image(systemName: "play.fill") }.buttonStyle(.borderless).help("Preview the sound")
+                Button(action: play) { Image(systemName: "play.fill") }.buttonStyle(.borderless).heraldHelp(.previewSound)
             }
         }
         if selection == ComposerModel.customSoundTag {
             HStack {
                 TextField("Sound file", text: $customPath, prompt: Text("path to an audio file"))
                 Button("Browse\u{2026}") { if let p = FormPanels.chooseFile(types: [.audio]) { customPath = p } }
+                    .heraldHelp(.browseSound)
             }
         }
     }
@@ -237,7 +243,7 @@ struct ComposerButtonsEditor: View {
                 ComposerButtonRow(button: $b) { buttons.removeAll { $0.id == b.id } }
             }
             Button { buttons.append(ComposerButton()) } label: { Label("Add Button", systemImage: "plus") }
-                .buttonStyle(.borderless)
+                .buttonStyle(.borderless).heraldHelp(.addButton)
         }
     }
 }
@@ -274,15 +280,15 @@ private struct ComposerButtonRow: View {
                     Text("Callback").tag(ComposerButton.Action.callback)
                     Text("Command").tag(ComposerButton.Action.command)
                 }
-                .labelsHidden().frame(width: 104)
+                .labelsHidden().frame(width: 104).heraldHelp(.buttonAction)
                 Picker("Style", selection: $button.style) {
                     Text("Default").tag(ComposerButton.Style.default)
                     Text("Destructive").tag(ComposerButton.Style.destructive)
                     Text("Cancel").tag(ComposerButton.Style.cancel)
                 }
-                .labelsHidden().frame(width: 118)
+                .labelsHidden().frame(width: 118).heraldHelp(.buttonStyle)
                 Button(action: onRemove) { Image(systemName: "minus.circle") }
-                    .buttonStyle(.borderless).help("Remove button")
+                    .buttonStyle(.borderless).heraldHelp(.removeButton)
             }
             switch button.action {
             case .url:
@@ -312,13 +318,13 @@ struct ComposerColorRow: View {
         HStack {
             Toggle("Accent color", isOn: Binding(
                 get: { hex != nil },
-                set: { on in hex = on ? (hex ?? "#0A84FF") : nil }))
+                set: { on in hex = on ? (hex ?? "#0A84FF") : nil })).heraldHelp(.accentColor)
             Spacer()
             if hex != nil {
                 ColorPicker("", selection: Binding(
                     get: { Self.color(hex ?? "") ?? .accentColor },
                     set: { hex = Self.hex($0) }), supportsOpacity: false)
-                    .labelsHidden()
+                    .labelsHidden().heraldHelp(.accentPicker)
                 TextField("Hex", text: $text, prompt: Text("#RRGGBB"))
                     .labelsHidden()
                     .lineLimit(1)

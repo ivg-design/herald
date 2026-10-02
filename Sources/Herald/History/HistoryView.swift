@@ -172,10 +172,10 @@ struct HistoryView: View {
             TextField("Search title, subtitle, body, app", text: $search)
                 .textFieldStyle(.plain)
                 .focused($searchFocused)
-                .onExitCommand { if search.isEmpty { searchFocused = false } else { search = "" } }
+                .onExitCommand { if search.isEmpty { searchFocused = false } else { search = "" } } .heraldHelp(.historySearch)
             if !search.isEmpty {
                 Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                    .buttonStyle(.plain).help("Clear search")
+                    .buttonStyle(.plain).heraldHelp(.historyClearSearch)
             }
             Text("\(count) item\(count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
             Menu {
@@ -186,7 +186,7 @@ struct HistoryView: View {
                     Button("Clear \(displayName(a)) History\u{2026}", role: .destructive) { confirmClearApp = a }
                 }
             } label: { Image(systemName: "ellipsis.circle") }
-                .menuStyle(.borderlessButton).fixedSize()
+                .menuStyle(.borderlessButton).fixedSize() .heraldHelp(.historyMore)
             // Hidden button purely to own the Cmd-F shortcut.
             Button("") { searchFocused = true }
                 .keyboardShortcut("f", modifiers: .command)
@@ -207,7 +207,7 @@ struct HistoryView: View {
                 Text("Apps send notifications to Herald over its local API; they show up here.")
                     .font(.callout).foregroundStyle(.tertiary).multilineTextAlignment(.center)
             } else {
-                Button("Clear Search") { search = "" }
+                Button("Clear Search") { search = "" } .heraldHelp(.historyClearSearch)
             }
         }
         .padding(24)

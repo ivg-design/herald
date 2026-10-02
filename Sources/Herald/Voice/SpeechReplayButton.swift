@@ -15,7 +15,7 @@ struct SpeechReplayButton: View {
                     Image(systemName: "speaker.wave.2.fill")
                 }
                 .buttonStyle(.borderless)
-                .help("Play again")
+                .heraldHelp(.replaySpeech)
                 Text(speech.text)
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(2)

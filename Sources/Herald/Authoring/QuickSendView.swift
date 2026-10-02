@@ -74,7 +74,7 @@ struct QuickSendView: View {
                 Spacer(minLength: 8)
                 Button("Design Template\u{2026}") { openDesigner(model.app.trimmingCharacters(in: .whitespacesAndNewlines)) }
                     .controlSize(.small)
-                    .help("Lay out the banner for this app in the Designer")
+                    .heraldHelp(.designTemplate)
             }
         } header: { Text("Look") }
     }
@@ -122,17 +122,21 @@ struct QuickSendView: View {
             statusLine
             Spacer(minLength: 8)
             Button("Clear") { model.clear(); status = nil }
+                .heraldHelp(.clear)
             Menu("Copy as\u{2026}") {
-                ForEach(CodeExportFormat.allCases) { f in Button(f.title) { copy(f) } }
+                ForEach(CodeExportFormat.allCases) { f in Button(f.title) { copy(f) }.heraldHelp(.copyFormat) }
             }
             .menuStyle(.borderedButton).fixedSize()
+            .heraldHelp(.copyAs)
             Button("Save as Template\u{2026}") { newTemplateName = model.template?.name ?? ""; showSaveSheet = true }
                 .disabled(model.app.trimmingCharacters(in: .whitespaces).isEmpty
                           || model.title.trimmingCharacters(in: .whitespaces).isEmpty)
+                .heraldHelp(.saveAsTemplate)
             Button("Send Now", action: send)
                 .keyboardShortcut(.return, modifiers: .command)
                 .buttonStyle(.borderedProminent)
                 .disabled(!model.issues.isEmpty || sending)
+                .heraldHelp(.sendNow)
         }
         .padding(10)
     }
@@ -154,16 +158,16 @@ struct QuickSendView: View {
             Text("Save as Template").font(.headline)
             Text("Stores this look, text, buttons and behavior for \(app). {placeholders} stay as typed; metadata rows are not saved.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            TextField("Template name", text: $newTemplateName).onSubmit { saveTemplate() }
+            TextField("Template name", text: $newTemplateName).onSubmit { saveTemplate() }.heraldHelp(.saveSheetName)
             if exists {
                 Label("A template with this name exists and will be replaced.", systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
             }
             HStack {
                 Spacer()
-                Button("Cancel") { showSaveSheet = false }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { showSaveSheet = false }.keyboardShortcut(.cancelAction).heraldHelp(.saveSheetCancel)
                 Button(exists ? "Replace" : "Save") { saveTemplate() }
-                    .keyboardShortcut(.defaultAction).disabled(name.isEmpty)
+                    .keyboardShortcut(.defaultAction).disabled(name.isEmpty).heraldHelp(.saveSheetSave)
             }
         }
         .padding(20)

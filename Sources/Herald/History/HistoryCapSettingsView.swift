@@ -41,7 +41,7 @@ struct HistoryCapSettingsView: View {
         Section {
             Picker("Keep per app", selection: Binding(get: { cap }, set: choose)) {
                 ForEach(choices, id: \.self) { Text("\($0) notifications").tag($0) }
-            }
+            } .heraldHelp(.historyKeep)
             Text("The oldest notifications of an app beyond this number are deleted from History, with their cached images.")
                 .font(.caption).foregroundStyle(.secondary)
         } header: {

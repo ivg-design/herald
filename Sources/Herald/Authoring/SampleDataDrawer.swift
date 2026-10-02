@@ -76,8 +76,7 @@ struct SampleDataDrawer: View {
                 Spacer()
                 Button("Fill from last notification", action: onFillFromLast)
                     .disabled(!canFillFromLast)
-                    .help(canFillFromLast ? "Copy the metadata of this app's newest notification"
-                                          : "No notification from this app in history yet")
+                    .heraldHelp(.fillFromLast)
             }
             Text("Values for {placeholders} in the template. They are sent to the preview as metadata.")
                 .font(.caption).foregroundStyle(.secondary)
@@ -90,16 +89,16 @@ struct SampleDataDrawer: View {
                     TextField("key", text: $row.key).frame(width: 110)
                     TextField("value", text: $row.value)
                     Button { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless).help("Remove row")
+                        .buttonStyle(.borderless).heraldHelp(.removeSample)
                 }
             }
             HStack {
-                Button { rows.append(SampleRow(key: "", value: "")) } label: { Label("Add row", systemImage: "plus") }
+                Button { rows.append(SampleRow(key: "", value: "")) } label: { Label("Add row", systemImage: "plus") }.heraldHelp(.addSample)
                 if !missing.isEmpty {
                     Button("Add \(missing.count) used in template") {
                         rows = SampleData.merge(rows, placeholders: placeholders)
                     }
-                    .help("Missing: " + missing.joined(separator: ", "))
+                    .heraldHelp(.addUsed)
                 }
             }
             .controlSize(.small)

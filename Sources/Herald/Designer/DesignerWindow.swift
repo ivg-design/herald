@@ -363,7 +363,7 @@ struct SplitHandle: View {
                 last = pos
             }
             .onEnded { _ in last = 0 })
-        .help("Drag to resize the live preview")
+        .heraldHelp(.designerPreviewDivider)
     }
 }
 
@@ -381,14 +381,14 @@ private struct DesignerModeBar: View {
                 ForEach(DesignerMode.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented).labelsHidden().frame(width: 190)
-            .help("Design a template, or send a one-off notification")
+            .heraldHelp(.designerModePicker)
             Spacer(minLength: 8)
             if model.mode == .design {
                 Button { DesignerBundleActions.importPanel(model: model) } label: { Label("Import\u{2026}", systemImage: "square.and.arrow.down") }
-                    .help("Add a template bundle (.heraldtemplate) with its animations. You can also drop one on this window.")
+                    .heraldHelp(.designerImportBundle)
                 Button { DesignerBundleActions.exportPanel(model: model) } label: { Label("Export\u{2026}", systemImage: "square.and.arrow.up") }
                     .disabled(model.draft.name.trimmingCharacters(in: .whitespaces).isEmpty || model.app.isEmpty)
-                    .help("Save this template and the animations it plays as a .heraldtemplate bundle")
+                    .heraldHelp(.designerExportBundle)
             }
         }
         .controlSize(.small)
@@ -460,20 +460,20 @@ private struct DesignerTopBar: View {
             Spacer(minLength: 4)
             Group {
                 Button { model.undo() } label: { Image(systemName: "arrow.uturn.backward") }
-                    .keyboardShortcut("z", modifiers: .command).disabled(!model.canUndo).help("Undo (\u{2318}Z)")
+                    .keyboardShortcut("z", modifiers: .command).disabled(!model.canUndo).heraldHelp(.designerUndo)
                 Button { model.redo() } label: { Image(systemName: "arrow.uturn.forward") }
-                    .keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo).help("Redo (\u{21E7}\u{2318}Z)")
+                    .keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!model.canRedo).heraldHelp(.designerRedo)
                 Divider().frame(height: 16)
                 Button { model.mergeSelection() } label: { Label("Merge", systemImage: "rectangle.compress.vertical") }
-                    .disabled(!model.canMerge).help("Join the selected slots into one cell (shift-click to select several)")
+                    .disabled(!model.canMerge).heraldHelp(.designerMerge)
                 Button { model.splitSelection() } label: { Label("Split", systemImage: "rectangle.expand.vertical") }
-                    .disabled(!model.canSplit).help("Cut a merged cell back into single slots")
+                    .disabled(!model.canSplit).heraldHelp(.designerSplit)
                 Divider().frame(height: 16)
                 Button { model.duplicateSelection() } label: { Image(systemName: "plus.square.on.square") }
-                    .keyboardShortcut("d", modifiers: .command).disabled(model.selectedCell == nil).help("Duplicate the selected component (\u{2318}D)")
+                    .keyboardShortcut("d", modifiers: .command).disabled(model.selectedCell == nil).heraldHelp(.designerDuplicateComponent)
                 Button { model.deleteSelection() } label: { Image(systemName: "trash") }
                     .keyboardShortcut(.delete, modifiers: .command).disabled(model.selectedCell == nil)
-                    .help("Remove the selected component (Delete)")
+                    .heraldHelp(.designerDeleteComponent)
             }
             .controlSize(.small)
             Divider().frame(height: 16)
@@ -541,24 +541,24 @@ private struct DesignerPreviewBar: View {
                     ForEach(DesignerPreviewSource.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented).labelsHidden().frame(width: 140)
-                .help(model.lastItem == nil ? "No notification from this issuer yet: Last real shows the sample" : "Sample data from the manifest, or the newest real notification")
+                .heraldHelp(.designerPreviewSource)
                 Picker("", selection: $model.appearance) {
                     Image(systemName: "sun.max").tag(DesignerAppearance.light)
                     Image(systemName: "moon").tag(DesignerAppearance.dark)
                 }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 70).help("Preview in light or dark appearance")
+                .pickerStyle(.segmented).labelsHidden().frame(width: 70).heraldHelp(.designerAppearance)
                 ZoomControl(zoom: $zoom)
                 Button { showFields.toggle() } label: {
                     Label(model.absentTokens.isEmpty ? "Fields" : "\(model.absentTokens.count) absent", systemImage: "eye")
                 }
-                .controlSize(.small).fixedSize().help("Preview a field as absent to see how the template handles it")
+                .controlSize(.small).fixedSize().heraldHelp(.designerAbsentFields)
                 .popover(isPresented: $showFields, arrowEdge: .top) { FieldsPopover(model: model) }
                 if !model.issues.isEmpty {
                     Button { showIssues.toggle() } label: {
                         Label("\(model.issues.count)", systemImage: model.hasErrors ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(model.hasErrors ? Color.red : Color.orange)
                     }
-                    .controlSize(.small).fixedSize().help("Problems found in the template")
+                    .controlSize(.small).fixedSize().heraldHelp(.designerIssues)
                     .popover(isPresented: $showIssues, arrowEdge: .top) { IssuesPopover(model: model) }
                 }
                 Spacer(minLength: 0)
@@ -566,9 +566,9 @@ private struct DesignerPreviewBar: View {
                     if model.sending { ProgressView().controlSize(.small) } else { Label("Send test", systemImage: "paperplane") }
                 }
                 .controlSize(.small).fixedSize().disabled(model.sending || model.app.isEmpty)
-                .help("Show this banner on screen through Herald, with the preview data")
+                .heraldHelp(.designerSendTest)
                 Button { model.save() } label: { Text("Save") }
-                    .keyboardShortcut("s", modifiers: .command).disabled(!model.canSave).buttonStyle(.borderedProminent).controlSize(.small)
+                    .keyboardShortcut("s", modifiers: .command).disabled(!model.canSave).buttonStyle(.borderedProminent).controlSize(.small) .heraldHelp(.designerSave)
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -597,9 +597,9 @@ private struct FieldsPopover: View {
                         if let s = t.sample, !s.isEmpty { Text(s).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
                     }
                 }
-                .toggleStyle(.checkbox)
+                .toggleStyle(.checkbox).heraldHelp(.designerFieldPresent)
             }
-            if !model.absentTokens.isEmpty { Button("All present") { model.absentTokens = [] }.controlSize(.small) }
+            if !model.absentTokens.isEmpty { Button("All present") { model.absentTokens = [] }.controlSize(.small).heraldHelp(.designerAllPresent) }
         }
         .padding(14).frame(width: 300)
     }
@@ -623,7 +623,7 @@ private struct IssuesPopover: View {
                             Spacer(minLength: 0)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).heraldHelp(.designerIssueRow)
                 }
             }
             .padding(14)
@@ -667,18 +667,18 @@ struct ZoomControl: View {
             Label(DesignerZoom.label(zoom), systemImage: "plus.magnifyingglass").monospacedDigit()
         }
         .controlSize(.small).fixedSize()
-        .help("Zoom (\u{2318}+  \u{2318}\u{2212}  \u{2318}0, or pinch)")
+        .heraldHelp(.designerZoom)
         .popover(isPresented: $open, arrowEdge: .bottom) {
             VStack(spacing: 8) {
                 HStack {
-                    Button { zoom = DesignerZoom.zoomOut(zoom) } label: { Image(systemName: "minus") }
-                    Slider(value: Binding(get: { zoom }, set: { zoom = DesignerZoom.clamped($0) }), in: DesignerZoom.range).frame(width: 150)
-                    Button { zoom = DesignerZoom.zoomIn(zoom) } label: { Image(systemName: "plus") }
+                    Button { zoom = DesignerZoom.zoomOut(zoom) } label: { Image(systemName: "minus") } .heraldHelp(.designerZoomOut)
+                    Slider(value: Binding(get: { zoom }, set: { zoom = DesignerZoom.clamped($0) }), in: DesignerZoom.range).frame(width: 150) .heraldHelp(.designerZoomSlider)
+                    Button { zoom = DesignerZoom.zoomIn(zoom) } label: { Image(systemName: "plus") } .heraldHelp(.designerZoomIn)
                 }
                 HStack {
                     Text(DesignerZoom.label(zoom)).font(.caption.monospacedDigit())
                     Spacer()
-                    Button("Reset to 100%") { zoom = 1 }.controlSize(.small)
+                    Button("Reset to 100%") { zoom = 1 }.controlSize(.small) .heraldHelp(.designerZoomReset)
                 }
             }
             .padding(12).frame(width: 240)

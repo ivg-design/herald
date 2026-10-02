@@ -13,10 +13,10 @@ struct QuietHoursSettingsView: View {
             statusRow
             ForEach(settings.quiet.windows) { w in windowEditor(w.id) }
             HStack {
-                Button("Add Window") { settings.quiet.windows.append(QuietWindow()) }
+                Button("Add Window") { settings.quiet.windows.append(QuietWindow()) } .heraldHelp(.quietAddWindow)
                 Spacer()
                 Button("Quiet for 1 Hour") { QuietHoursCoordinator.shared.quietFor(minutes: 60) }
-                    .disabled(status.active)
+                    .disabled(status.active) .heraldHelp(.quietOneHour)
             }
         } header: { Text("Quiet hours") }
         footer: {
@@ -32,7 +32,7 @@ struct QuietHoursSettingsView: View {
                 Image(systemName: "moon.fill").foregroundStyle(.indigo)
                 Text("Quiet until \(until.formatted(date: .omitted, time: .shortened))")
                 Spacer()
-                Button("Resume Now") { QuietHoursCoordinator.shared.resumeNow() }
+                Button("Resume Now") { QuietHoursCoordinator.shared.resumeNow() } .heraldHelp(.quietResume)
             }
         } else {
             Text("Not quiet right now.").foregroundStyle(.secondary)
@@ -52,19 +52,19 @@ struct QuietHoursSettingsView: View {
                         let on = w.wrappedValue.days.isEmpty || w.wrappedValue.days.contains(day)
                         Button(Self.dayLabels[i]) { toggleDay(w, day) }
                             .buttonStyle(.bordered).tint(on ? .accentColor : .secondary)
-                            .controlSize(.small)
+                            .controlSize(.small) .heraldHelp(.quietDay)
                     }
                     Spacer()
                     Button(role: .destructive) { settings.quiet.windows.removeAll { $0.id == id } } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.borderless) .heraldHelp(.quietDelete)
                 }
                 // Labels are plain Text and the pickers are label-less: a labelled DatePicker in a grouped Form
                 // stretches to the row's full width, which made this section wider than the Settings window.
                 HStack(spacing: 8) {
                     Text("From")
-                    DatePicker("From", selection: time(w.start), displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
+                    DatePicker("From", selection: time(w.start), displayedComponents: .hourAndMinute).labelsHidden().fixedSize().heraldHelp(.quietFrom)
                     Text("until")
-                    DatePicker("Until", selection: time(w.end), displayedComponents: .hourAndMinute).labelsHidden().fixedSize()
+                    DatePicker("Until", selection: time(w.end), displayedComponents: .hourAndMinute).labelsHidden().fixedSize().heraldHelp(.quietUntil)
                     if !QuietEvaluator.isValid(w.wrappedValue) {
                         Text("Start and end must differ").font(.caption).foregroundStyle(.red)
                     }
@@ -72,11 +72,11 @@ struct QuietHoursSettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 14) {
-                        Toggle("Speech", isOn: w.speech)
-                        Toggle("Sounds", isOn: w.sounds)
-                        Toggle("Banners", isOn: w.banners)
+                        Toggle("Speech", isOn: w.speech) .heraldHelp(.quietSpeech)
+                        Toggle("Sounds", isOn: w.sounds) .heraldHelp(.quietSounds)
+                        Toggle("Banners", isOn: w.banners) .heraldHelp(.quietBanners)
                     }
-                    Toggle("Speak queued messages when it ends", isOn: w.speakSummary).disabled(!w.wrappedValue.speech)
+                    Toggle("Speak queued messages when it ends", isOn: w.speakSummary).disabled(!w.wrappedValue.speech) .heraldHelp(.quietSummary)
                 }
                 .toggleStyle(.checkbox).font(.caption)
             }

@@ -18,7 +18,7 @@ struct VoiceSettingsView: View {
             Section {
                 Picker("Engine", selection: $settings.engine) {
                     ForEach(VoiceEngineKind.allCases) { Text($0.title).tag($0) }
-                }
+                } .heraldHelp(.voiceEngine)
                 if settings.engine == .kokoro { kokoroSection }
                 if settings.engine != .off { voiceSection }
             } header: { Text("Speech") }
@@ -30,8 +30,8 @@ struct VoiceSettingsView: View {
             if settings.engine != .off {
                 Section {
                     HStack {
-                        TextField("Test text", text: $testText)
-                        Button("Speak") { voice.test(text: testText) }
+                        TextField("Test text", text: $testText) .heraldHelp(.testText)
+                        Button("Speak") { voice.test(text: testText) } .heraldHelp(.speakTest)
                     }
                     if let e = voice.lastError { Text(e).font(.caption).foregroundStyle(.red) }
                 } header: { Text("Test") }
@@ -47,19 +47,19 @@ struct VoiceSettingsView: View {
                     HStack {
                         Toggle(rec.displayName, isOn: Binding(
                             get: { settings.prefs(for: rec.registration.app).speak },
-                            set: { v in settings.update(app: rec.registration.app) { $0.speak = v } }))
+                            set: { v in settings.update(app: rec.registration.app) { $0.speak = v } })) .heraldHelp(.speakApp)
                         Spacer()
                         Toggle("Urgent can break quiet hours", isOn: Binding(
                             get: { settings.prefs(for: rec.registration.app).urgentBreaksQuiet },
                             set: { v in settings.update(app: rec.registration.app) { $0.urgentBreaksQuiet = v } }))
-                            .toggleStyle(.checkbox).font(.caption).fixedSize()
+                            .toggleStyle(.checkbox).font(.caption).fixedSize() .heraldHelp(.urgentBreaksQuiet)
                         Picker("", selection: Binding(
                             get: { settings.prefs(for: rec.registration.app).voice ?? "" },
                             set: { v in settings.update(app: rec.registration.app) { $0.voice = v.isEmpty ? nil : v } })) {
                             Text("Default voice").tag("")
                             ForEach(voice.availableVoices) { Text($0.name).tag($0.id) }
                         }
-                        .labelsHidden().frame(width: 190)
+                        .labelsHidden().frame(width: 190) .heraldHelp(.appVoice)
                     }
                 }
             } header: { Text("Speak per app") }
@@ -81,18 +81,18 @@ struct VoiceSettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([layout.root]) }
-                    .disabled(!FileManager.default.fileExists(atPath: layout.root.path))
+                    .disabled(!FileManager.default.fileExists(atPath: layout.root.path)) .heraldHelp(.showKokoro)
             }
             if !layout.isInstalled {
                 if let existing = installer.existing {
                     Button("Use existing installation at ~/.claude/tts") { installer.useExisting(existing) }
-                        .disabled(installer.isBusy)
+                        .disabled(installer.isBusy) .heraldHelp(.useExistingKokoro)
                     Text("Links the models and Python environment already there; nothing is copied or changed.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
-                    Button("Download Kokoro (about 340 MB)") { installer.install() }.disabled(installer.isBusy)
-                    if installer.isBusy { Button("Cancel") { installer.cancel() } }
+                    Button("Download Kokoro (about 340 MB)") { installer.install() }.disabled(installer.isBusy).heraldHelp(.downloadKokoro)
+                    if installer.isBusy { Button("Cancel") { installer.cancel() }.heraldHelp(.cancelKokoro) }
                 }
                 Text("Downloads kokoro-v1.0.onnx and voices-v1.0.bin from the kokoro-onnx GitHub release into Herald's folder and builds a Python environment (uv, or python3 and pip).")
                     .font(.caption).foregroundStyle(.secondary)
@@ -124,16 +124,16 @@ struct VoiceSettingsView: View {
         if settings.engine == .kokoro {
             Picker("Voice", selection: $settings.defaultVoice) {
                 ForEach(voice.availableVoices) { Text($0.name).tag($0.id) }
-            }
+            } .heraldHelp(.defaultVoice)
         } else {
             Picker("Voice", selection: Binding(get: { settings.systemVoice ?? "" }, set: { settings.systemVoice = $0.isEmpty ? nil : $0; voice.resetEngine() })) {
                 Text("System default").tag("")
                 ForEach(voice.availableVoices) { Text($0.name).tag($0.id) }
-            }
+            } .heraldHelp(.defaultVoice)
         }
         HStack {
             Text("Speed")
-            Slider(value: $settings.speed, in: 0.5...2.0, step: 0.05)
+            Slider(value: $settings.speed, in: 0.5...2.0, step: 0.05) .heraldHelp(.speechSpeed)
             Text(String(format: "%.2fx", settings.speed)).monospacedDigit().frame(width: 52, alignment: .trailing)
         }
     }

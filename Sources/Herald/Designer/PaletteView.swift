@@ -51,7 +51,7 @@ struct IssuerTemplatesView: View {
                 else if !model.issuers.contains(where: { $0.id == model.app }) { Text(model.app).tag(model.app) }
                 ForEach(model.issuers) { Text($0.name).tag($0.id) }
             }
-            .labelsHidden()
+            .labelsHidden().heraldHelp(.designerIssuerPicker)
             if let issuer = model.currentIssuer, !issuer.hasManifest {
                 Text("No manifest yet: only the standard fields are known.")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -78,12 +78,12 @@ struct IssuerTemplatesView: View {
                     }
                 } label: { Label("New", systemImage: "plus") }
                     .menuStyle(.borderlessButton).fixedSize()
-                    .disabled(model.app.isEmpty)
+                    .disabled(model.app.isEmpty).heraldHelp(.designerNewTemplate)
                 Button { model.duplicate() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                     .disabled(model.app.isEmpty)
-                    .help("Save a copy of this template, with your current edits, under a new name")
+                    .heraldHelp(.designerDuplicateTemplate)
                 Button(role: .destructive) { confirmDelete() } label: { Label("Delete", systemImage: "trash") }
-                    .disabled(model.isNew)
+                    .disabled(model.isNew).heraldHelp(.designerDeleteTemplate)
             }
             .controlSize(.small)
             .buttonStyle(.borderless)
@@ -94,7 +94,7 @@ struct IssuerTemplatesView: View {
             }
             .controlSize(.small)
             .disabled(model.isNew || model.savedName.map { model.isDefault($0) } == true)
-            .help("Notifications from this issuer that name no template use this one")
+            .heraldHelp(.designerSetDefault)
         }
         .padding(12)
     }
@@ -106,10 +106,10 @@ struct IssuerTemplatesView: View {
             Spacer(minLength: 0)
             if !t.usesGrid {
                 Text("v1").font(.system(size: 9, weight: .medium)).padding(.horizontal, 4)
-                    .background(Capsule().fill(Color.secondary.opacity(0.2))).help("Old layout: opens converted to a grid")
+                    .background(Capsule().fill(Color.secondary.opacity(0.2))).heraldHelp(.designerOldLayoutBadge)
             }
-            if model.isDefault(t.name) { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow).help("Issuer's default template") }
-            if t.name == model.savedName, model.isDirty { Circle().fill(.orange).frame(width: 6, height: 6).help("Unsaved changes") }
+            if model.isDefault(t.name) { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow).heraldHelp(.designerDefaultBadge) }
+            if t.name == model.savedName, model.isDirty { Circle().fill(.orange).frame(width: 6, height: 6).heraldHelp(.designerUnsavedDot) }
         }
     }
 
@@ -202,10 +202,10 @@ struct FieldsPalette: View {
             HStack(spacing: 4) {
                 TextField("custom.token", text: $custom).textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced))
                     .onSubmit(addCustom)
-                Button("Add", action: addCustom).disabled(!DesignerModel.isTokenName(custom.trimmingCharacters(in: CharacterSet(charactersIn: "{} "))))
+                Button("Add", action: addCustom).disabled(!DesignerModel.isTokenName(custom.trimmingCharacters(in: CharacterSet(charactersIn: "{} ")))).heraldHelp(.designerAddCustomField)
             }
             .controlSize(.small)
-            .help("A key the issuer may send in its metadata that the manifest does not declare")
+            .heraldHelp(.designerCustomField)
         }
     }
 
@@ -282,7 +282,7 @@ struct ActionsPalette: View {
                     Button { model.openActionEditor(model.newActionRequest(kind: k)) } label: { Label(k.designerTitle, systemImage: k.designerSymbol) }
                 }
             } label: { Label("Add action\u{2026}", systemImage: "plus.circle") }
-                .menuStyle(.borderlessButton).fixedSize()
+                .menuStyle(.borderlessButton).fixedSize().heraldHelp(.designerAddAction)
                 .controlSize(.small)
         }
     }
@@ -308,7 +308,7 @@ struct AssetsPalette: View {
             ForEach(model.assets) { asset in AssetRow(model: model, asset: asset) }
             Button { addFiles() } label: { Label("Add\u{2026}", systemImage: "plus.circle") }
                 .buttonStyle(.borderless).controlSize(.small).disabled(model.app.isEmpty)
-                .help("Copy a .riv file into this issuer's assets folder")
+                .heraldHelp(.designerAddAsset)
         }
     }
 
@@ -349,7 +349,7 @@ private struct AssetRow: View {
             }
             Spacer(minLength: 0)
             Button { remove() } label: { Image(systemName: "trash") }
-                .buttonStyle(.borderless).controlSize(.small).help("Remove this file")
+                .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerRemoveAsset)
         }
         .padding(5)
         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.secondary.opacity(0.07)))

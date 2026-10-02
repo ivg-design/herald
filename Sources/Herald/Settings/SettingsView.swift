@@ -26,19 +26,19 @@ struct GeneralSettingsView: View {
         Form {
             Section {
                 HStack {
-                    TextField("Port", text: $portText).frame(width: 80)
-                    Button("Apply") { applyPort() }
-                    Button("Reset to \(HeraldPaths.defaultPort)") { portText = String(HeraldPaths.defaultPort); applyPort() }
+                    TextField("Port", text: $portText).frame(width: 80) .heraldHelp(.apiPort)
+                    Button("Apply") { applyPort() } .heraldHelp(.apiApply)
+                    Button("Reset to \(HeraldPaths.defaultPort)") { portText = String(HeraldPaths.defaultPort); applyPort() } .heraldHelp(.apiReset)
                 }
                 Text({ _ = ticker.tick; return controller.serverStatus }())
                     .font(.caption).foregroundStyle(controller.serverRunning ? Color.secondary : Color.red)
                 Button("Reveal Token File in Finder") {
                     NSWorkspace.shared.activateFileViewerSelecting([HeraldPaths.tokenURL()])
-                }
+                } .heraldHelp(.revealToken)
             } header: { Text("Local API") }
             Section {
-                Toggle("Launch at login", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 }))
-                Toggle("Mute all sounds", isOn: $settings.muted)
+                Toggle("Launch at login", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 })) .heraldHelp(.launchAtLogin)
+                Toggle("Mute all sounds", isOn: $settings.muted) .heraldHelp(.muteSounds)
                 Picker("Tooltips", selection: $settings.tooltipLevel) {
                     ForEach(TooltipLevel.allCases) { Text($0.title).tag($0) }
                 }
@@ -126,24 +126,24 @@ struct AppDetail: View {
                     get: { d.sound ?? EffectiveSettings.fallbackSound },
                     set: { v in editDefaults { $0.sound = v }; if v != "none" { controller.sounds.play(v) } })) {
                     ForEach(soundOptions, id: \.self) { Text(($0 as NSString).lastPathComponent) }
-                }
+                } .heraldHelp(.defaultSound)
                 Button("Choose Sound File\u{2026}") {
                     let p = NSOpenPanel()
                     p.allowedContentTypes = [.audio]
                     if p.runModal() == .OK, let u = p.url { editDefaults { $0.sound = u.path } }
-                }
+                } .heraldHelp(.chooseSound)
                 Toggle("Stay until dismissed", isOn: Binding(
-                    get: { d.persistent ?? true }, set: { v in editDefaults { $0.persistent = v } }))
+                    get: { d.persistent ?? true }, set: { v in editDefaults { $0.persistent = v } })) .heraldHelp(.stayUntilDismissed)
                 HStack {
                     Text("Auto-dismiss after (seconds, 0 = never)")
                     Spacer()
                     TextField("", value: Binding(get: { d.timeout ?? 0 }, set: { v in editDefaults { $0.timeout = max(0, v) } }),
-                              format: .number).frame(width: 60)
+                              format: .number).frame(width: 60) .heraldHelp(.autoDismiss)
                 }
             } header: { Text("Defaults") }
             AppDisplaySettingsView(controller: controller, app: app)
             Section {
-                Button("Templates\u{2026}") { TemplateEditorWindow.show(controller: controller, app: app) }
+                Button("Templates\u{2026}") { TemplateEditorWindow.show(controller: controller, app: app) } .heraldHelp(.openTemplates)
             } header: { Text("Templates") } footer: {
                 Text("Reusable banner layouts and defaults that notifications can reference with \"template\".")
             }
@@ -152,7 +152,7 @@ struct AppDetail: View {
                     get: { record.commandsConfirmed },
                     set: { v in
                         if v { confirmCommands() } else { edit { $0.commandsConfirmed = false } }
-                    }))
+                    })) .heraldHelp(.allowCommands)
                 if record.commandsConfirmed && record.registration.allowCommands != true {
                     Text("Confirmed, but the app has not requested command access.").font(.caption).foregroundStyle(.secondary)
                 }
@@ -165,7 +165,7 @@ struct AppDetail: View {
                         get: { record.callbackHostApproved == host },
                         set: { v in
                             if v { confirmCallbackHost(host) } else { edit { $0.callbackHostApproved = nil } }
-                        }))
+                        })) .heraldHelp(.allowCallbacks)
                 } header: { Text("Callbacks") } footer: {
                     Text("Callback buttons POST their action and payload to a URL. Local addresses always work; any other host needs this approval.")
                 }
@@ -262,10 +262,10 @@ struct ActionsSettingsView: View {
                     Button("Reveal in Finder") {
                         controller.actionRunner.ensureScriptsDirectory()
                         NSWorkspace.shared.open(controller.actionRunner.scriptsDirectory)
-                    }
-                    Button("Refresh") { scripts = controller.actionRunner.listScripts() }
+                    } .heraldHelp(.revealScripts)
+                    Button("Refresh") { scripts = controller.actionRunner.listScripts() } .heraldHelp(.refreshScripts)
                     Spacer()
-                    Button("Show Log") { revealLog() }
+                    Button("Show Log") { revealLog() } .heraldHelp(.showActionLog)
                 }
             } header: { Text("Scripts") } footer: {
                 Text("A script action runs the file with the notification as JSON on standard input and HERALD_APP, HERALD_ACTION, HERALD_FIELD_<NAME> and HERALD_EXTRA_<KEY> in the environment. It has 30 seconds. Output goes to ~/Library/Logs/Herald/actions.log.")
@@ -284,7 +284,7 @@ struct ActionsSettingsView: View {
                                 Button("Revoke") {
                                     controller.commandApprovals.revoke(app: row.app, template: row.template)
                                     controller.changed()
-                                }
+                                } .heraldHelp(.revokeApproval)
                             }
                         }
                         ForEach(row.commands, id: \.self) { c in

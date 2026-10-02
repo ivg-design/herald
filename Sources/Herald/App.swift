@@ -1,11 +1,17 @@
 import SwiftUI
 import AppKit
 
+/// No SwiftUI `App`/`Settings` scene: that scene owned Cmd-, and opened a blank window. Settings is one window,
+/// `SettingsWindowController`, reached from the main menu and the bell menu.
 @main
-struct HeraldApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    var body: some Scene {
-        Settings { EmptyView() }
+enum HeraldMain {
+    @MainActor private static let delegate = AppDelegate()
+    static func main() {
+        MainActor.assumeIsolated {
+            let app = NSApplication.shared
+            app.delegate = delegate
+            app.run()
+        }
     }
 }
 
@@ -13,11 +19,13 @@ struct HeraldApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var historyWindow: NSWindow?
-    private var settingsWindow: NSWindow?
     private let controller = AppController.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        let controller = self.controller
+        SettingsWindowController.shared.makeContent = { NSHostingView(rootView: SettingsView(controller: controller)) }
+        NSApp.mainMenu = HeraldMainMenu.make()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.imagePosition = .imageLeading
@@ -105,7 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(stackingItem())
         menu.addItem(item("Dismiss All", #selector(dismissAll), ""))
         menu.addItem(.separator())
-        menu.addItem(item("Settings\u{2026}", #selector(openSettings), ","))
+        let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(SettingsWindowController.showSettings), keyEquivalent: ",")
+        settings.target = SettingsWindowController.shared
+        menu.addItem(settings)
         menu.addItem(item("Quit Herald", #selector(quit), "q"))
     }
 
@@ -157,8 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func openSettings() {
-        settingsWindow = present(settingsWindow, title: "Herald Settings", size: NSSize(width: 640, height: 460),
-                                 content: SettingsView(controller: controller))
+        SettingsWindowController.shared.showSettings()
     }
 
     private func present<V: View>(_ existing: NSWindow?, title: String, size: NSSize, content: V) -> NSWindow {
@@ -172,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             w.contentView = NSHostingView(rootView: content)
             w.center()
         }
+        WindowPresence.shared.track(w)
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         return w

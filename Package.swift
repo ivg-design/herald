@@ -23,7 +23,7 @@ let package = Package(
         // The pure (AppKit-free) part of the app, compiled here so the router, history store and
         // snooze math can be unit tested. The Xcode app target compiles Sources/Herald directly.
         .target(name: "HeraldCore", dependencies: ["HeraldClient"],
-                path: "Sources/Herald", sources: ["Core", "Authoring/CodeExport.swift", "Authoring/ComposerModel.swift",
+                path: "Sources/Herald", exclude: ["Help/HeraldHelp.swift"], sources: ["Core", "Help", "Authoring/CodeExport.swift", "Authoring/ComposerModel.swift",
                          "Designer/DesignerModel.swift", "Designer/SymbolBrowser.swift", "Voice/TTSWorker.swift", "Voice/KokoroInstaller.swift", "Voice/SpeechQueue.swift", "Voice/AudioCache.swift", "Voice/KokoroLayout.swift", "Voice/QuietHours.swift", "MCP/MCPInstaller.swift"]),
         .testTarget(name: "HeraldTests", dependencies: ["HeraldClient", "HeraldCore", "herald-mcp"],
                     path: "Tests/HeraldTests"),

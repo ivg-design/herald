@@ -23,10 +23,10 @@ struct MCPSettingsView: View {
                     Spacer()
                     Button("Reveal in Finder") {
                         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: installer.serverPath)])
-                    }
+                    } .heraldHelp(.mcpReveal)
                 }
                 HStack {
-                    Button("Test connection") { runTest() }.disabled(busy)
+                    Button("Test connection") { runTest() }.disabled(busy) .heraldHelp(.mcpTest)
                     if let t = testResult { Text(t).font(.caption).foregroundStyle(t.hasPrefix("OK") ? Color.green : Color.red) }
                 }
             }
@@ -35,7 +35,7 @@ struct MCPSettingsView: View {
             }
             Section("Command line tool") {
                 HStack {
-                    Button("Install `herald` command line tool") { run("cli") { installer.installCLI() } }.disabled(busy)
+                    Button("Install `herald` command line tool") { run("cli") { installer.installCLI() } }.disabled(busy) .heraldHelp(.mcpInstallCLI)
                     Spacer()
                 }
                 result("cli")
@@ -61,18 +61,18 @@ struct MCPSettingsView: View {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(installer.genericClipboardText, forType: .string)
                         messages[client.rawValue] = .init(ok: true, message: "Copied the JSON config and the stdio command line.", touched: "pasteboard")
-                    }
+                    } .heraldHelp(.mcpCopyConfig)
                 case .claudeCode:
                     let exists = messages[client.rawValue]?.alreadyExists == true
                     Button(st == .installed || exists ? "Reinstall" : "Install") {
                         run(client.rawValue) { installer.installClaudeCode(reinstall: st == .installed || exists) }
-                    }.disabled(busy || st == .clientNotFound)
+                    }.disabled(busy || st == .clientNotFound) .heraldHelp(.mcpInstallClient)
                 case .codex:
                     Button(st == .installed ? "Reinstall" : "Install") { run(client.rawValue) { installer.installCodex() } }
-                        .disabled(busy || st == .clientNotFound)
+                        .disabled(busy || st == .clientNotFound) .heraldHelp(.mcpInstallClient)
                 case .claudeDesktop:
                     Button(st == .installed ? "Reinstall" : "Install") { run(client.rawValue) { installer.installClaudeDesktop() } }
-                        .disabled(busy || st == .clientNotFound)
+                        .disabled(busy || st == .clientNotFound) .heraldHelp(.mcpInstallClient)
                 }
             }
             result(client.rawValue)

@@ -30,18 +30,18 @@ struct AppDisplaySettingsView: View {
                 edit { $0.screen = (v == BannerDisplay.main) ? nil : v }
             })) {
                 ForEach(BannerDisplays.choices(including: record?.screen)) { Text($0.name).tag($0.id) }
-            }
+            } .heraldHelp(.displayScreen)
             Picker("Screen corner", selection: Binding(get: { record?.corner }, set: { v in edit { $0.corner = v } })) {
                 Text("App default (\(Self.title(appDefaultCorner)))").tag(HeraldCorner?.none)
                 ForEach(HeraldCorner.allCases, id: \.self) { Text(Self.title($0)).tag(HeraldCorner?.some($0)) }
-            }
+            } .heraldHelp(.screenCorner)
             Toggle("Mute banners", isOn: Binding(get: { record?.mutedBanners ?? false }, set: { v in
                 edit { $0.mutedBanners = v }
-            }))
+            })) .heraldHelp(.muteBanners)
             Picker("Stack notifications", selection: Binding(get: { record?.stacking }, set: { v in edit { $0.stacking = v } })) {
                 Text("Default (\(AppSettings.shared.stacking.title))").tag(StackingLevel?.none)
                 ForEach(StackingLevel.allCases, id: \.self) { Text($0.title).tag(StackingLevel?.some($0)) }
-            }
+            } .heraldHelp(.stackNotifications)
         } header: { Text("Banners") } footer: {
             Text(footer)
         }

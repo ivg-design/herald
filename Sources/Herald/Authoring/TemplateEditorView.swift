@@ -22,6 +22,7 @@ enum TemplateEditorWindow {
             w.center()
             windows[app] = w
         }
+        WindowPresence.shared.track(w)
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }
@@ -80,7 +81,7 @@ struct TemplateEditorView: View {
             }
             Divider()
             HStack {
-                Button { startNew() } label: { Label("New", systemImage: "plus") }
+                Button { startNew() } label: { Label("New", systemImage: "plus") }.heraldHelp(.newTemplate)
                 Spacer()
             }
             .padding(8)
@@ -107,11 +108,12 @@ struct TemplateEditorView: View {
                     Picker("Layout", selection: $draft.layout) {
                         ForEach(HeraldLayout.allCases, id: \.self) { Text($0.formTitle).tag($0) }
                     }
+                    .heraldHelp(.layout)
                     ComposerColorRow(hex: $draft.accentColor)
-                    Toggle("Show subtitle", isOn: $draft.showSubtitle)
-                    Toggle("Show body", isOn: $draft.showBody)
-                    Toggle("Show time", isOn: $draft.showTimestamp)
-                    Stepper("Body lines: \(draft.maxBodyLines)", value: $draft.maxBodyLines, in: 1...20)
+                    Toggle("Show subtitle", isOn: $draft.showSubtitle).heraldHelp(.showSubtitle)
+                    Toggle("Show body", isOn: $draft.showBody).heraldHelp(.showBody)
+                    Toggle("Show time", isOn: $draft.showTimestamp).heraldHelp(.showTime)
+                    Stepper("Body lines: \(draft.maxBodyLines)", value: $draft.maxBodyLines, in: 1...20).heraldHelp(.bodyLines)
                 }
                 Section {
                     TextField("Title", text: optional($draft.title))
@@ -127,19 +129,20 @@ struct TemplateEditorView: View {
                 }
                 Section("Behavior") {
                     SoundField(sound: $draft.sound)
-                    TriStatePicker(title: "Stay until dismissed", value: $draft.persistent)
+                    TriStatePicker(title: "Stay until dismissed", value: $draft.persistent, help: .triStatePersistent)
                     HStack {
                         Text("Auto-dismiss after (s)")
                         Spacer()
                         TextField("inherit", value: $draft.timeout, format: .number).frame(width: 70)
                     }
-                    TriStatePicker(title: "Snooze menu", value: $draft.snooze)
+                    TriStatePicker(title: "Snooze menu", value: $draft.snooze, help: .triStateSnooze)
                     Picker("Priority", selection: Binding(get: { draft.priority ?? "" }, set: { draft.priority = $0.isEmpty ? nil : $0 })) {
                         Text("Default").tag("")
                         Text("low").tag("low")
                         Text("normal").tag("normal")
                         Text("high").tag("high")
                     }
+                    .heraldHelp(.priority)
                     TextField("Reminder title", text: reminderTitle)
                     TextField("Reminder due (ISO 8601)", text: reminderDue)
                 }
@@ -157,13 +160,14 @@ struct TemplateEditorView: View {
             if draft.usesGrid {
                 Button("Open in Designer") { DesignerWindow.show(controller: controller, app: app, template: savedName) }
                     .disabled(savedName == nil)
-                    .help("Edit this grid template visually. Opens the saved version.")
+                    .heraldHelp(.openInDesigner)
             }
-            Button("Delete", role: .destructive, action: delete).disabled(savedName == nil)
-            Button("Duplicate", action: duplicate).disabled(savedName == nil)
+            Button("Delete", role: .destructive, action: delete).disabled(savedName == nil).heraldHelp(.deleteTemplate)
+            Button("Duplicate", action: duplicate).disabled(savedName == nil).heraldHelp(.duplicateTemplate)
             Button("Save", action: save)
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!isDirty || draft.name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .heraldHelp(.saveTemplate)
         }
         .padding(10)
     }
@@ -329,11 +333,13 @@ struct TemplateEditorView: View {
 private struct TriStatePicker: View {
     let title: String
     @Binding var value: Bool?
+    let help: HelpEntry
     var body: some View {
         Picker(title, selection: Binding(get: { value.map { $0 ? 1 : 0 } ?? -1 }, set: { value = $0 < 0 ? nil : $0 == 1 })) {
             Text("Inherit").tag(-1)
             Text("On").tag(1)
             Text("Off").tag(0)
         }
+        .heraldHelp(help)
     }
 }
