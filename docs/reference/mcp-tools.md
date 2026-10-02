@@ -42,6 +42,15 @@ still ask the user for confirmation in Herald ([actions.md](actions.md#confirmat
 | [`list_shortcuts`](#list_shortcuts), [`list_history`](#list_history), [`list_stacks`](#list_stacks) | read | yes |
 | [`dismiss`](#dismiss) | write | yes |
 | [`get_quiet_hours`](#get_quiet_hours), [`set_quiet_hours`](#set_quiet_hours) | read / write | yes |
+| [`get_settings`, `set_settings`](#settings-and-apps) | read / write | yes |
+| [`list_apps`, `update_app_settings`, `register_app`](#settings-and-apps) | read / write | yes |
+| [`voice_status`, `install_voice`, `install_mcp`](#settings-and-apps) | read / write | yes |
+| [`list_approvals`, `revoke_approval`](#settings-and-apps) | read / write | yes |
+| [`duplicate_template`, `rename_template`, `set_default_template`](#templates-assets-and-symbols) | write | yes |
+| [`export_template_bundle`, `import_template_bundle`, `delete_manifest`](#templates-assets-and-symbols) | write | yes |
+| [`list_assets`, `upload_asset`, `delete_asset`, `list_symbols`, `rive_check`](#templates-assets-and-symbols) | read / write | yes |
+| [`history_search`, `reshow_notification`, `delete_history`, `export_history`](#history-and-banners) | read / write | yes |
+| [`snooze`, `expand_stack`, `designer_snapshot`](#history-and-banners) | write / read | yes |
 
 ## herald_status
 
@@ -263,6 +272,56 @@ No arguments. The scheduled windows, any ad hoc silence, and `status` (what is s
 | `resume` | boolean | End the current silence now. |
 
 Tell the user before silencing them.
+
+## Parity tools
+
+Everything the Designer, History and Settings can do is also a tool ([parity.md](parity.md) lists each one
+against its route). Every tool below is a thin wrapper over one HTTP route ([api.md](api.md)): the arguments become the
+query or body, the reply is Herald's JSON, and a Herald error comes back as a readable tool error. A missing required
+argument is a tool error before any request is made. Destructive tools carry `destructiveHint`.
+
+### Settings and apps
+
+| Tool | Arguments | Route | Notes |
+|---|---|---|---|
+| `get_settings` | none | `GET /v1/settings` | Values, `schema`, `options` (sounds, displays, voices, corners, levels). |
+| `set_settings` | `settings` (object) | `PUT /v1/settings` | Keys: `port`, `launchAtLogin`, `muteAllSounds`, `stacking`, `historyCapPerApp`, `tooltipLevel`, `voiceEngine`, `voiceDefault`, `voiceSpeed`, `voiceLang`, `voiceSystem`. All or nothing. |
+| `list_apps` | `app?` | `GET /v1/apps/settings` | Per-app settings, voice, approvals (read only) and the schema. |
+| `update_app_settings` | `app`, `settings` | `PUT /v1/apps/settings` | `sound`, `persistent`, `timeout`, `corner`, `display`, `muteBanners`, `stacking`, `speak`, `voice`, `urgentBreaksQuiet`; `revokeCommands: true`, `revokeCallbackHost: true`. Granting an approval is refused (403). |
+| `register_app` | `app`, `appName?`, `icon?`, `bundleId?`, `callbackURL?`, `allowCommands?`, `defaults?` | `POST /v1/register` | `allowCommands` is only a request; the user confirms it in Settings. |
+| `voice_status` | none | `GET /v1/voice` | Engine, Kokoro installed or missing, progress, voices. |
+| `install_voice` | `action`: `install`, `cancel`, `useExisting` | `POST /v1/voice/install` | `install` downloads about 340 MB: ask first. |
+| `install_mcp` | `client?`, `reinstall?` | `GET /v1/mcp`, `POST /v1/mcp/install` | Without `client`: status. Edits another application's configuration. |
+| `list_approvals` | none | `GET /v1/actions/approvals` | Template commands, scripts and Shortcuts the user approved. |
+| `revoke_approval` | `app`, `template` | `DELETE /v1/actions/approvals` | Destructive. There is no tool that grants one. |
+
+### Templates, assets and symbols
+
+| Tool | Arguments | Route | Notes |
+|---|---|---|---|
+| `duplicate_template` | `app`, `name`, `newName?`, `toApp?` | `POST /v1/templates/duplicate` | `name` may be `builtin.*`. |
+| `rename_template` | `app`, `name`, `newName` | `POST /v1/templates/rename` | Destructive: the default template follows, approvals reset. |
+| `set_default_template` | `app`, `name?` | `PUT /v1/templates/default` | Omit `name` to clear. Needs a manifest. |
+| `export_template_bundle` | `app`, `name`, `path?` | `GET /v1/templates/export` | `path` ends in `.heraldtemplate`; without it, base64. |
+| `import_template_bundle` | `path` or `base64`, `app?`, `onConflict?` | `POST /v1/templates/import` | `keepBoth` (default), `replace`, `fail`. Destructive (replace). |
+| `delete_manifest` | `app` | `DELETE /v1/manifest` | Destructive; templates stay. |
+| `list_assets` | `app` | `GET /v1/assets` | Rive files and images, with `usedBy` and the component snippet. |
+| `upload_asset` | `app`, `path` or `base64` (+ `name`), `kind?` | `POST /v1/assets` | Rive at most 10 MB; images checked by their bytes. Same name replaces. |
+| `delete_asset` | `app`, `file` | `DELETE /v1/assets` | Destructive; the reply lists templates left with a placeholder. |
+| `list_symbols` | `q?`, `category?`, `limit?`, `offset?` | `GET /v1/symbols` | Names and categories for a component's `symbol`. |
+| `rive_check` | `app`, `component`, `fields?`, `simulate?` | `POST /v1/rive/check` | Load a `rive` component without a window ([rive.md](rive.md#testing-without-a-window)). |
+
+### History and banners
+
+| Tool | Arguments | Route | Notes |
+|---|---|---|---|
+| `history_search` | `q`, `app?`, `limit?` | `GET /v1/history/search` | Every word must match; newest first. |
+| `reshow_notification` | `app`, `id` | `POST /v1/history/reshow` | A new banner with sound. |
+| `delete_history` | `app`, `id`; or `all: true` (+ `app?`) | `DELETE /v1/history/item`, `DELETE /v1/history` | Destructive; cannot be undone. |
+| `export_history` | `app?`, `path?` | `GET /v1/history/export` | `path` (`.json`): Herald writes the file. |
+| `snooze` | `app`, `id`, `minutes` or `cancel: true` | `POST /v1/snooze`, `/v1/unsnooze` | |
+| `expand_stack` | `app`, `group?`, `expanded?` | `POST /v1/stacks/expand` | |
+| `designer_snapshot` | `app?`, `template?`, `select?`, `width?`, `height?` | `POST /v1/designer/snapshot` | Returns an image of the Designer drawn offscreen. No window opens. |
 
 ## Resources
 

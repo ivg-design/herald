@@ -117,6 +117,20 @@ is a JSON-RPC error (`-32602`).
 | `list_stacks` | `app?` | The stacks of banners on screen (notifications folded into one banner with a counter): level, app, group, count, whether it is open and its notifications newest first. |
 | `speak` | `app`, `text`, `voice?`, `speed?`, `lang?`, `id?` | Say `text` aloud on the Mac with Herald's local voice, without a banner. The history keeps the text. Meant for "the long task finished" in a sentence or two. |
 
+**Parity with the editor and Settings.** Anything a person does in the Designer, Quick send, History or Settings is also a tool
+(see [reference/parity.md](reference/parity.md)): `get_settings` and `set_settings` (general, voice, tooltips, History cap),
+`list_apps` and `update_app_settings` (per-app sound, corner, display, mute, stacking, voice, and the approvals the user gave),
+`register_app`, `voice_status` and `install_voice`, `install_mcp`, `duplicate_template`, `rename_template`,
+`set_default_template`, `export_template_bundle` and `import_template_bundle`, `list_assets`, `upload_asset` (Rive or an
+image, by path or base64) and `delete_asset`, `list_symbols` (SF Symbol names and categories), `rive_check`,
+`history_search`, `reshow_notification`, `delete_history`, `export_history`, `snooze`, `expand_stack`, `delete_manifest`,
+`list_approvals` and `revoke_approval`, and `designer_snapshot` (the Designer drawn offscreen). Each is a thin wrapper
+over one HTTP route; arguments and routes are in [reference/mcp-tools.md](reference/mcp-tools.md#parity-tools).
+Grid, cell, component and action-rule edits are `put_template` (the template is one document), checked by the same
+validation the Designer uses. **Not exposed on purpose:** granting an app permission to run commands or call a remote
+host, and approving a template's commands: the agent is the program that approval guards against, so only the user
+can give it, in Settings. An agent can read those approvals and withdraw them.
+
 **Scripts.** A `script` action runs a file in `~/Library/Application Support/Herald/scripts/` (a plain file
 name; `.sh`, `.zsh`, `.bash`, `.py`, `.rb`, `.pl`, `.scpt` run through their interpreter, anything else
 must be executable) with the notification JSON on stdin. This server only talks to Herald's API, so an

@@ -63,6 +63,18 @@ AUTH="Authorization: Bearer $(cat "$D/token")"
 | POST | [`/v1/stacks/expand`](#stacks) | Open or close a stack. |
 | GET, PUT | [`/v1/settings/stacking`](#stacks) | The global stacking level. |
 | GET, PUT | [`/v1/settings/quiet-hours`](#quiet-hours) | Quiet hours. |
+| GET, PUT | [`/v1/settings`](#settings) | Every general and voice setting, validated. |
+| GET, PUT | [`/v1/apps/settings`](#per-app-settings) | Per-app sound, corner, display, mute, stacking, voice; approvals (revoke only). |
+| GET, POST, DELETE | [`/v1/assets`](#assets) | An app's Rive files and images. |
+| POST | [`/v1/templates/duplicate`, `/rename`](#template-duplicate-rename-default) | Duplicate or rename a template. |
+| PUT | [`/v1/templates/default`](#template-duplicate-rename-default) | Set or clear the app's default template. |
+| GET, POST | [`/v1/templates/export`, `/import`](#template-bundles) | `.heraldtemplate` bundles. |
+| GET | [`/v1/history/search`, `/export`](#history-search-re-show-delete-export) | Search or export History. |
+| POST, DELETE | [`/v1/history/reshow`, `/item`](#history-search-re-show-delete-export) | Re-show or delete one notification. |
+| GET | [`/v1/symbols`](#symbols) | SF Symbol names and categories. |
+| GET, POST | [`/v1/voice`, `/v1/voice/install`](#voice-and-mcp-install) | Kokoro state and install. |
+| GET, POST | [`/v1/mcp`, `/v1/mcp/install`](#voice-and-mcp-install) | Install `herald-mcp` in a client. |
+| GET, DELETE | [`/v1/actions/approvals`](#approvals) | Template command approvals: list, revoke. |
 
 ## GET /v1/health
 
@@ -210,7 +222,7 @@ Renders a template offscreen with the real banner renderer and returns `image/pn
 |---|---|---|---|
 | `template` | string or object | the app's default template, else `builtin.imageLeft` | A saved template's name (or `builtin.*`), or a full template object (validated; errors name the cell). |
 | `app` | string | the inline template's `app` | Required unless the template object carries one. |
-| `data` | object or `"sample"` | `"sample"` | The notification to draw: its top-level keys and `metadata` are the fields, by the same rules as `/v1/notify`. `"sample"` uses the manifest's samples. Omit a key to see the collapse. |
+| `data` | object, `"sample"` or `"last"` | `"sample"` | The notification to draw: its top-level keys and `metadata` are the fields, by the same rules as `/v1/notify`. `"sample"` uses the manifest's samples; `"last"` the app's most recent notification from History (`400` when it has none). Omit a key to see the collapse. |
 | `appearance` | `light` or `dark` | `light` | |
 | `scale` | number 1 to 3 | 2 | Pixel scale. |
 | `confirmation` | kind or object | none | Draws an inline question: a kind (`callbackHost`, `command`, `script`, `shortcut`, `templateCommand`, `remindersError`, `remindersDenied`) or `{"kind","name","host","url","command","template","others","replaces","message"}`. |
@@ -246,6 +258,106 @@ See [stacking.md](stacking.md).
 ## Quiet hours
 
 `GET /v1/settings/quiet-hours` and `PUT /v1/settings/quiet-hours`: [quiet-hours.md](quiet-hours.md#api).
+
+## Settings
+
+`GET /v1/settings` returns `{"settings":{key:value},"schema":[{key,group,type,min?,max?,values?,description}],"options":{...}}`.
+`options` lists what the choices are: `sounds`, `displays` (`id`, `name`), `corners`, `stackingLevels`,
+`voiceEngines`, `voices`, `historyCapChoices`. `PUT /v1/settings` takes an object of keys and new values and
+answers like the GET plus `applied`. **All or nothing**: an unknown key, a wrong type or a value out of range is `400`
+and nothing is changed.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `port` | integer 1024 to 65535 | Local API port. The server restarts on the new port just after the reply. |
+| `launchAtLogin` | boolean | Login item. |
+| `muteAllSounds` | boolean | Global sound mute. |
+| `stacking` | `byApp`, `byIssuer`, `bySender`, `never` | Default stacking ([stacking.md](stacking.md)). |
+| `historyCapPerApp` | integer 1 to 100000 | History kept per app; older items are deleted. |
+| `tooltipLevel` | `nameOnly`, `nameAndDescription` | Settings > Tooltips. |
+| `voiceEngine` | `kokoro`, `system`, `off` | Speech engine ([voice.md](voice.md)). |
+| `voiceDefault`, `voiceLang` | string | Default voice and language. |
+| `voiceSpeed` | number 0.5 to 2.0 | Default speed. |
+| `voiceSystem` | string or `null` | macOS voice id for the system engine. |
+
+Quiet hours keep their own route ([quiet-hours.md](quiet-hours.md#api)); `GET`/`PUT /v1/settings/stacking` still works.
+
+## Per-app settings
+
+`GET /v1/apps/settings[?app=]` returns `{"apps":[{app, appName, bundleId?, callbackURL?, settings, voice, approvals}],
+"schema":[...]}`. `PUT /v1/apps/settings` takes `{"app":"id", key: value, ...}` (404 for an unknown app; the same
+all-or-nothing validation).
+
+| Key | Type | Meaning |
+|---|---|---|
+| `sound`, `persistent`, `timeout` | string, boolean, 0 to 86400 | The app's defaults ([actions](#post-v1register) `defaults`). |
+| `corner` | corner or `null` | The user's corner; `null` follows what the app registered. |
+| `display` | `"main"` or a display id | From `options.displays`. |
+| `muteBanners` | boolean | No banners; notifications go to History, unread. |
+| `stacking` | level or `null` | Override of the global stacking. |
+| `speak`, `urgentBreaksQuiet` | boolean | Voice, per app. |
+| `voice` | string or `null` | The app's voice. |
+| `revokeCommands`, `revokeCallbackHost` | `true` | Withdraw the approval to run command buttons, or to call the registered non-loopback host. |
+
+**Approvals can be read (`approvals`) and withdrawn, never granted.** Sending `false` for a revoke key, or any key that
+would grant, is `403` or `400`: only the user can allow command buttons or a remote callback host, in Settings > Apps.
+
+## Assets
+
+- `GET /v1/assets?app=` returns the Rive files (`kind:"rive"`: `id`, `file`, `path`, `bytes`, `declared`, `usedBy`, and the
+  `component` to use) and images (`kind:"image"`: `file`, `path`, `bytes`) stored for the app.
+- `POST /v1/assets` `{"app","name?","kind?","base64"|"path"}`: exactly one of `base64` (the body limit is 1 MB, so up to about
+  700 KB) or `path` (a file on this Mac). `name` is required with `base64`. `kind` is inferred from the name. Rive: at most
+  10 MB, 32 per app, stored as `<id>.riv`. Images: PNG, JPEG, GIF, WebP, HEIC, TIFF, BMP, checked by their bytes, at most
+  10 MB, 100 per app, stored in `<assets>/<app>/images/`. The same name replaces. The reply has the stored `path`.
+- `DELETE /v1/assets?app=&file=` removes one; the reply lists templates that still play a deleted animation.
+
+## Template duplicate, rename, default
+
+- `POST /v1/templates/duplicate` `{"app","name","newName?","toApp?"}`: copies a saved template or a `builtin.*` layout;
+  without `newName` the copy is `<name> copy` (numbered when taken). `409` when `newName` exists.
+- `POST /v1/templates/rename` `{"app","name","newName"}`: the manifest's `defaultTemplate` follows. Command, script and
+  Shortcut approvals belong to the old name (the user is asked again). Built-ins cannot be renamed.
+- `PUT /v1/templates/default` `{"app","name?"}`: sets the manifest's `defaultTemplate` (a saved or `builtin.*` name), or clears
+  it when `name` is omitted. `400` when the app has no manifest.
+
+## Template bundles
+
+- `GET /v1/templates/export?app=&name=[&path=]`: packs the template and its Rive files ([rive.md](rive.md#packaging-with-a-template-heraldtemplate)).
+  With `path` (ending in `.heraldtemplate`) Herald writes the file; otherwise the reply carries `base64`.
+- `POST /v1/templates/import` `{"base64"|"path","app?","onConflict?"}`: `onConflict` is `keepBoth` (default), `replace` or
+  `fail` (`409`). `app` retargets the bundle to another issuer. The reply lists `installedAssets`, `missingAssets` and warnings.
+
+## History search, re-show, delete, export
+
+- `GET /v1/history/search?q=&app=&limit=`: every word of `q` must appear (any case, accents folded) in the title, subtitle,
+  body, app id or app name; newest first; `{"query","count","items"}`.
+- `POST /v1/history/reshow` `{"app","id"}`: shows the stored notification again as a banner (sound, fresh delivery time). `{"ok","id"}`.
+- `DELETE /v1/history/item?app=&id=`: deletes one notification and closes its banner (`404` when unknown). `DELETE /v1/history`
+  still clears an app (or all).
+- `GET /v1/history/export?app=[&path=]`: `{"count","items"}` (the full records); with `path` (`.json`) Herald writes the file.
+
+## Symbols
+
+`GET /v1/symbols?q=&category=&limit=&offset=`: `{"total","offset","limit","symbols":[{name,categories}],"categories":[{key,title,icon,count}]}`.
+`q` matches every word in the name, Apple's search terms or a synonym; `category` is a key from `categories` (`400`
+otherwise); `limit` defaults to 100 (at most 1000). Use the names for a component's `symbol` ([symbols.md](symbols.md)).
+
+## Voice and MCP install
+
+- `GET /v1/voice`: `{"engine","kokoro":{installed,missing,folder,busy,phase,existingInstallationAvailable,log},"voices","lastError"}`.
+- `POST /v1/voice/install` `{"action":"install"|"cancel"|"useExisting"}`: starts the 340 MB download, stops it, or links a complete
+  `~/.claude/tts`. Poll `GET /v1/voice`.
+- `GET /v1/mcp`: the server path and the status of Claude Code, Codex and Claude Desktop (`Installed`, `Not installed`,
+  `Client not found`).
+- `POST /v1/mcp/install` `{"client":"claudeCode"|"codex"|"claudeDesktop"|"cli"|"generic","reinstall?"}`: the Settings > MCP button.
+  It edits that client's own configuration (a `.bak` is kept) and `cli` installs the `herald` tool into `/usr/local/bin`.
+
+## Approvals
+
+`GET /v1/actions/approvals`: the commands, scripts and Shortcuts the user approved for templates (`app`, `template`, `commands`,
+`approvedAt`). `DELETE /v1/actions/approvals?app=&template=` withdraws one (`404` when there is none). There is no route
+that grants an approval.
 
 ## Callbacks (Herald calls you)
 

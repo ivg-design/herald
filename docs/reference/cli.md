@@ -42,14 +42,21 @@ Environment: `HERALD_SUPPORT_DIR` points the tool at another Herald's data folde
 | `dismiss-all` | `--app ID` dismisses all banners of an app; with `--group G` only that stack. (`dismissAll` is accepted too.) |
 | `stacks` | `[--app ID]`: list live stacks. |
 | `history` | `--app ID [--limit N] [--clear]`: show or clear history. |
-| `template` | `export` and `import` of `.heraldtemplate` bundles. |
-| `apps` | List registered apps. |
+| `template` | `export` and `import` of `.heraldtemplate` bundles; `list`, `put`, `delete`, `duplicate`, `rename`, `default`. |
+| `apps` | List registered apps; `apps settings`, `apps set` for per-app settings. |
+| `settings` | Show (`settings`) or change (`settings set KEY=VALUE ...`) Herald's settings. |
+| `assets` | `list`, `add`, `rm` an app's Rive files and images. |
+| `symbols` | Search SF Symbol names. |
+| `voice` | Kokoro: `status`, `install`, `cancel`, `use-existing`. |
+| `mcp` | `status`, `install CLIENT [--reinstall]`. |
+| `approvals` | List template command approvals; `approvals revoke --app --template`. |
+| `manifest` | `manifest delete --app ID`. |
 | `speak` | Say text aloud, no banner. |
 | `quiet` | Quiet hours. |
 | `health` | Check that Herald is running (no token needed). |
 
-There are **no** CLI commands for manifests, saving templates or reading the component schema: use the API,
-the MCP server or the Designer for those.
+There is no CLI command to save a manifest or to read the component schema: use the API, the MCP server or the
+Designer. Nothing in the CLI grants an approval for commands or callbacks; only the user does, in Settings.
 
 ## notify
 
@@ -125,6 +132,47 @@ herald history --app bidbot --limit 10
 herald history --app bidbot --clear
 herald stacks --app webwatcher.email
 herald dismiss-all --app webwatcher.email --group "billing@acme.com"
+```
+
+## Settings, apps, assets, symbols
+
+Values in `KEY=VALUE` are JSON where they parse (`true`, `3`, `1.2`, `null`) and strings otherwise. Everything is validated
+by Herald, all or nothing ([api.md](api.md#settings)).
+
+```sh
+herald settings                                   # values, schema and options
+herald settings set muteAllSounds=true stacking=bySender voiceSpeed=1.2
+herald apps settings --app webwatcher.email
+herald apps set --app webwatcher.email muteBanners=true corner=bottomLeft sound=Ping timeout=8
+herald apps set --app webwatcher.email revokeCommands=true      # withdraw only; granting is the user's
+herald assets list --app webwatcher.email
+herald assets add --app webwatcher.email --file ~/Desktop/bell.riv
+herald assets rm --app webwatcher.email --file bell.riv
+herald symbols bell --category communication --limit 20
+herald voice status;  herald voice use-existing
+herald mcp status;  herald mcp install claudeCode --reinstall
+herald approvals;  herald approvals revoke --app webwatcher.email --template email-accumulated
+```
+
+## History search, re-show, delete, export
+
+```sh
+herald history search invoice paid --app bidbot --limit 20
+herald history reshow --app bidbot --id bid-42
+herald history delete --app bidbot --id bid-42
+herald history export --app bidbot --out ~/Desktop/bidbot.json
+```
+
+## template list, put, delete, duplicate, rename, default
+
+```sh
+herald template list --app webwatcher.email
+herald template put draft.json                    # one template object; "-" reads stdin; validated by Herald
+herald template duplicate --app webwatcher.email --name hero [--new-name hero2] [--to-app other.app]
+herald template rename --app webwatcher.email --name hero --new-name banner
+herald template default --app webwatcher.email --name banner      # or --clear
+herald template delete --app webwatcher.email --name banner
+herald manifest delete --app old.app
 ```
 
 ## template export and import

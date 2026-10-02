@@ -61,7 +61,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Capability | HTTP route | CLI | MCP tool | Before | After |
 |---|---|---|---|---|---|
 | Preview light / dark, scale, sample data | `POST /v1/preview` | none | `render_preview` | ok | ok |
-| Preview with the last delivered notification (`"last"`) | `POST /v1/preview` with `data:"last"` | none | `render_preview` `data:"last"` | gap | ok |
+| Preview with the last delivered notification | `POST /v1/preview` with `data:"last"` | none | `render_preview` `source:"last"` | MCP ok, HTTP gap | ok |
 | Preview stack and confirmation states | `POST /v1/preview` | none | `render_preview` | ok | ok |
 | Whole-Designer snapshot (layout check) | `POST /v1/designer/snapshot` | none | `designer_snapshot` | HTTP ok, MCP gap | ok |
 | Send test (real banner from a template) | `POST /v1/notify` | `notify --template` | `send_test` | ok | ok |
@@ -112,9 +112,10 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Template commands: grant approval | none | none | none | by design | by design |
 | Install `herald-mcp` into Claude Code, Codex, Claude Desktop; the `herald` CLI | `GET`, `POST /v1/mcp` | `mcp` | `install_mcp` | gap | ok |
 | Reveal token file / scripts folder / log in Finder, test sound | none | none | none | UI (opens Finder or plays on the speakers) | UI |
-| Tooltips level, activation policy | `PUT /v1/settings` | `settings set` | `set_settings` | not landed at the time of the audit | see the note below |
+| Tooltips level (`tooltipLevel`) | `PUT /v1/settings` | `settings set` | `set_settings` | gap | ok |
+| Cmd-Tab presence while windows are open (#55) | none | none | none | automatic, not a setting | n/a |
 
-Settings keys are validated against one table (`SettingsSchema`); an unknown key, a wrong type or an out-of-range
+Settings keys are validated against one table (`SettingsSchema`; a new setting is one more row); an unknown key, a wrong type or an out-of-range
 value is `400` and nothing is changed. `GET /v1/settings` returns the same table as `schema`, so an agent can
 discover the keys.
 
