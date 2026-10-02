@@ -135,6 +135,7 @@ enum DesignerWindow {
         if let w = window, let m = model {
             if quickSend { m.showQuickSend(app: app) }
             else { m.showDesign(app: app, template: template) }
+            WindowPresence.shared.track(w)
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
             return
@@ -163,6 +164,7 @@ enum DesignerWindow {
         titleSubscription = m.$mode.removeDuplicates().sink { [weak w] mode in w?.title = mode.windowTitle }
         window = w; model = m; delegate = d
         installKeyMonitor()
+        WindowPresence.shared.track(w)
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }

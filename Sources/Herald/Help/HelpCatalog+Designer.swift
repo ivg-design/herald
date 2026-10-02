@@ -94,14 +94,14 @@ extension HelpEntry {
     static let designerPreviewWithout = HelpEntry("designer.previewWithout", "Preview without fields", "preview the banner as if these fields were missing")
     static let designerTextStyle = HelpEntry("designer.textStyle", "Text style", "choose the type style of this text")
     static let designerMaxLines = HelpEntry("designer.maxLines", "Line limit", "most lines to show; empty uses the style’s limit")
-    static let designerFontSize = HelpEntry("designer.fontSize", "Font size", "x")
+    static let designerFontSize = HelpEntry("designer.fontSize", "Font size", "size in points; empty uses the style’s size")
     static let designerFontWeight = HelpEntry("designer.fontWeight", "Font weight", "choose the weight of this text, or follow the style")
     static let designerTextAlignment = HelpEntry("designer.textAlignment", "Text alignment", "align the text inside its cell, or follow the cell")
     static let designerMarkdown = HelpEntry("designer.markdown", "Links and markdown", "turn markdown and links in the text on or off")
     static let designerImageFit = HelpEntry("designer.imageFit", "Image fit", "fit inside the cell, fill it, or cover it while cropping")
     static let designerCornerRadius = HelpEntry("designer.cornerRadius", "Corner radius", "how round the corners are, in points")
     static let designerAspectRatio = HelpEntry("designer.aspectRatio", "Aspect ratio", "width divided by height; empty keeps the image’s own")
-    static let designerHeight = HelpEntry("designer.height", "Height", "x")
+    static let designerHeight = HelpEntry("designer.height", "Height", "fixed height in points; empty sizes to the content")
     static let designerIconSize = HelpEntry("designer.iconSize", "Icon size", "size of the issuer icon, in points")
     static let designerIconShape = HelpEntry("designer.iconShape", "Icon shape", "rounded square or circle")
     static let designerIconCorners = HelpEntry("designer.iconCorners", "Icon corners", "corner radius in points; empty picks one automatically")
@@ -145,6 +145,8 @@ extension HelpEntry {
     static let designerAddRow = HelpEntry("designer.addRow", "Add row", "add a row at the bottom of the grid")
     static let designerTrackSize = HelpEntry("designer.trackSize", "Track size", "Auto fits the content, Fill shares what is left, Points is exact")
     static let designerRemoveTrack = HelpEntry("designer.removeTrack", "Remove track", "delete this row or column from the grid")
+    static let designerCheckRow = HelpEntry("designer.checkRow", "Problem", "select the cell this problem is about")
+    static let designerTrackPoints = HelpEntry("designer.trackPoints", "Track points", "the exact size of this row or column in points")
 }
 
 extension HeraldHelpCatalog {
@@ -292,5 +294,7 @@ extension HeraldHelpCatalog {
         .designerAddRow,
         .designerTrackSize,
         .designerRemoveTrack,
+        .designerCheckRow,
+        .designerTrackPoints,
     ]
 }

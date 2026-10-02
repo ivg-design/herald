@@ -36,7 +36,7 @@ enum HeraldHelpFormat {
 
 enum HeraldHelpCatalog {
     /// Every entry of every area; the catalog test walks this.
-    static var all: [HelpEntry] { designer + authoring + history + settings }
+    static var all: [HelpEntry] { designer + designerInspector + authoring + history + settings }
     static func entry(_ id: String) -> HelpEntry? { all.first { $0.id == id } }
 }
 
