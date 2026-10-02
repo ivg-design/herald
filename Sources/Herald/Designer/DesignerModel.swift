@@ -474,6 +474,39 @@ struct TokenSuggestion: Identifiable, Equatable {
     var sample: String?
     var id: String { key }
     var token: String { "{\(key)}" }
+
+    /// Where a token's value comes from; every token picker groups by it (docs/reference/bindings.md).
+    enum Provenance: CaseIterable {
+        /// A field the issuer's manifest declares.
+        case issuer
+        /// A field of the notification itself: a standard key, or any key it carries.
+        case notification
+        /// A value the template sets (`extra`): the same for every notification.
+        case fixed
+
+        var title: String {
+            switch self {
+            case .issuer: return "From the issuer app (manifest field)"
+            case .notification: return "From the notification (payload field)"
+            case .fixed: return "Set here (fixed value)"
+            }
+        }
+    }
+
+    var provenance: Provenance {
+        switch group {
+        case .issuer: return .issuer
+        case .extra: return .fixed
+        case .standard, .seen, .custom: return .notification
+        }
+    }
+
+    /// What a menu row shows after the token: the sample of a dynamic token, the value of a fixed one.
+    var sampleText: String? {
+        guard let s = sample, !s.isEmpty else { return nil }
+        let flat = s.replacingOccurrences(of: "\n", with: " ")
+        return flat.count > 30 ? String(flat.prefix(29)) + "\u{2026}" : flat
+    }
 }
 
 enum DesignerPalette {

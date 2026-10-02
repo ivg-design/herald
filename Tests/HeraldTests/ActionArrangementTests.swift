@@ -20,7 +20,7 @@ final class ActionArrangementTests: XCTestCase {
     /// archive, delete and spam right-aligned in one merged cell spanning columns 2-4 of row 4.
     static let requested = """
     {"name":"email-split","app":"webwatcher.email","layoutVersion":2,"collapseEmpty":true,
-     "grid":{"rows":4,"cols":4,"rowSizes":["auto","auto","auto","auto"],"colSizes":["72","fill","fill","fill"],"gap":8,"padding":14,"width":400},
+     "grid":{"rows":4,"cols":4,"rowSizes":["auto","auto","auto","auto"],"colSizes":["104","fill","fill","fill"],"gap":8,"padding":14,"width":400},
      "cells":[
       {"id":"icon","row":0,"col":0,"rowSpan":3,"component":{"type":"issuerIcon","size":56,"shape":"rounded"}},
       {"id":"title","row":0,"col":1,"colSpan":3,"component":{"type":"text","binding":"{title}","style":"title","maxLines":1}},
@@ -143,12 +143,12 @@ final class ActionArrangementTests: XCTestCase {
         let icon = try frame("icon"), read = try frame("read"), more = try frame("more")
 
         XCTAssertEqual(read.x, 14, accuracy: 0.001, "the markRead button is in column 1")
-        XCTAssertEqual(read.width, 72, accuracy: 0.001)
+        XCTAssertEqual(read.width, 104, accuracy: 0.001)
         XCTAssertEqual(icon.x, 14, accuracy: 0.001)
         XCTAssertEqual(icon.y, 14, accuracy: 0.001, "the icon starts at row 1 and reaches row 3")
         XCTAssertLessThanOrEqual(icon.maxY, read.y, "the icon ends above the button row (row 4)")
         XCTAssertEqual(more.y, read.y, accuracy: 0.001, "both are in row 4")
-        XCTAssertEqual(more.x, 14 + 72 + 8, accuracy: 0.001, "the merged cell starts at column 2")
+        XCTAssertEqual(more.x, 14 + 104 + 8, accuracy: 0.001, "the merged cell starts at column 2")
         XCTAssertEqual(more.maxX, 400 - 14, accuracy: 0.001, "and ends at the right edge of column 4")
 
         guard case .actions(let a) = t.cells.first(where: { $0.id == "more" })!.component else { return XCTFail() }

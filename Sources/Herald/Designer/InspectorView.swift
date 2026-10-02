@@ -64,23 +64,34 @@ struct FieldRow<Content: View>: View {
 /// in real notifications and custom ones; "Custom token" adds a new one.
 struct TokenMenu: View {
     @ObservedObject var model: DesignerModel
+    /// Limits the list (the image picker offers image fields only); nil lists every token.
+    var only: ((TokenSuggestion) -> Bool)?
+    /// False hides "Custom token…" where a made-up key makes no sense.
+    var allowsCustom = true
     let onPick: (String) -> Void
 
+    init(model: DesignerModel, only: ((TokenSuggestion) -> Bool)? = nil, allowsCustom: Bool = true,
+         onPick: @escaping (String) -> Void) {
+        self.model = model; self.only = only; self.allowsCustom = allowsCustom; self.onPick = onPick
+    }
+
     var body: some View {
-        let all = model.tokenSuggestions
+        let all = model.tokenSuggestions.filter { only?($0) ?? true }
         Menu {
-            ForEach([TokenSuggestion.Group.issuer, .standard, .extra, .seen, .custom], id: \.rawValue) { g in
-                let items = all.filter { $0.group == g }
+            // Grouped by where the value comes from, each row with the token's sample (or its fixed value).
+            ForEach(TokenSuggestion.Provenance.allCases, id: \.title) { p in
+                let items = all.filter { $0.provenance == p }
                 if !items.isEmpty {
-                    Section(g.rawValue) {
+                    Section(p.title) {
                         ForEach(items) { t in
                             Button { onPick(t.token) } label: {
-                                if let s = t.sample, !s.isEmpty { Text("\(t.token)   \(s.prefix(30))") } else { Text(t.token) }
+                                if let s = t.sampleText { Text("\(t.token)   \(s)") } else { Text(t.token) }
                             }
                         }
                     }
                 }
             }
+            if allowsCustom {
             Divider()
             Button("Custom token\u{2026}") {
                 if let k = DesignerAlerts.prompt(title: "Custom token", message: "The name of a key the issuer sends, for example customer.name",
@@ -89,6 +100,7 @@ struct TokenMenu: View {
                     model.addCustomToken(key)
                     onPick("{\(key)}")
                 }
+            }
             }
         } label: { Image(systemName: "curlybraces") }
             .menuStyle(.borderlessButton).fixedSize().heraldHelp(.designerInsertField)
@@ -506,7 +518,7 @@ private struct ImageComponentEditor: View {
     let id: String
     var body: some View {
         let b = PayloadBinder<HeraldImageComponent>.of(model, id)
-        FieldRow("Image") { TokenTextField(model: model, title: "{image}", text: b.binding(\.binding, "{image}")) }
+        ImageSourceControl(model: model, binding: b.binding(\.binding, "{image}"))
         FieldRow("Fit") {
             Picker("", selection: b.binding(\.fit, .cover)) {
                 Text("Fit").tag(HeraldImageFit.fit); Text("Fill").tag(HeraldImageFit.fill); Text("Cover").tag(HeraldImageFit.cover)
