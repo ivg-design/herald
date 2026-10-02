@@ -22,7 +22,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true });
+    if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true, ...(env.BUNDLE_HASH ? { bundle: env.BUNDLE_HASH } : {}) });
 
     const oauth = await handleOAuth(req, env, url);
     if (oauth) return oauth;

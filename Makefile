@@ -23,3 +23,8 @@ install: install-cli
 	rm -rf /Applications/Herald.app
 	cp -R .build/xcode/Build/Products/Release/Herald.app /Applications/Herald.app
 	@echo "Installed /Applications/Herald.app"
+
+# The Worker as one ES module in Resources/relay (what Herald uploads to Cloudflare). Re-run after any change in relay/src.
+.PHONY: relay-bundle
+relay-bundle:
+	./scripts/relay-bundle.sh

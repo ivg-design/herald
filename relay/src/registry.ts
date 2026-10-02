@@ -79,7 +79,7 @@ export class Registry extends DurableObject<Env> {
       if (secret && !safeEqual(await sha256Hex(secret), await sha256Hex(String(req.headers.get("x-pairing-secret") ?? "")))) {
         return err(401, "unauthorized", "this relay requires its pairing secret (X-Pairing-Secret)");
       }
-      const max = Number(this.env.MAX_DEVICES ?? "300") || 300;
+      const max = Number(this.env.MAX_DEVICES ?? "5") || 5;
       if (this.q<{ n: number }>("SELECT COUNT(*) AS n FROM devices")[0].n >= max) {
         return err(403, "device_limit", `this relay already has ${max} paired Macs`);
       }

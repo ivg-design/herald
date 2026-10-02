@@ -29,6 +29,7 @@ describe("per-device caps (not global)", () => {
   it("defaults are sized for a shared relay and can be overridden by Worker vars", () => {
     expect(limitsFor({})).toEqual(DEFAULT_LIMITS);
     expect(limitsFor({ DEVICE_QUEUE_MAX: "7", DEVICE_AUDIO_BYTES_PER_DAY: "1000" })).toMatchObject({ queueMax: 7, audioBytesPerDay: 1000 });
+    expect(limitsFor({ QUEUE_TTL_HOURS: "48", MAX_BODY_BYTES: "1000", RATE_LIMIT_PER_KEY: "5" })).toMatchObject({ ttlMs: 48 * 3600_000, bodyBytes: 1000, ratePerKey: 5 });
     expect(limitsFor({ DEVICE_QUEUE_MAX: "-3", DEVICE_REQUESTS_PER_DAY: "abc" })).toEqual(DEFAULT_LIMITS);
     expect(DEFAULT_LIMITS.notificationsPerDay).toBeLessThanOrEqual(500);
     expect(DEFAULT_LIMITS.requestsPerDay).toBeLessThanOrEqual(5000);
@@ -133,11 +134,6 @@ describe("pairing limits are per client address", () => {
     });
   });
 
-  it("the hosted relay is configured for many Macs", async () => {
-    const toml = (await import("../wrangler.toml?raw")).default as string;
-    expect(Number(/MAX_DEVICES = "(\d+)"/.exec(toml)![1])).toBeGreaterThanOrEqual(100);
-    expect(toml).toMatch(/PAIR_STARTS_PER_HOUR = "6"/);
-  });
 });
 
 describe("no cross-device paths", () => {

@@ -2,11 +2,9 @@ import { DurableObject } from "cloudflare:workers";
 import { agentKey, oauthToken, parseOAuthSecret, parseToken, type Principal } from "./ids";
 import { DAY_MS, bearer, err, hmacHex, json, randomHex, safeEqual, sha256Hex } from "./util";
 import { limitsFor } from "./limits";
-import { MAX_BODY_BYTES, validateNotification } from "./validate";
+import { validateNotification } from "./validate";
 
-export const RATE_LIMIT = 60;
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
-export const TTL_MS = DAY_MS;
 export const MAX_LONG_POLL_S = 60;
 const MAX_KEYS = 20;
 // Herald pings every 5 minutes (auto-response, free), so "online" tolerates two missed pings.
@@ -405,22 +403,22 @@ export class Mailbox extends DurableObject<Env> {
   private expireSweep(now: number) {
     this.sql(
       "UPDATE notes SET suppressed_reason = 'expired', suppressed_scope = 'all' WHERE acked_at IS NULL AND suppressed_reason IS NULL AND created_at < ?",
-      now - TTL_MS,
+      now - this.lim.ttlMs,
     );
   }
 
   private pending(): NoteRow[] {
     return this.sql<NoteRow>(
       "SELECT * FROM notes WHERE acked_at IS NULL AND displayed_at IS NULL AND suppressed_reason IS NULL AND created_at >= ? ORDER BY created_at, rowid",
-      Date.now() - TTL_MS,
+      Date.now() - this.lim.ttlMs,
     );
   }
 
   private async notify(req: Request, key: KeyRow): Promise<Response> {
     const declared = Number(req.headers.get("content-length") ?? 0);
-    if (declared > MAX_BODY_BYTES) return err(413, "too_large", `body is larger than ${MAX_BODY_BYTES} bytes`);
+    if (declared > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
     const text = await req.text();
-    if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return err(413, "too_large", `body is larger than ${MAX_BODY_BYTES} bytes`);
+    if (new TextEncoder().encode(text).length > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
     let input: unknown;
     try { input = JSON.parse(text); } catch { return err(400, "invalid_request", "body must be JSON"); }
     const v = validateNotification(input);
@@ -436,9 +434,9 @@ export class Mailbox extends DurableObject<Env> {
     if (dup) this.sql("DELETE FROM notes WHERE rid = ?", dup.rid);
 
     const used = this.sql<{ n: number; oldest: number }>("SELECT COUNT(*) AS n, MIN(at) AS oldest FROM rate WHERE key_id = ? AND at > ?", key.id, now - RATE_WINDOW_MS)[0];
-    if (used.n >= RATE_LIMIT) {
+    if (used.n >= this.lim.ratePerKey) {
       const retry = Math.max(1, Math.ceil((used.oldest + RATE_WINDOW_MS - now) / 1000));
-      return json(429, { error: "rate_limited", message: `at most ${RATE_LIMIT} notifications per 10 minutes per key`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
+      return json(429, { error: "rate_limited", message: `at most ${this.lim.ratePerKey} notifications per 10 minutes per key`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
     if (this.usageField("notifications") >= this.lim.notificationsPerDay) {
       const retry = this.secondsToMidnight();
@@ -493,7 +491,7 @@ export class Mailbox extends DurableObject<Env> {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
     this.setMeta("last_seen", String(Date.now()));
-    pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: TTL_MS / 1000 }));
+    pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: this.lim.ttlMs / 1000 }));
     this.expireSweep(Date.now());
     this.flush(true);
     for (const r of this.pendingRequests()) this.sendConsent(r);
@@ -912,7 +910,7 @@ export class Mailbox extends DurableObject<Env> {
     const now = Date.now();
     this.persistUsage();
     this.expireSweep(now);
-    this.sql("DELETE FROM notes WHERE created_at < ?", now - TTL_MS - 60 * 60 * 1000);
+    this.sql("DELETE FROM notes WHERE created_at < ?", now - this.lim.ttlMs - 60 * 60 * 1000);
     this.sql("DELETE FROM rate WHERE at < ?", now - RATE_WINDOW_MS);
     this.sql("DELETE FROM meta WHERE k LIKE 'usage:%' AND k < ?", "usage:" + new Date(now - 7 * DAY_MS).toISOString().slice(0, 10));
     const left = this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM notes")[0].n;

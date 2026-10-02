@@ -5,8 +5,8 @@ workers_dev = true
 preview_urls = false
 
 [vars]
-# The hosted relay is shared: every Herald that turns on "Enable relay" gets its own mailbox. How many Macs may pair at all.
-MAX_DEVICES = "300"
+# How many Macs may pair with this relay (one user, a few machines; a relay shared by many people can raise it).
+MAX_DEVICES = "5"
 # Pairing codes per client address per hour. Per-device caps (notifications/day, queue, audio, requests) are in src/limits.ts;
 # override any of them here: DEVICE_NOTIFICATIONS_PER_DAY, DEVICE_QUEUE_MAX, DEVICE_REQUESTS_PER_DAY, DEVICE_AUDIO_UPLOADS_PER_DAY,
 # DEVICE_AUDIO_BYTES_PER_DAY, DEVICE_POLL_SECONDS_PER_DAY.

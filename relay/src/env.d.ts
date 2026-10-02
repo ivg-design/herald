@@ -12,4 +12,8 @@ interface Env {
   DEVICE_AUDIO_BYTES_PER_DAY?: string;
   DEVICE_POLL_SECONDS_PER_DAY?: string;
   REGISTER_PER_HOUR?: string;
+  QUEUE_TTL_HOURS?: string;
+  MAX_BODY_BYTES?: string;
+  RATE_LIMIT_PER_KEY?: string;
+  BUNDLE_HASH?: string;       // set by Herald when it deploys this Worker: the hash of the bundle that is running
 }
