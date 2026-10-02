@@ -409,7 +409,7 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | Route | Does |
 |---|---|
 | `GET /v1/relay/status` | `{paired, state, online, relayURL, mcpURL, deviceId, lastSeenAt, keys, log}`; `log` is the last 20 relay items with `displayed`, `spoken`, `replied`, `suppressed`. |
-| `POST /v1/relay/pair` | Pairs this Mac with the relay: asks for a one-time code, redeems it, stores the device token in the Keychain. Replies `{paired, code, deviceId}`. |
+| `POST /v1/relay/pair` | Pairs this Mac with the relay: asks for a one-time code, redeems it, stores the device token in the secret store (data-protection keychain, else a 0600 file). Replies `{paired, code, deviceId}`. |
 | `POST /v1/relay/unpair` | Wipes the mailbox on the relay (keys, queue, audio) and forgets the token. |
 | `GET /v1/relay/keys` | The agent keys: `id`, `name`, `client`, `scope` (always `notify`), `createdAt`, `lastUsedAt`, `revokedAt`. Never a secret. |
 | `POST /v1/relay/keys` | `{name, client?}` (`client`: `claude`, `codex`, `other`) mints a notify-only key. The reply has `key` (shown once), `mcpURL` and `connectorConfig`, the block to paste into the agent. 409 when the name is taken. |
@@ -418,7 +418,7 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `GET /v1/relay/usage` | Today's relay traffic against this device's caps: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
 | `GET /v1/relay/setup` | The setup state machine: `state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`), `hasToken`, `paired`, `online`, `relayURL`, `mcpURL`, `workersDevURL`, `customURL`, `customDomainRecommended`, `bundledVersion`, `deployedVersion`, `updateAvailable`, `message`, `steps`, `usage`. Also returned as `setup` by `GET /v1/relay/status`. |
 | `GET /v1/relay/token-url` | The pre-filled Cloudflare token page `url`, the sign-up URL, the nine `permissions` (three for the deploy, six Zone ones for the custom domain) with the reason for each, and `steps` to tell the user. |
-| `POST /v1/relay/token` | `{token}` stores the Cloudflare API token in the Keychain. Never returned by any route. |
+| `POST /v1/relay/token` | `{token}` stores the Cloudflare API token in the secret store (see CLOUD.md). Never returned by any route. |
 | `POST /v1/relay/deploy` | Deploys or upgrades the Worker in the user's Cloudflare account, waits for `/health`, pairs this Mac. Replies `{deployed, upgraded, relayURL, paired, online, steps, workersDevURL, customURL, warnings}` (`relayURL` is the custom address when one is set; `warnings` carries Bot Fight Mode and reconnect notes); a failure is `4xx/5xx` with Cloudflare's message. |
 | `GET /v1/relay/settings`, `PUT /v1/relay/settings` | Every Advanced field (`relayURL`, `accountId`, `workerName`, `subdomain`, `bucket`, `audioRetentionDays`, `queueTTLHours`, `notificationsPerDay`, `maxQueue`, `bodyLimitBytes`, `ratePerKey`, `maxDevices`, `deviceName`, `pingSeconds`, `customDomain` `{zone, hostname, attached}` (`null` removes it; setting it redeploys and applies it, see docs/CLOUD.md "Custom domain"), write-only `pairingSecret`). PUT validates (400 names the field) and redeploys when a Worker value or the custom domain changed (`redeployed`, `steps`). |
 | `GET /v1/relay/zones` | `{zones: [{id, name, status, suggestedHostname}]}`: the Cloudflare zones the stored token can see. 403 with "Token is missing Zone permissions ..." when it lacks Zone: Read. |

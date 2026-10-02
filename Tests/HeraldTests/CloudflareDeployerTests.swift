@@ -501,8 +501,9 @@ final class RelayCloudConfigTests: XCTestCase {
 
 final class CloudflareSecretsTests: XCTestCase {
     func testKeychainStoresEachSecretSeparatelyAndRemovesThem() {
-        let k = KeychainCloudflareSecrets(service: "com.ivg.herald.cloudflare.test.\(UUID().uuidString)")
-        defer { CloudflareSecretName.allCases.forEach { k.remove($0) } }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("herald-secrets-\(UUID().uuidString)")
+        let k = KeychainCloudflareSecrets(service: "com.ivg.herald.cloudflare.test.\(UUID().uuidString)", directory: dir, layer: FakeSecItems())
+        defer { CloudflareSecretName.allCases.forEach { k.remove($0) }; try? FileManager.default.removeItem(at: dir) }
         XCTAssertNil(k.get(.apiToken))
         XCTAssertTrue(k.set(.apiToken, "tok-1")); XCTAssertTrue(k.set(.pairingSecret, "pair-1"))
         XCTAssertEqual(k.get(.apiToken), "tok-1"); XCTAssertEqual(k.get(.pairingSecret), "pair-1")

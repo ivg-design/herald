@@ -61,11 +61,24 @@ You can narrow the token to your account on that page.
 
 | What | Where |
 |---|---|
-| Cloudflare API token | macOS Keychain (`com.ivg.herald.cloudflare`), this device only. Sent only to `api.cloudflare.com`. Never shown again, never returned by the local API or MCP. *Forget the token* (Advanced) deletes it. |
-| Pairing secret (made at the first deploy) | Keychain; also a secret on the Worker. The relay demands it (`X-Pairing-Secret`) when a Mac pairs, so a stranger who finds the URL cannot pair. Shown under Advanced. |
-| Relay signing secret (`RELAY_SECRET`, made at the first deploy) | Keychain and a Worker secret; signs device ids. Kept so a deploy from scratch is possible. |
-| Device token (`hrd_...`) | Keychain (see below). |
+| Cloudflare API token | Secret store (below; service `com.ivg.herald.cloudflare`), this device only. Sent only to `api.cloudflare.com`. Never shown again, never returned by the local API or MCP. *Forget the token* (Advanced) deletes it. |
+| Pairing secret (made at the first deploy) | Secret store; also a secret on the Worker. The relay demands it (`X-Pairing-Secret`) when a Mac pairs, so a stranger who finds the URL cannot pair. Shown under Advanced. |
+| Relay signing secret (`RELAY_SECRET`, made at the first deploy) | Secret store and a Worker secret; signs device ids. Kept so a deploy from scratch is possible. |
+| Device token (`hrd_...`) | Secret store (service `com.ivg.herald.relay`). |
 | Account id, worker name, subdomain, bucket, limits, deployed bundle hash | `relay-cloudflare.json` in Herald's support folder (no secrets). |
+
+**The secret store, and why there is no Keychain password prompt.** Herald's secrets used to sit in the legacy login keychain, whose access
+list is tied to the app's code signature: after an update macOS asked "Herald wants to use your confidential information ... enter your
+keychain password", over and over if that password is out of sync. Herald now keeps each secret in the **data-protection keychain**
+(`kSecUseDataProtectionKeychain`, this device only, available after first unlock), which has no per-signature access list and never
+prompts. That keychain needs the app's application identifier from a provisioning profile; a Developer ID build without one is refused
+with `errSecMissingEntitlement` (-34018), and Herald then keeps the secret in a **file with mode 0600** in its support folder
+(`~/Library/Application Support/Herald/secrets/<service>.<account>`), the same protection the local API `token` file has. (Herald does not
+add a `keychain-access-groups` entitlement: it is restricted, and a build that claims it without a profile does not launch.)
+**Migration**: the first time a secret is not found in the new place, Herald reads the old keychain item **once** (macOS may ask one last
+time; Deny, a wrong password or a locked keychain simply mean "not found", and Herald pairs again or asks for the Cloudflare token
+again), copies it into the new store and deletes the old item. A marker file (`secrets/<service>.<account>.migrated`) makes sure the old
+item is never read twice. `herald`, `herald-mcp` and the helpers read only the support folder's `token` file and never use the keychain.
 
 ### Upgrade, redeploy, delete
 
@@ -342,7 +355,7 @@ adds those two buttons (banners stay until dismissed anyway; the notification is
 ## Security model
 
 - **Outbound only.** Herald opens the WebSocket; the Mac has no listener for the relay and the loopback API stays on 127.0.0.1.
-- **Device token** (`hrd_...`): minted at pairing, stored in the macOS Keychain (this device only), sent as a Bearer on the WebSocket and the
+- **Device token** (`hrd_...`): minted at pairing, stored in Herald's secret store (data-protection keychain, else a 0600 file; see above), sent as a Bearer on the WebSocket and the
   device calls. The relay stores a SHA-256 hash.
 - **Agent keys** (`hrk_<deviceId>_<keyId>_<secret>`): minted only with the device token; scope `notify` is the only scope that exists
   (anything else is a 400); stored as SHA-256 hashes in the mailbox; compared in constant time; revocable instantly; a key routes to its own

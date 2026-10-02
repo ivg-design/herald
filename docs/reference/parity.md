@@ -121,7 +121,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 |---|---|---|
 | Setup state (none, token needed, deploying, online, error), version, update available | `GET /v1/relay/setup`, `GET /v1/relay/status` | `relay_status` |
 | The pre-filled Cloudflare token page and its permissions | `GET /v1/relay/token-url` | `relay_token_url` |
-| Store the Cloudflare API token (Keychain; never read back) | `POST /v1/relay/token` | `relay_set_cloudflare_token` |
+| Store the Cloudflare API token (secret store; never read back) | `POST /v1/relay/token` | `relay_set_cloudflare_token` |
 | Deploy / upgrade (Deploy, Update the relay, Redeploy), with the step log | `POST /v1/relay/deploy` | `relay_deploy` |
 | Enable relay off (unpair, revokes everything); Pair with a code | `POST /v1/relay/unpair`, `POST /v1/relay/pair` | `relay_unpair`, `relay_pair` |
 | Every Advanced field, read and write (a Worker value redeploys) | `GET`, `PUT /v1/relay/settings` | `relay_settings` |

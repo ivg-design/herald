@@ -29,25 +29,28 @@ public final class MemoryCloudflareSecrets: CloudflareSecrets, @unchecked Sendab
     public func remove(_ n: CloudflareSecretName) { lock.lock(); values[n] = nil; lock.unlock() }
 }
 
+/// The Cloudflare token, the pairing secret and the signing secret, each in its own `SecretVault` (see there for where, and for the
+/// one-time migration of the legacy login-keychain items).
 public final class KeychainCloudflareSecrets: CloudflareSecrets, @unchecked Sendable {
     private let service: String
-    public init(service: String = "com.ivg.herald.cloudflare") { self.service = service }
-    private func query(_ n: CloudflareSecretName) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: n.rawValue]
+    private let directory: URL?
+    private let layer: SecItemLayer
+    public init(service: String = "com.ivg.herald.cloudflare", directory: URL? = nil, layer: SecItemLayer = SystemSecItem()) {
+        self.service = service; self.directory = directory; self.layer = layer
     }
-    public func get(_ n: CloudflareSecretName) -> String? {
-        var q = query(n); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
+    private let lock = NSLock()
+    private var vaults: [CloudflareSecretName: SecretVault] = [:]
+    /// One vault per secret for the life of the store, so the one-time legacy read is remembered in memory as well as on disk.
+    private func vault(_ n: CloudflareSecretName) -> SecretVault {
+        lock.lock(); defer { lock.unlock() }
+        if let v = vaults[n] { return v }
+        let v = SecretVault(service: service, account: n.rawValue, directory: directory, layer: layer)
+        vaults[n] = v
+        return v
     }
-    public func set(_ n: CloudflareSecretName, _ v: String) -> Bool {
-        remove(n)
-        var q = query(n); q[kSecValueData as String] = Data(v.utf8)
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
-    }
-    public func remove(_ n: CloudflareSecretName) { SecItemDelete(query(n) as CFDictionary) }
+    public func get(_ n: CloudflareSecretName) -> String? { vault(n).load() }
+    public func set(_ n: CloudflareSecretName, _ v: String) -> Bool { vault(n).save(v) }
+    public func remove(_ n: CloudflareSecretName) { vault(n).delete() }
 }
 
 // MARK: - Bundle

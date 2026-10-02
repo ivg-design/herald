@@ -42,9 +42,9 @@ final class RelayController: RelayHost, RelayBackend {
         dedupe = RelayDedupe(file: dir.appendingPathComponent("relay-dedupe.json"))
         // A throwaway support folder (tests, HERALD_SUPPORT_DIR) gets its own Keychain item, never the real token's.
         let isDefault = dir.standardizedFileURL == HeraldPaths.defaultSupportDirectory.standardizedFileURL
-        tokens = KeychainTokenStore(service: isDefault ? "com.ivg.herald.relay" : "com.ivg.herald.relay.\(Self.stableHash(dir.path))")
+        tokens = KeychainTokenStore(service: isDefault ? "com.ivg.herald.relay" : "com.ivg.herald.relay.\(Self.stableHash(dir.path))", directory: dir)
         cloudConfig = RelayCloudConfigStore(file: dir.appendingPathComponent("relay-cloudflare.json"))
-        cloudSecrets = KeychainCloudflareSecrets(service: isDefault ? "com.ivg.herald.cloudflare" : "com.ivg.herald.cloudflare.\(Self.stableHash(dir.path))")
+        cloudSecrets = KeychainCloudflareSecrets(service: isDefault ? "com.ivg.herald.cloudflare" : "com.ivg.herald.cloudflare.\(Self.stableHash(dir.path))", directory: dir)
         client = RelayClient(host: self, store: store, dedupe: dedupe, tokens: tokens)
         client.pingSeconds = TimeInterval(cloudConfig.value.pingSeconds)
         // No relay is shared by default. An earlier build pointed unpaired installs at the maintainer's own instance: forget that.

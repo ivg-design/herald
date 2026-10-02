@@ -130,7 +130,8 @@ Tomorrow 9:00; the API takes any number of minutes up to 43200.
 **State machine.** The Rive logic object that reacts to inputs. A `rive` component plays one.
 
 **Support directory.** `~/Library/Application Support/Herald/`: `token`, `port`, `templates/`, `manifests/`,
-`assets/`, `scripts/`, `history/`, `template-approvals.json`. Override with `HERALD_SUPPORT_DIR`.
+`assets/`, `scripts/`, `history/`, `template-approvals.json`, `secrets/` (0600 files for the relay and Cloudflare secrets when the
+data-protection keychain is unavailable; see [../CLOUD.md](../CLOUD.md#what-herald-stores-where)). Override with `HERALD_SUPPORT_DIR`.
 
 **SF Symbol.** An Apple system icon, used by `iconButton`, buttons, badges and issuer icons. See
 [symbols.md](symbols.md).

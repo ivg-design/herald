@@ -17,35 +17,16 @@ public final class MemoryTokenStore: RelayTokenStore, @unchecked Sendable {
     public func delete() { lock.lock(); token = nil; lock.unlock() }
 }
 
-/// The device token in the macOS Keychain (generic password, this device only, available after first unlock so the
-/// relay reconnects at login). `service` is per support folder so a test instance never touches the real token.
+/// The device token, kept by a `SecretVault` (data-protection keychain, else a 0600 file in the support folder; the legacy login
+/// keychain item is migrated once). `service` is per support folder so a test instance never touches the real token.
 public final class KeychainTokenStore: RelayTokenStore, @unchecked Sendable {
-    private let service: String
-    private let account = "relay-device-token"
-    public init(service: String = "com.ivg.herald.relay") { self.service = service }
-
-    private var query: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]
+    private let vault: SecretVault
+    public init(service: String = "com.ivg.herald.relay", directory: URL? = nil, layer: SecItemLayer = SystemSecItem()) {
+        vault = SecretVault(service: service, account: "relay-device-token", directory: directory, layer: layer)
     }
-
-    public func load() -> String? {
-        var q = query
-        q[kSecReturnData as String] = true
-        q[kSecMatchLimit as String] = kSecMatchLimitOne
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
-    }
-
-    public func save(_ token: String) -> Bool {
-        delete()
-        var q = query
-        q[kSecValueData as String] = Data(token.utf8)
-        q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
-    }
-
-    public func delete() { SecItemDelete(query as CFDictionary) }
+    public func load() -> String? { vault.load() }
+    public func save(_ token: String) -> Bool { vault.save(token) }
+    public func delete() { vault.delete() }
 }
 
 /// What Herald remembers about the relay between launches (not the token): which relay, which device, and the log of
