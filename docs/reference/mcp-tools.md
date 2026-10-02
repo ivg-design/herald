@@ -210,7 +210,7 @@ No arguments. The names of the installed Apple Shortcuts, for `add_action_rule` 
 |---|---|---|---|
 | `app` | string | yes | |
 | `template` | string | yes | A saved template (built-ins are read-only: copy one with `put_template` first). |
-| `rule` | object | yes | `{match?, hide?, relabel?, style?: default\|destructive\|cancel, symbol?: <name or object>, position?, add?: {id, label, kind, url?\|command?\|script?\|shortcut?, input?, snoozeMinutes?, style?, symbol?}}`. |
+| `rule` | object | yes | `{match?, hide?, relabel?, style?: normal\|prominent\|destructive\|cancel, symbol?: <name or object>, position?, add?: {id, label, kind, url?\|command?\|script?\|shortcut?, input?, snoozeMinutes?, style?, symbol?}}`. |
 
 Appends one rule to `actionRules` ([actions.md](actions.md#rules-actionrules)). A rule changes an issuer action
 (`match` by id, label or `*`) or adds one of your own. `script` actions run a file in the scripts folder, which

@@ -40,6 +40,21 @@ blank values are left out, so "absent" and "blank" are the same thing.
 The standard tokens, available without a manifest: `title`, `subtitle`, `body`, `image`, `url`, `app`,
 `appName`, `id`, `priority`, `sound`, `group`, `deliveredAt`, `stack.count`.
 
+## Three provenances
+
+Every token in the Designer's pickers is filed under where its value comes from, and the sample shown beside
+a token is what a preview fills it with:
+
+| Group in the picker | Provenance | What it is | Sample shown |
+|---|---|---|---|
+| **From the issuer app (manifest field)** | the issuer | A field the issuer's manifest declares (`sender`, `thumbnail`). The issuer promises to send it, with a type and a sample. | the manifest's `sample` |
+| **From the notification (payload field)** | the notification | A standard key (`title`, `body`, `image`, `deliveredAt`, `stack.count`...), or any other key a real notification carried (`customer.name`) or you typed as a custom token. Not promised by anyone: absent when the notification does not send it. | the sample or the last real value |
+| **Set here (fixed value)** | the template | An `extra.<key>` value you wrote in the template. The same for every notification. | the value itself |
+
+A fixed picture for an `image` component is the same idea without a token: the binding is a plain file path
+(for example one inside `~/Library/Application Support/Herald/template-images/`), which is never empty while
+the file exists. See [components/image.md](components/image.md#source).
+
 ## Types
 
 With the issuer's manifest, a field declared `number` or `bool` that arrives as text is converted

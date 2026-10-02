@@ -17,7 +17,7 @@ merged payload. The short guide is [../ACTIONS.md](../ACTIONS.md); this page is 
 | `id` | string | all | Stable name. Rules (`match`) and components (`actionRef`) refer to it. Defaults to a slug of the label (`"Mark as Read"` becomes `mark-as-read`). |
 | `label` | string | all | Button text; `{tokens}` are filled; falls back to the `id` if that leaves nothing. Required (defaults to `id` if omitted). |
 | `kind` | string | all | `url`, `callback`, `command`, `script`, `shortcut`, `dismiss`, `snooze`. May be omitted when exactly one of `shortcut`, `script`, `command`, `callback`, `url` is present (checked in that order). |
-| `style` | string | all | `default`, `destructive`, `cancel`. |
+| `style` | string | all | `normal`, `prominent`, `destructive` (asks for confirmation before running), `cancel`; `default` means `normal`. |
 | `url` | string | `url` | An http, https or mailto URL; may contain `{tokens}` in a template action. |
 | `callback` | object | `callback` | `{url?, payload?}`; `url` defaults to the app's registered `callbackURL`. |
 | `command` | string | `command` | A shell command line, run with `/bin/zsh -lc`. |
@@ -86,7 +86,7 @@ Applied in order to the resolved list.
 | `match` | Selects actions by id or label (case-insensitive), or `"*"` for all. |
 | `hide: true` | Removes the matched actions. |
 | `relabel` | New label for the matched actions. |
-| `style` | New style: `default`, `destructive`, `cancel`. An empty string clears it. |
+| `style` | New style: `normal`, `prominent`, `destructive` (asks for confirmation before running), `cancel`; `default` means `normal`. An empty string clears it. |
 | `position` | Moves the matched actions to this 0-based index (clamped). |
 | `symbol` | **1.3.** Gives the matched actions an SF Symbol (a name or an object). |
 | `add` | Appends a new template-owned action (at `position` when the rule has no `match`). An action with an existing id replaces that action (keeping its place unless `position` is given). |

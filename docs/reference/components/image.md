@@ -14,6 +14,21 @@ A picture bound to a field: a preview thumbnail, a hero image, a logo.
 | `height` | number > 0 | none | Fixed height in points. Wins over `aspectRatio`. |
 | `emptyBehavior` | string | template default | `collapse` or `keep`. |
 
+## Source
+
+In the Designer the Image component's *Source* control chooses where the picture comes from. All three choices are
+just the component's `binding`:
+
+| Choice | Binding it writes | Meaning |
+|---|---|---|
+| **From issuer** `{image}` | `"{image}"` | The image the sending app attached to the notification. |
+| **Fixed image...** | a file path | A picture you choose; it overrides the issuer's and is the same for every notification. Herald copies it into `~/Library/Application Support/Herald/template-images/<app>/` (PNG, JPEG, GIF, WebP, HEIC, AVIF, TIFF or BMP, at most 10 MB; named with a short content hash, so choosing the same file twice makes one copy and a changed file never replaces what other templates use). |
+| **Field...** | `"{key}"` | Another field of type `image` that the manifest declares (`{thumbnail}`). |
+
+A binding that mixes tokens or text (`https://cdn.example/{id}.png`) shows as a custom binding with its own text
+field. A fixed path is never empty while the file exists; if the file is removed the component is empty and
+follows `emptyBehavior`.
+
 ## Bindings and tokens
 
 The standard token `{image}` is the notification's own `image`. It is present whenever the banner has a

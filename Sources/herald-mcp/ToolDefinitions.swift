@@ -258,7 +258,7 @@ enum MCPToolCatalog {
             inputSchema: Schema.input([
                 "app": Schema.string("The app id."),
                 "template": Schema.string("The saved template's name (built-ins are read-only: copy one with put_template first)."),
-                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: default|destructive|cancel, symbol?: <SF Symbol name or object>, position?, add?: {id, label, kind, url?|command?|script?|shortcut?, input?, snoozeMinutes?, style?, symbol?}}."),
+                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: normal|prominent|destructive|cancel, symbol?: <SF Symbol name or object>, position?, add?: {id, label, kind, url?|command?|script?|shortcut?, input?, snoozeMinutes?, style?, symbol?}}."),
             ], required: ["app", "template", "rule"]),
             destructive: true, idempotent: false),
 

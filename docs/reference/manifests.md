@@ -73,7 +73,7 @@ The issuer's own buttons, offered to the user. An issuer action is one of:
 
 Properties: `id` (stable name that `actionRules.match` and `actionRef` use; derived from the label as a slug
 when omitted, `"Mark as Read"` becomes `mark-as-read`; duplicate ids are an error), `label` (required, at most
-1024 bytes), `kind`, `style` (`default`, `destructive`, `cancel`), and the kind-specific fields.
+1024 bytes), `kind`, `style` (`normal`, `prominent`, `destructive`, `cancel`; `default` means `normal`), and the kind-specific fields.
 
 `script`, `shortcut` and `snooze` actions are **not** issuer actions: they are the user's, authored in
 templates (the manifest decoder says so: `'shortcut' actions are authored in templates, not declared by an
