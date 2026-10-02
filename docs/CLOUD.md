@@ -48,7 +48,7 @@ you press *Delete relay from Cloudflare* (Advanced).
 | Config Settings: Edit (`config_settings`) | custom domain: the Configuration Rule that switches Browser Integrity Check off |
 | Zone WAF: Edit (`waf`) | custom domain: a narrow skip rule for the relay hostname |
 
-The last six are only used for the [custom domain](#custom-domain-required-for-openaichatgpt-cloud-agents--error-1010). A token without
+The last six are only used for the [custom domain](#custom-domain-optional). A token without
 them still deploys the relay on workers.dev; asking for a custom domain with such a token stops with "Token is missing Zone
 permissions ..." (create a new token from the pre-filled page, or skip the custom domain). Group names are Cloudflare's; the template
 keys in the page link are Herald's best match, and the page lists any it does not know, so check the six zone rows are ticked.
@@ -84,12 +84,22 @@ secret; plus **Apply settings**, **Redeploy**, **Test connection** (health, then
 **Pair with a code** (for a relay Herald did not deploy), **Unpair**, **Forget token** and **Delete relay from Cloudflare**.
 The same fields are `relay_settings` in the local MCP and `GET|PUT /v1/relay/settings`.
 
-### Custom domain (required for OpenAI/ChatGPT cloud agents: Error 1010)
+### Custom domain (optional)
 
 Symptom: a cloud agent (an OpenAI sandbox, ChatGPT) calling `https://<worker>.<account>.workers.dev` gets **403 / Error 1010**
 ("the owner of this website has banned your access based on your browser's signature"). That is Cloudflare's **Browser Integrity
-Check** on the workers.dev hostname, which cannot be switched off there. From a Mac every User-Agent gets 200, so the relay is fine.
-The fix is a hostname in a zone you control, with the check off for that hostname only.
+Check**, which rejects Python's default `User-Agent: Python-urllib/3.x` on every Cloudflare-fronted host before the request reaches the
+relay (any other value works: curl, requests, aiohttp, no User-Agent, a custom string). **The simplest fix: send a custom
+User-Agent such as `Herald-Agent/1.0`:**
+
+```python
+req = urllib.request.Request(url, headers={"User-Agent": "Herald-Agent/1.0", "Authorization": "Bearer <key>"})
+```
+
+The instruction blocks Herald gives for cloud agents carry this note. A custom domain is the optional alternative: a hostname in a
+zone you control, with the check switched off for that hostname only, so even default library User-Agents work; it also gives the
+relay a stable, branded address. workers.dev's check cannot be switched off. `relay_test` reports `browserCheckActive` (it asks
+`/health` and `/mcp` with `Python-urllib/3.12` and with a custom User-Agent) and says when the check is active on the hostname.
 
 Settings > Cloud > Advanced > Custom domain (or `relay_zones`, then `relay_settings {settings: {customDomain: {zone, hostname}}}`):
 
@@ -112,7 +122,7 @@ in the Cloudflare dashboard (Security > Bots), or it can still challenge cloud a
 automated" not set to Allow is reported the same way. These are warnings, not failures. A missing Zone WAF permission is a warning
 too; a missing Zone, DNS, Workers Routes or Config Settings permission stops the deploy with a clear message.
 
-After a deploy without a custom domain, Settings > Cloud shows "Cloud agents such as ChatGPT need a custom domain" with **Set up...**.
+After a deploy without a custom domain, Settings > Cloud shows "Cloud agents: send a custom User-Agent; or set up a custom domain to skip Cloudflare's browser check" with **Set up...**.
 "Use workers.dev again" removes the setting and points Herald back at workers.dev; the hostname, DNS record and rules stay in your
 Cloudflare account (delete them there if you want them gone).
 
@@ -350,7 +360,7 @@ Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST
 
 | Symptom | Cause |
 |---|---|
-| A cloud agent gets 403 / Error 1010 on the workers.dev address | Cloudflare's Browser Integrity Check blocks it on workers.dev. Set up a [custom domain](#custom-domain-required-for-openaichatgpt-cloud-agents--error-1010). |
+| A cloud agent gets 403 / Error 1010 on the workers.dev address | Cloudflare's Browser Integrity Check blocks it on workers.dev. Set up a [custom domain](#custom-domain-optional). |
 | Settings shows "Offline" and keeps retrying | No network; Herald retries 1 s, 2 s, 4 s ... up to 5 minutes and at once on wake or when the network returns. |
 | "the relay rejected this Mac's token" | The pairing was removed (Unpair) or the relay was reset. Pair again. |
 | The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked, or its refresh token was used twice; connect it again. |

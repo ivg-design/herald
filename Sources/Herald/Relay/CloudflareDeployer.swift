@@ -496,6 +496,25 @@ public struct CloudflareDeployer: Sendable {
         } catch let e as RelayError { return .failure(e) } catch { return .failure(.transport(error.localizedDescription)) }
     }
 
+    public static let defaultLibraryUserAgent = "Python-urllib/3.12"
+
+    /// Is Cloudflare's Browser Integrity Check active on this hostname? Asks /health and /mcp with Python's default User-Agent and
+    /// with a custom one: 403 for the first only (Error 1010) means yes. nil when the relay cannot be reached either way.
+    public static func browserCheckActive(url: String, http: RelayHTTP) async -> Bool? {
+        func status(_ path: String, ua: String) async -> Int? {
+            guard let u = URL(string: url + path) else { return nil }
+            var r = URLRequest(url: u); r.timeoutInterval = 15; r.setValue(ua, forHTTPHeaderField: "User-Agent")
+            return try? await http.send(r).1.statusCode
+        }
+        var answered = false
+        for path in ["/health", "/mcp"] {
+            guard let plain = await status(path, ua: "Herald-Agent/1.0") else { continue }
+            answered = true
+            if let lib = await status(path, ua: defaultLibraryUserAgent), lib == 403, plain != 403 { return true }
+        }
+        return answered ? false : nil
+    }
+
     // MARK: Delete
 
     /// Deletes the Worker (and, with it, every mailbox, key and queued notification) and tries to delete the bucket.

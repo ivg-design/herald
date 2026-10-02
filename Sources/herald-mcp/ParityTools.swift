@@ -282,7 +282,7 @@ enum ParityTools {
             save the listed ones; a change to a value that lives in the Worker (or the custom domain) redeploys it, and the reply says so with the step log. \
             Never returns the Cloudflare token. \
             customDomain {zone, hostname} (null removes it) puts the relay on a hostname in the user's own Cloudflare zone, switches Browser Integrity Check off for that host and \
-            re-points Herald at it: REQUIRED for OpenAI/ChatGPT cloud agents, which Cloudflare blocks on workers.dev (Error 1010). Use relay_zones to pick the zone; connectors \
+            re-points Herald at it. OPTIONAL: it makes agents with default library User-Agents (Python-urllib/3.x gets Error 1010 on workers.dev) work, and gives a stable branded address; the alternative is for the agent to send a custom User-Agent such as Herald-Agent/1.0. Use relay_zones to pick the zone; connectors \
             already added to an agent must be re-added with the new URL. Needs the token's Zone permissions (relay_token_url).
             """,
             inputSchema: Schema.input(["settings": Schema.object("Settings to change, by name, for example {\"maxQueue\": 50}.")]),
@@ -317,7 +317,7 @@ enum ParityTools {
 
         ParityTool(definition: MCPToolDefinition(
             name: "relay_test", title: "Test the relay end to end",
-            description: "Checks the relay's /health, then sends a test notification through it with a temporary key (a banner appears on this Mac), waits for its receipt and revokes the key.",
+            description: "Checks the relay's /health (and reports `browserCheckActive`: whether Cloudflare's Browser Integrity Check rejects Python-urllib on this hostname, expected on workers.dev), then sends a test notification through it with a temporary key (a banner appears on this Mac), waits for its receipt and revokes the key.",
             inputSchema: Schema.input(), idempotent: false),
             route: { _ in RouteCall(method: "POST", path: "/v1/relay/test", timeout: 60) }),
 

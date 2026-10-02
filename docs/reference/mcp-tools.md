@@ -366,11 +366,11 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `relay_set_cloudflare_token` | `{token}` (sensitive): stores it in the Keychain; never returned. |
 | `relay_deploy` | Deploys or upgrades the relay in the user's Cloudflare account, waits until it answers, pairs this Mac; returns the step log. Idempotent. |
 | `relay_pair` / `relay_unpair` | Pair with the configured relay / turn the relay off (revokes every key and connector; changes nothing if the relay cannot be reached). |
-| `relay_settings` | No arguments: every Advanced setting. `{settings: {...}}`: validate, save, and redeploy when a Worker value changed. `customDomain: {zone, hostname}` (or `null`) puts the relay on a hostname in the user's zone, turns Browser Integrity Check off for it and re-points Herald: required for OpenAI/ChatGPT cloud agents (Error 1010 on workers.dev). |
+| `relay_settings` | No arguments: every Advanced setting. `{settings: {...}}`: validate, save, and redeploy when a Worker value changed. `customDomain: {zone, hostname}` (or `null`) puts the relay on a hostname in the user's zone, turns Browser Integrity Check off for it and re-points Herald. Optional: agents with default library User-Agents (Python-urllib gets Error 1010) then work; otherwise they send a custom User-Agent. |
 | `relay_zones` | The Cloudflare zones the token can see, each with a suggested hostname. Needs the token's Zone permissions. |
 | `relay_delete` | `{confirm: true}`: delete the relay from Cloudflare (destructive). |
 | `relay_instructions` | `{client: chatgpt\|claude\|codex}`: the exact text for that agent. |
-| `relay_test` | `/health`, then a test notification through the relay with its receipt. |
+| `relay_test` | `/health`, then a test notification through the relay with its receipt; `browserCheckActive` says whether Cloudflare's Browser Integrity Check rejects `Python-urllib/3.x` on the hostname (expected on workers.dev). |
 
 `relay_status` carries the setup state machine as `setup.state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`).
 Connected agents are `list_connectors` (OAuth) and the keys in `relay_status`; revoke either with `revoke_agent_key`.

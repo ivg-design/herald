@@ -219,6 +219,16 @@ extension RelayController: RelaySwitchBackend, RelaySetupBackend {
     // MARK: Test, instructions
 
     func testRelay() async throws -> RelayTestReply {
+        var r = try await testRelayCore()
+        let bic = await CloudflareDeployer.browserCheckActive(url: relayURL, http: URLSessionRelayHTTP())
+        r.browserCheckActive = bic
+        if bic == true {
+            r.detail += " Browser Integrity Check is active on this hostname (expected on workers.dev): Python's default User-Agent (Python-urllib/3.x) is rejected with Error 1010. Agents must send a custom User-Agent such as Herald-Agent/1.0, or set up a custom domain."
+        }
+        return r
+    }
+
+    private func testRelayCore() async throws -> RelayTestReply {
         let url = relayURL
         guard !url.isEmpty else { throw BackendError(409, "No relay is set up yet (relay_status).") }
         let http = URLSessionRelayHTTP()

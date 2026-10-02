@@ -100,6 +100,9 @@ public struct RelayTestReply: Codable, Equatable, Sendable {
     public var roundTrip: Bool
     public var receipt: String?
     public var detail: String
+    /// true: Cloudflare's Browser Integrity Check rejects Python-urllib on this hostname (expected on workers.dev); false: it does not;
+    /// nil: could not tell.
+    public var browserCheckActive: Bool? = nil
 }
 
 public protocol RelaySetupBackend: Sendable {

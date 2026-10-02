@@ -50,8 +50,10 @@ create a token, and approve a connector on the Mac.
 4. Optional: `relay_settings` to read the Advanced values, `relay_settings {settings: {...}}` to change them before deploying.
 5. `relay_deploy`: takes up to about a minute; the reply is the step log. On failure the error is Cloudflare's message (for example a
    missing permission): fix it and call `relay_deploy` again, which is safe to repeat and upgrades in place.
-6. Custom domain (REQUIRED for ChatGPT / OpenAI cloud agents, which Cloudflare blocks with Error 1010 on workers.dev; skip it for Claude/Codex
-   if their calls already work): `relay_zones`, ask the user which zone, then `relay_settings {settings: {customDomain: {zone, hostname}}}`
+6. Custom domain (OPTIONAL). A cloud agent that calls the relay over HTTP must **send a custom User-Agent (for example `Herald-Agent/1.0`)**:
+   Cloudflare rejects Python's default `Python-urllib/3.x` with Error 1010 before the request reaches the relay; any other value works
+   (`urllib.request.Request(url, headers={"User-Agent": "Herald-Agent/1.0", ...})`). The custom domain turns that check off for a hostname, so
+   default User-Agents work too (`relay_test` reports `browserCheckActive`): `relay_zones`, ask the user which zone, then `relay_settings {settings: {customDomain: {zone, hostname}}}`
    (suggest `herald.<zone>`; it redeploys, attaches the hostname, switches Browser Integrity Check off for it and re-points Herald, the Mac
    stays paired). Read `warnings` in the reply (Bot Fight Mode on the zone must be turned off by the user). "Token is missing Zone
    permissions" means: have the user create a new token from `relay_token_url` and repeat from step 3. Connectors added earlier must be

@@ -18,7 +18,7 @@ struct CloudCustomDomainView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Custom domain").font(.headline)
-            Text("Cloud agents such as ChatGPT and OpenAI sandboxes are blocked by Cloudflare on workers.dev (Error 1010). Put the relay on a hostname in a domain you own on Cloudflare: Herald attaches it, switches Browser Integrity Check off for that hostname only, and points this Mac at it. Connectors already added to an agent must be re-added with the new URL.")
+            Text("Optional. Cloudflare\u{2019}s Browser Integrity Check rejects Python\u{2019}s default User-Agent (Python-urllib/3.x, Error 1010) on workers.dev; agents that send their own User-Agent are fine. A hostname in a domain you own on Cloudflare turns the check off, so even default library User-Agents work, and gives the relay a stable, branded address. Herald attaches it, switches Browser Integrity Check off for that hostname only, and points this Mac at it. Connectors already added to an agent must be re-added with the new URL.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if let w = relay.cloudConfig.value.workerURL { addressRow("workers.dev address", w, canonical: relay.cloudConfig.value.customURL == nil) }
             if let c = relay.cloudConfig.value.customURL { addressRow("Custom address (canonical)", c, canonical: true) }
@@ -78,7 +78,7 @@ struct CustomDomainBanner: View {
     var body: some View {
         HStack {
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-            Text("Cloud agents such as ChatGPT need a custom domain; Cloudflare blocks them on workers.dev (Error 1010).").font(.caption)
+            Text("Cloud agents: send a custom User-Agent; or set up a custom domain to skip Cloudflare\u{2019}s browser check.").font(.caption)
             Spacer()
             Button("Set up\u{2026}", action: setUp)
         }

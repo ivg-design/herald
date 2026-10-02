@@ -17,6 +17,8 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
     var forced: [String: (Int, String)] = [:]
     var healthBundle: String? = nil   // nil: echo the uploaded BUNDLE_HASH
     var healthFailures = 0
+    /// Cloudflare's Browser Integrity Check: Python's default urllib User-Agent gets 403 / Error 1010 on non-API hosts.
+    var blockPythonUrllib = false
     /// After this many successful health answers every later one fails (nil: never).
     var failHealthAfter: Int?
     private var healthAnswered = 0
@@ -78,6 +80,7 @@ final class FakeCloudflare: RelayHTTP, @unchecked Sendable {
             }
         }
         // the workers.dev health check
+        if blockPythonUrllib, r.value(forHTTPHeaderField: "User-Agent") == "Python-urllib/3.12" { return reply(403, "error code: 1010") }
         if healthFailures > 0 { healthFailures -= 1; throw RelayError.transport("could not resolve host") }
         if let n = failHealthAfter, healthAnswered >= n { throw RelayError.transport("could not resolve host") }
         healthAnswered += 1
@@ -397,6 +400,21 @@ final class CloudflareCustomDomainTests: XCTestCase {
         catch let e as CloudflareError { XCTAssertTrue(e.message.hasPrefix("Token is missing Zone permissions")) }
     }
 
+    func testBrowserCheckProbeDetectsTheUrllibBan() async {
+        let http = FakeCloudflare(); http.blockPythonUrllib = true
+        let on = await CloudflareDeployer.browserCheckActive(url: "https://herald-relay.acme.workers.dev", http: http)
+        XCTAssertEqual(on, true)
+        let ua = http.calls.count   // each path asked with a custom and the default User-Agent
+        XCTAssertEqual(ua, 2)       // stops at the first path that shows the ban
+        let off = FakeCloudflare()
+        let none = await CloudflareDeployer.browserCheckActive(url: "https://herald.example.com", http: off)
+        XCTAssertEqual(none, false)
+        // everything blocked for everyone (not a User-Agent rule) is not reported as the browser check
+        let down = FakeCloudflare(); down.healthFailures = 99
+        let unknown = await CloudflareDeployer.browserCheckActive(url: "https://x.test", http: down)
+        XCTAssertNil(unknown)
+    }
+
     func testTokenPageAsksForTheZonePermissionsToo() {
         let keys = CloudflareLinks.tokenPermissions.map(\.key)
         for k in ["zone", "dns", "workers_routes", "zone_settings", "config_settings", "waf"] { XCTAssertTrue(keys.contains(k), k) }
@@ -599,6 +617,16 @@ final class RelaySwitchTests: XCTestCase {
 }
 
 final class RelayInstructionsTests: XCTestCase {
+    func testBothBlocksTellAgentsToSendACustomUserAgent() {
+        for t in [RelayInstructions.oauth(mcpURL: "https://r.example.com/mcp"), RelayInstructions.staticKey(mcpURL: "https://r.example.com/mcp"),
+                  RelayInstructions.staticKey(mcpURL: "https://r.example.com/mcp", key: "hrk_abc")] {
+            XCTAssertTrue(t.contains("Send a custom User-Agent"))
+            XCTAssertTrue(t.contains("Python-urllib/3.x")); XCTAssertTrue(t.contains("Error 1010"))
+            XCTAssertTrue(t.contains(#""User-Agent": "Herald-Agent/1.0""#))
+            XCTAssertTrue(t.contains("custom domain"))
+        }
+    }
+
     private let url = "https://herald-relay.acme.workers.dev/mcp"
 
     func testOAuthBlockIsForChatGPTAndNeedsNoKey() {
