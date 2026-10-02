@@ -273,6 +273,9 @@ struct ActionFormView: View {
                 }
                 detail
                 Section {
+                    SymbolPanel(model: model, symbol: Binding(get: { request.action.symbol }, set: { request.action.symbol = $0 }))
+                }
+                Section {
                     DisclosureGroup("Advanced") {
                         TextField("Id", text: Binding(get: { request.action.id }, set: { request.action.id = $0; idEdited = true }))
                             .font(.system(size: 12, design: .monospaced))

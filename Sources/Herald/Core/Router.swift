@@ -36,7 +36,7 @@ public protocol HeraldBackend: AnyObject, Sendable {
     func dismissGroup(app: String, group: String) async throws
     /// `POST /v1/designer/snapshot`: the Designer window's content drawn offscreen at `width` x `height` as PNG (test hook;
     /// no window is created or shown).
-    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data
+    func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) async throws -> Data
     /// `POST /v1/rive/check`: loads a `rive` component in a window-less host view and reports what it found (test hook).
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply
     /// `GET /v1/stacks?app=`: the stacks that are up (DESIGN section 9).
@@ -107,7 +107,7 @@ public extension HeraldBackend {
     func quietHours() async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func dismissGroup(app: String, group: String) async throws { throw BackendError(501, "stacks are not supported") }
-    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data { throw BackendError(501, "designer snapshots are not supported") }
+    func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) async throws -> Data { throw BackendError(501, "designer snapshots are not supported") }
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { throw BackendError(501, "rive checks are not supported") }
     func stacks(app: String?) async throws -> [HeraldStackInfo] { throw BackendError(501, "stacks are not supported") }
     func expandStack(app: String, group: String, expanded: Bool) async throws { throw BackendError(501, "stacks are not supported") }
@@ -200,7 +200,7 @@ public final class Router: @unchecked Sendable {
                 }
                 let w = q["width"].flatMap(Int.init) ?? 1100, h = q["height"].flatMap(Int.init) ?? 820
                 guard (600...4000).contains(w), (400...3000).contains(h) else { throw BackendError(400, "width must be 600-4000 and height 400-3000") }
-                return .png(try await backend.designerSnapshot(app: q["app"].flatMap { $0.isEmpty ? nil : $0 }, width: w, height: h))
+                return .png(try await backend.designerSnapshot(app: q["app"].flatMap { $0.isEmpty ? nil : $0 }, template: q["template"].flatMap { $0.isEmpty ? nil : $0 }, select: q["select"].flatMap { $0.isEmpty ? nil : $0 }, width: w, height: h))
             case ("POST", "/v1/rive/check"):
                 let b = try decode(RiveCheckRequest.self, req)
                 guard !b.app.isEmpty else { throw BackendError(400, "app is required") }

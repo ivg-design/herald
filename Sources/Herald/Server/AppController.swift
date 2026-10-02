@@ -29,8 +29,8 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func shortcuts() async throws -> [String] { try await controller.shortcutNames() }
     func preview(_ request: PreviewSpec) async throws -> Data { try await controller.previewPNG(request) }
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { await controller.riveCheck(request) }
-    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data {
-        try await controller.designerSnapshot(app: app, width: width, height: height)
+    func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) async throws -> Data {
+        try await controller.designerSnapshot(app: app, template: template, select: select, width: width, height: height)
     }
     func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
@@ -356,8 +356,9 @@ final class AppController {
 
     /// `POST /v1/designer/snapshot`: the Designer's content in a window-less hosting view, drawn to a bitmap. Nothing
     /// is shown, activated or saved; the model reads the app's templates and manifest but is never saved.
-    func designerSnapshot(app: String?, width: Int, height: Int) throws -> Data {
-        let m = DesignerModel(backend: .live(self), app: app, template: nil)
+    func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) throws -> Data {
+        let m = DesignerModel(backend: .live(self), app: app, template: template)
+        if let select { m.select(cell: select) }
         let view = DesignerView(model: m, controller: self,
                                 iconFor: { [registry] in AppIcons.icon(for: registry.record(for: $0), app: $0) })
             .environment(\.colorScheme, .light)

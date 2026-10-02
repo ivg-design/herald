@@ -239,7 +239,7 @@ final class DesignerSnapshotRouteTests: XCTestCase {
         func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { [] }
         func clearHistory(app: String?) async throws {}
         func apps() async throws -> [HeraldAppRegistration] { [] }
-        func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data { seen.append((app, width, height)); return Data([0x89]) }
+        func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) async throws -> Data { seen.append((app, width, height)); return Data([0x89]) }
     }
     func testDefaultsSizeLimitsAndVerbs() async {
         let b = B(); let r = Router(token: "t", backend: b, version: "1", pid: 1)

@@ -521,6 +521,8 @@ private struct IssuerIconEditor: View {
         }
         FieldRow("Corners") { OptionalNumberField(value: b.binding(\.cornerRadius, nil), placeholder: "auto") }
         Text("The issuing app\u{2019}s icon.").font(.caption2).foregroundStyle(.secondary)
+        Divider()
+        SymbolPanel(model: model, symbol: b.binding(\.symbol, nil), showsPlacement: false)
     }
 }
 
@@ -559,6 +561,8 @@ private struct ButtonEditor: View {
             OptionalPicker(selection: b.binding(\.style, nil),
                            options: [("default", "Default"), ("destructive", "Destructive"), ("cancel", "Quiet")], noneLabel: "Action\u{2019}s own")
         }
+        Divider()
+        SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
     }
 }
 
@@ -580,6 +584,8 @@ private struct ActionsRowEditor: View {
         FieldRow("Max") { OptionalIntField(value: b.binding(\.maxVisible, nil), placeholder: "all") }
         Button { model.tab = .actions } label: { Label("Edit the buttons\u{2026}", systemImage: "slider.horizontal.3") }
             .buttonStyle(.borderless).controlSize(.small)
+        Divider()
+        SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
     }
 }
 
@@ -590,13 +596,12 @@ private struct IconButtonEditor: View {
                                   "bell.slash", "clock", "moon.zzz", "arrow.up.right", "star", "flag", "pin", "bolt", "ellipsis"]
     var body: some View {
         let b = PayloadBinder<HeraldIconButtonComponent>.of(model, id)
-        FieldRow("Symbol") {
-            TextField("xmark", text: b.binding(\.symbol, "")).textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))
-            Menu {
-                ForEach(Self.symbols, id: \.self) { s in Button { b.binding(\.symbol, "").wrappedValue = s } label: { Label(s, systemImage: s) } }
-            } label: { Image(systemName: b.binding(\.symbol, "").wrappedValue.isEmpty ? "questionmark" : b.binding(\.symbol, "").wrappedValue) }
-                .menuStyle(.borderlessButton).fixedSize()
-        }
+        SymbolPanel(model: model, symbol: Binding(
+            get: { b.binding(\.symbol, "").wrappedValue.isEmpty ? nil : b.binding(\.symbolStyle, nil).wrappedValue.map { var x = $0; x.name = b.binding(\.symbol, "").wrappedValue; return x } ?? HeraldSymbol(name: b.binding(\.symbol, "").wrappedValue) },
+            set: { new in
+                b.binding(\.symbol, "").wrappedValue = new?.name ?? ""
+                b.binding(\.symbolStyle, nil).wrappedValue = (new?.styled ?? false) ? new : nil
+            }), showsPlacement: false)
         FieldRow("Size") { OptionalNumberField(value: b.binding(\.size, nil), placeholder: "18") }
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil)) }
         FieldRow("Tooltip") {
@@ -615,6 +620,8 @@ private struct BadgeEditor: View {
         FieldRow("Value") { TokenTextField(model: model, title: "{count}", text: b.binding(\.binding, "")) }
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Accent") }
         FieldRow("Text") { ColorFieldRow(value: b.binding(\.textColor, nil), autoLabel: "Automatic") }
+        Divider()
+        SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
     }
 }
 
