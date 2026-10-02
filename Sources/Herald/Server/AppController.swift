@@ -1,3 +1,4 @@
+import SwiftUI
 import AppKit
 import Foundation
 
@@ -28,6 +29,9 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func shortcuts() async throws -> [String] { try await controller.shortcutNames() }
     func preview(_ request: PreviewSpec) async throws -> Data { try await controller.previewPNG(request) }
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { await controller.riveCheck(request) }
+    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data {
+        try await controller.designerSnapshot(app: app, width: width, height: height)
+    }
     func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
         try await MainActor.run { try QuietHoursCoordinator.shared.apply(update) }
@@ -346,6 +350,28 @@ final class AppController {
         } catch {
             throw BackendError(500, error.localizedDescription)
         }
+    }
+
+    // MARK: Designer snapshot
+
+    /// `POST /v1/designer/snapshot`: the Designer's content in a window-less hosting view, drawn to a bitmap. Nothing
+    /// is shown, activated or saved; the model reads the app's templates and manifest but is never saved.
+    func designerSnapshot(app: String?, width: Int, height: Int) throws -> Data {
+        let m = DesignerModel(backend: .live(self), app: app, template: nil)
+        let view = DesignerView(model: m, controller: self,
+                                iconFor: { [registry] in AppIcons.icon(for: registry.record(for: $0), app: $0) })
+            .environment(\.colorScheme, .light)
+        let host = NSHostingView(rootView: view)
+        host.appearance = NSAppearance(named: .aqua)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        host.layoutSubtreeIfNeeded()
+        // One more pass: GeometryReader-driven panes settle after the first layout.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { throw BackendError(500, "could not allocate a bitmap") }
+        host.cacheDisplay(in: host.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { throw BackendError(500, "could not encode the PNG") }
+        return png
     }
 
     // MARK: Rive check

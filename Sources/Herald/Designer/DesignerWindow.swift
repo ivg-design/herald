@@ -148,14 +148,14 @@ enum DesignerWindow {
         if quickSend { m.showQuickSend(app: app) }
         let root = DesignerView(model: m, controller: controller,
                                 iconFor: { AppIcons.icon(for: controller.registry.record(for: $0), app: $0) })
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 720),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 820),
                          styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         w.title = m.mode.windowTitle
         w.isReleasedWhenClosed = false
         w.tabbingMode = .disallowed
-        w.minSize = NSSize(width: 1020, height: 620)
+        w.minSize = NSSize(width: 1020, height: 720)
         w.contentView = NSHostingView(rootView: root)
-        w.setContentSize(NSSize(width: 1100, height: 720))
+        w.setContentSize(NSSize(width: 1100, height: 820))
         w.center()
         w.setFrameAutosaveName("HeraldDesigner")
         let d = WindowDelegate(model: m)
@@ -243,7 +243,7 @@ struct DesignerView: View {
                 QuickSendView(controller: controller, model: model.quickSend, openDesigner: { model.showDesign(app: $0.isEmpty ? nil : $0) })
             }
         }
-        .frame(minWidth: 1020, minHeight: 620)
+        .frame(minWidth: 1020, minHeight: 720)
         .onReceive(NotificationCenter.default.publisher(for: .heraldChanged)) { _ in model.refreshFromDisk() }
         .sheet(item: $model.actionEditor) { req in ActionFormView(model: model, request: req) }
         .task(id: model.status) {
@@ -262,7 +262,40 @@ struct DesignerView: View {
         }
     }
 
+    @State private var previewFraction = DesignerSplit.load()
+
+    /// The editor (palette, canvas, inspector) and the live preview as two panes of one split. The preview is never
+    /// below half of the design area: beside the editor in a wide window, on top of it otherwise (`DesignerSplit`).
     private var designContent: some View {
+        GeometryReader { geo in
+            let split = DesignerSplit.make(width: geo.size.width, fraction: previewFraction)
+            let total = split.axis == .horizontal ? geo.size.width : geo.size.height
+            let previewLen = split.previewLength(total: total)
+            let editorLen = split.editorLength(total: total)
+            if split.axis == .horizontal {
+                HStack(spacing: 0) {
+                    editor.frame(width: editorLen)
+                    SplitHandle(axis: .horizontal) { drag in dragDivider(drag, editor: editorLen, total: total) }
+                    DesignerPreviewPane(model: model, appName: model.issuerName, icon: iconFor(model.app), scheme: scheme)
+                        .frame(width: previewLen)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    DesignerPreviewPane(model: model, appName: model.issuerName, icon: iconFor(model.app), scheme: scheme)
+                        .frame(height: previewLen)
+                    SplitHandle(axis: .vertical) { drag in dragDivider(-drag, editor: editorLen, total: total) }
+                    editor.frame(height: editorLen)
+                }
+            }
+        }
+    }
+
+    private func dragDivider(_ delta: CGFloat, editor: Double, total: Double) {
+        previewFraction = DesignerSplit.fraction(forEditorLength: editor + Double(delta), total: total)
+        DesignerSplit.save(previewFraction)
+    }
+
+    private var editor: some View {
         HStack(spacing: 0) {
             PaletteView(model: model).frame(width: 226)
             Divider()
@@ -271,17 +304,41 @@ struct DesignerView: View {
                 Divider()
                 GridCanvasView(model: model, appName: model.issuerName, icon: iconFor(model.app))
                     .environment(\.colorScheme, scheme)
-                    .frame(minHeight: 180)
-                Divider()
-                DesignerLivePreview(model: model, appName: model.issuerName, icon: iconFor(model.app))
-                    .environment(\.colorScheme, scheme)
-                Divider()
-                DesignerPreviewBar(model: model)
+                    .frame(minHeight: 120)
             }
             .frame(minWidth: 460)
             Divider()
             InspectorView(model: model)
         }
+    }
+}
+
+/// The draggable divider between editor and preview. `onDrag` gets the movement since the last call.
+struct SplitHandle: View {
+    let axis: DesignerSplit.Axis
+    let onDrag: (CGFloat) -> Void
+    @State private var last: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: axis == .horizontal ? 1 : nil, height: axis == .vertical ? 1 : nil)
+            Capsule().fill(Color.secondary.opacity(0.45))
+                .frame(width: axis == .horizontal ? 3 : 36, height: axis == .vertical ? 3 : 36)
+        }
+        .frame(width: axis == .horizontal ? CGFloat(DesignerSplit.dividerThickness) : nil,
+               height: axis == .vertical ? CGFloat(DesignerSplit.dividerThickness) : nil)
+        .contentShape(Rectangle())
+        .onHover { inside in
+            if inside { (axis == .horizontal ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push() } else { NSCursor.pop() }
+        }
+        .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
+            .onChanged { v in
+                let pos = axis == .horizontal ? v.location.x : v.location.y
+                if last != 0 { onDrag(pos - last) }
+                last = pos
+            }
+            .onEnded { _ in last = 0 })
+        .help("Drag to resize the live preview")
     }
 }
 
@@ -400,35 +457,32 @@ private struct DesignerTopBar: View {
 
 // MARK: - Live preview
 
-private struct HeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
-}
-
-/// The banner exactly as a delivery draws it: collapsing applied, Rive running, over a desktop-like backdrop.
-private struct DesignerLivePreview: View {
+/// The live preview as a pane of its own: a header ("Live preview", data source, light/dark, fields, problems,
+/// Send test, Save) over the banner exactly as a delivery draws it (collapsing applied, Rive and symbol effects
+/// running) on a desktop-like backdrop. It redraws with every edit.
+struct DesignerPreviewPane: View {
     @ObservedObject var model: DesignerModel
     let appName: String
     let icon: NSImage
-    @State private var height: CGFloat = 150
+    let scheme: ColorScheme
 
     var body: some View {
-        let banner = DesignerPreview.bannerModel(model, appName: appName, icon: icon, live: true)
-        ScrollView(.vertical, showsIndicators: false) {
-            HStack {
-                Spacer(minLength: 0)
-                BannerPreviewView(model: banner, scheme: model.appearance == .dark ? .dark : .light)
-                Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            DesignerPreviewBar(model: model)
+            Divider()
+            ZStack {
+                DesignerBackdrop()
+                let banner = DesignerPreview.bannerModel(model, appName: appName, icon: icon, live: true)
+                ScrollView([.vertical, .horizontal]) {
+                    BannerView(model: banner)
+                        .padding(28)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .environment(\.colorScheme, scheme)
             }
-            .padding(.vertical, 8)
-            .background(GeometryReader { Color.clear.preference(key: HeightKey.self, value: $0.size.height) })
         }
-        .frame(height: min(max(height, 110), 270))
-        .onPreferenceChange(HeightKey.self) { height = $0 }
-        .overlay(alignment: .topLeading) {
-            Text("Live preview").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
-                .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(Color.black.opacity(0.35))).padding(8)
-        }
+        .background(Color(nsColor: .windowBackgroundColor))
+        .accessibilityIdentifier("designer-live-preview")
     }
 }
 
@@ -446,6 +500,8 @@ private struct DesignerPreviewBar: View {
                     .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(spacing: 8) {
+                Text("Live preview \u{00B7} as it will appear").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    .layoutPriority(-1)
                 Picker("", selection: $model.previewSource) {
                     ForEach(DesignerPreviewSource.allCases) { Text($0.title).tag($0) }
                 }

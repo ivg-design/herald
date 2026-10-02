@@ -34,6 +34,9 @@ public protocol HeraldBackend: AnyObject, Sendable {
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply
     /// `POST /v1/dismissAll {app, group}`: every banner of `app` sent with this `group` (DESIGN section 9).
     func dismissGroup(app: String, group: String) async throws
+    /// `POST /v1/designer/snapshot`: the Designer window's content drawn offscreen at `width` x `height` as PNG (test hook;
+    /// no window is created or shown).
+    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data
     /// `POST /v1/rive/check`: loads a `rive` component in a window-less host view and reports what it found (test hook).
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply
     /// `GET /v1/stacks?app=`: the stacks that are up (DESIGN section 9).
@@ -104,6 +107,7 @@ public extension HeraldBackend {
     func quietHours() async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func dismissGroup(app: String, group: String) async throws { throw BackendError(501, "stacks are not supported") }
+    func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data { throw BackendError(501, "designer snapshots are not supported") }
     func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { throw BackendError(501, "rive checks are not supported") }
     func stacks(app: String?) async throws -> [HeraldStackInfo] { throw BackendError(501, "stacks are not supported") }
     func expandStack(app: String, group: String, expanded: Bool) async throws { throw BackendError(501, "stacks are not supported") }
@@ -188,6 +192,15 @@ public final class Router: @unchecked Sendable {
                 // The group of a notification that sent none is its issuer id, so that is the default here too.
                 try await backend.expandStack(app: app, group: b.group.flatMap { $0.isEmpty ? nil : $0 } ?? app, expanded: b.expanded ?? true)
                 return .json(200, ["ok": true])
+            case ("GET", "/v1/designer/snapshot"), ("POST", "/v1/designer/snapshot"):
+                var q = req.query
+                if req.method == "POST", !req.body.isEmpty,
+                   let o = (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any] {
+                    for (k, v) in o { q[k] = "\(v)" }
+                }
+                let w = q["width"].flatMap(Int.init) ?? 1100, h = q["height"].flatMap(Int.init) ?? 820
+                guard (600...4000).contains(w), (400...3000).contains(h) else { throw BackendError(400, "width must be 600-4000 and height 400-3000") }
+                return .png(try await backend.designerSnapshot(app: q["app"].flatMap { $0.isEmpty ? nil : $0 }, width: w, height: h))
             case ("POST", "/v1/rive/check"):
                 let b = try decode(RiveCheckRequest.self, req)
                 guard !b.app.isEmpty else { throw BackendError(400, "app is required") }
@@ -254,7 +267,7 @@ public final class Router: @unchecked Sendable {
                 return .png(try await backend.preview(try decodePreview(req)))
             case ("GET", "/v1/preview"):
                 return .png(try await backend.preview(try previewRequest(query: req.query)))
-            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/rive/check"), (_, "/v1/settings/stacking"),
+            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/rive/check"), (_, "/v1/designer/snapshot"), (_, "/v1/settings/stacking"),
                  (_, "/v1/history"), (_, "/v1/apps"), (_, "/v1/templates"),
                  (_, "/v1/manifests"), (_, "/v1/manifest"), (_, "/v1/components"), (_, "/v1/shortcuts"),
                  (_, "/v1/preview"):

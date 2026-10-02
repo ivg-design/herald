@@ -228,3 +228,29 @@ final class RiveCheckRouteTests: XCTestCase {
         XCTAssertEqual(unsupported.status, 501)
     }
 }
+
+final class DesignerSnapshotRouteTests: XCTestCase {
+    final class B: HeraldBackend, @unchecked Sendable {
+        var seen: [(String?, Int, Int)] = []
+        func notify(_ n: HeraldNotification) async throws -> String { "x" }
+        func register(_ r: HeraldAppRegistration) async throws {}
+        func dismiss(app: String, id: String) async throws {}
+        func dismissAll(app: String?) async throws {}
+        func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { [] }
+        func clearHistory(app: String?) async throws {}
+        func apps() async throws -> [HeraldAppRegistration] { [] }
+        func designerSnapshot(app: String?, width: Int, height: Int) async throws -> Data { seen.append((app, width, height)); return Data([0x89]) }
+    }
+    func testDefaultsSizeLimitsAndVerbs() async {
+        let b = B(); let r = Router(token: "t", backend: b, version: "1", pid: 1)
+        func call(_ m: String, _ q: [String: String] = [:], _ body: String = "") async -> HTTPResponse {
+            await r.handle(HTTPRequest(method: m, path: "/v1/designer/snapshot", query: q, headers: ["authorization": "Bearer t"], body: Data(body.utf8)))
+        }
+        let a = await call("GET"); XCTAssertEqual(a.status, 200)
+        XCTAssertEqual(b.seen.last?.1, 1100); XCTAssertEqual(b.seen.last?.2, 820)
+        let p = await call("POST", [:], #"{"app":"x","width":1800,"height":900}"#); XCTAssertEqual(p.status, 200)
+        XCTAssertEqual(b.seen.last?.0, "x"); XCTAssertEqual(b.seen.last?.1, 1800)
+        let bad = await call("GET", ["width": "10"]); XCTAssertEqual(bad.status, 400)
+        let del = await call("DELETE"); XCTAssertEqual(del.status, 405)
+    }
+}
