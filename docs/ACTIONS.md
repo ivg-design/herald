@@ -66,6 +66,12 @@ An `actions` component with `source: "issuer"`, `"template"` or `"merged"` decid
 a `button` or `iconButton` points at one action by `actionRef`. Template rules also apply to buttons
 sent with the notification, so you can relabel an issuer's button without touching the issuer.
 
+## Symbols on actions
+
+An action can carry an SF Symbol, drawn on its button (a `button`, the `actions` row, an `iconButton`): `{"id":"archive","label":"Archive","kind":"command","command":"...","symbol":"archivebox"}`. `symbol` is a name or the full styling object (weight, scale, placement, renderingMode, colors, variableValue, effect; see TEMPLATES.md, "Symbols"). A component's own `symbol` is the default for the buttons it draws, and the action's `symbol` wins.
+
+A rule can give a symbol to existing actions without touching the issuer: `{"match":"markRead","symbol":{"name":"checkmark.circle.fill","renderingMode":"palette","colors":["white","#34C759"]}}` (`match: "*"` for all). `add_action_rule` accepts `symbol` on the rule and on an added action; an unknown name is a warning and the button simply has no symbol.
+
 ## Augmenting the payload
 
 Every action receives the **merged payload**: the issuer's top-level fields, its `metadata`, and the

@@ -103,6 +103,61 @@ Every component accepts `emptyBehavior`. All other properties are optional unles
 from tokens; `hover` and `pressed` follow the mouse over the banner. A failed load renders a placeholder
 with the error and never crashes the banner.
 
+## Symbols
+
+`button`, `iconButton`, `actions`, `issuerIcon` and `badge` (and every action, see ACTIONS.md) can carry an SF Symbol. `symbol` is a plain name, or an object with the full styling. An unknown name is a validation warning, never an error: the component keeps its current look (an `iconButton` draws a question mark so the typo is visible).
+
+| key | values |
+|---|---|
+| `name` | an SF Symbol name; may contain a `{token}` (that is how `replace` has something to swap) |
+| `weight` | `ultraLight` `thin` `light` `regular` `medium` `semibold` `bold` `heavy` `black` |
+| `scale` | `small` `medium` `large` |
+| `placement` | `leading` (default) `trailing` `only` (drops the label); buttons only |
+| `renderingMode` | `monochrome` `hierarchical` `palette` `multicolor` |
+| `colors` | 1-3 of `#RGB`, `#RRGGBB`, `#RRGGBBAA`, `accent`, `primary`, `secondary` or a `{token}` whose value is one of those |
+| `variableValue` | 0-1, or a `{token}` bound to a numeric field (for symbols such as `wifi` or `speaker.wave.3`) |
+| `effect` | `{kind, trigger?, speed?, cumulative?, reversing?}` (macOS 14+) |
+
+Effects: `kind` is `bounce`, `pulse`, `variableColor` (with `cumulative` / `reversing`), `scale`, `appear`, `disappear` or `replace`; `trigger` is `onAppear` (default), `onChange` (when a bound token changes), `onHover` or `repeating`; `speed` is 0.25-4. Effects run only in live banners and the Designer's live preview, never in `render_preview` / `/v1/preview` (those show weight, scale, mode, colours and the variable value), never on macOS 13, and never when Reduce Motion is on.
+
+Plain name:
+
+```json
+{"type":"iconButton","symbol":"xmark","action":{"id":"dismiss","label":"Dismiss","kind":"dismiss"}}
+```
+
+Monochrome (one colour, here a token):
+
+```json
+{"type":"button","actionRef":"markRead","symbol":{"name":"checkmark.circle","weight":"semibold","colors":["{tint}"]}}
+```
+
+Hierarchical (shades of one colour):
+
+```json
+{"type":"badge","binding":"{count}","symbol":{"name":"envelope.fill","renderingMode":"hierarchical","colors":["#FF3B30"]}}
+```
+
+Palette (2-3 colours) with a bound variable value:
+
+```json
+{"type":"iconButton","size":30,"symbol":{"name":"wifi","renderingMode":"palette","colors":["#34C759","secondary"],"variableValue":"{signal}"},"action":{"id":"d","label":"Dismiss","kind":"dismiss"}}
+```
+
+Multicolor (the symbol's own colours; `colors` is ignored):
+
+```json
+{"type":"issuerIcon","size":28,"symbol":{"name":"cloud.sun.rain.fill","renderingMode":"multicolor","scale":"large"}}
+```
+
+With an effect:
+
+```json
+{"type":"iconButton","symbol":{"name":"bell.badge","effect":{"kind":"bounce","trigger":"onChange","speed":1.5}},"action":{"id":"d","label":"Dismiss","kind":"dismiss"}}
+```
+
+In the Designer, select the component and use the Symbol panel: a searchable picker over the symbols on this Mac (right-click a symbol to favourite it), weight, scale, placement, mode with colour wells, variable value and effect. `component_schema` documents the keys (`definitions.symbol`).
+
 ## Examples
 
 ### Email, accumulated
