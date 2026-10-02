@@ -632,6 +632,7 @@ final class DesignerModelStateTests: XCTestCase {
         let (m, _) = make()
         m.addComponent(type: "text", at: GridSlot(0, 0))
         m.edit { t in if case .text(var p) = t.cells[0].component { p.binding = "{nothing}"; t.cells[0].component = .text(p) } }
+        m.absentTokens = ["nothing"]   // "mark absent" is how the Designer shows a bound component empty
         let cell = m.draft.cells[0]
         XCTAssertTrue(m.isEmpty(cell))
         XCTAssertEqual(m.draft.behavior(for: cell.component), .collapse)
@@ -1044,5 +1045,36 @@ final class DesignerWorkflowTests: XCTestCase {
         m.importBundle(data, intoApp: "demo")
         XCTAssertEqual(m.app, "demo")
         XCTAssertEqual(svc.templates.get(app: "demo", name: "Elsewhere")?.app, "demo")
+    }
+}
+
+// A bound component is drawn with a sample, not as an empty box (Designer canvas, issue: "{count}" showed as a dashed box).
+@MainActor
+final class DesignerSampleFallbackTests: XCTestCase {
+    private func model(manifest: HeraldManifest?) -> DesignerModel {
+        var b = DesignerBackend()
+        b.manifest = { _ in manifest }
+        return DesignerModel(backend: b, app: "demo")
+    }
+
+    func testAnUndeclaredBoundTokenGetsASampleSoItsComponentIsDrawn() {
+        let m = model(manifest: nil)
+        m.addComponent(type: "badge", at: GridSlot(0, 2))
+        m.edit { t in if case .badge(var p) = t.cells[0].component { p.binding = "{count}"; t.cells[0].component = .badge(p) } }
+        XCTAssertEqual(m.previewFields["count"], .number(3))
+        XCTAssertFalse(m.isEmpty(m.draft.cells[0]), "drawn with the sample, not as an empty marker")
+        m.addComponent(type: "text", at: GridSlot(1, 0))
+        m.edit { t in if case .text(var p) = t.cells[1].component { p.binding = "{receivedFrom}"; t.cells[1].component = .text(p) } }
+        XCTAssertEqual(m.previewFields["receivedFrom"], .text("Received from"))
+    }
+
+    func testTheManifestSampleWinsAndMarkAbsentStillShowsTheEmptyState() {
+        let m = model(manifest: HeraldManifest(app: "demo", appName: "Demo", fields: [HeraldField(key: "count", type: .number, sample: .number(7))]))
+        m.addComponent(type: "badge", at: GridSlot(0, 2))
+        m.edit { t in if case .badge(var p) = t.cells[0].component { p.binding = "{count}"; t.cells[0].component = .badge(p) } }
+        XCTAssertEqual(m.previewFields["count"], .number(7))
+        m.absentTokens = ["count"]
+        XCTAssertNil(m.previewFields["count"])
+        XCTAssertTrue(m.isEmpty(m.draft.cells[0]))
     }
 }

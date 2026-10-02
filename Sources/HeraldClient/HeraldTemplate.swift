@@ -1022,6 +1022,10 @@ public extension TemplateResolver {
         }
     }
 
+    /// A stand-in value for a token no manifest sample covers ("receivedAt" -> "Received at"), so the Designer can
+    /// show a bound component drawn instead of an empty box.
+    static func sampleText(forKey key: String) -> String { humanize(key) }
+
     /// "receivedAt" becomes "Received at".
     private static func humanize(_ key: String) -> String {
         var words: [String] = []

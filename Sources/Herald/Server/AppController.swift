@@ -355,9 +355,12 @@ final class AppController {
     func riveCheck(_ request: RiveCheckRequest) -> RiveCheckReply {
         let manifest = manifests.get(app: request.app)
         let host = RiveHostView(frame: NSRect(x: 0, y: 0, width: 320, height: 160))
+        var clicked: [String] = []
+        host.onAction = { clicked.append($0) }
         host.apply(.init(component: request.component, app: request.app, manifest: manifest,
                          fields: request.fields ?? [:], assets: .shared))
         defer { host.tearDown() }
+        for step in request.simulate ?? [] { host.simulate(step) }
         func text(_ v: HeraldFieldValue) -> String {
             switch v {
             case .text(let s): return s
@@ -377,7 +380,8 @@ final class AppController {
         }
         return RiveCheckReply(loaded: host.loadError == nil && host.viewModel != nil, error: host.loadError,
                               inputs: host.inputKinds.mapValues(\.rawValue), applied: host.applied.mapValues(text),
-                              artboards: artboards)
+                              artboards: artboards, takesClicks: host.takesClicks, pointerWrites: host.pointerWrites,
+                              clickedActions: clicked)
     }
 
     // MARK: User actions (from banners)

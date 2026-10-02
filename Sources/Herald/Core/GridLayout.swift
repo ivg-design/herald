@@ -321,3 +321,18 @@ public enum EmptySlotSizing {
         return (axis(width), axis(height))
     }
 }
+
+
+/// How a Designer cell is sized for a proposal: exactly the proposed size on an axis that has one (a track's resolved
+/// size), otherwise what its content asks for. Content, and above all helper or annotation text, can therefore never
+/// make a cell taller than its row (`FitToProposal` in the canvas calls this; `CellFitSizingTests` pin it down).
+public enum CellFitSizing {
+    public static func size(proposedWidth: Double?, proposedHeight: Double?,
+                            content: (width: Double, height: Double)) -> (width: Double, height: Double) {
+        func axis(_ proposed: Double?, _ own: Double) -> Double {
+            guard let p = proposed, p.isFinite else { return own }
+            return max(p, 0)
+        }
+        return (axis(proposedWidth, content.width), axis(proposedHeight, content.height))
+    }
+}

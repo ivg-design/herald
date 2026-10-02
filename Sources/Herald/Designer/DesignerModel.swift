@@ -1667,6 +1667,19 @@ final class DesignerModel: ObservableObject {
                 for token in TemplateResolver.placeholders(in: p.binding) where f[token] == nil { f[token] = .text(Self.sampleImage) }
             }
         }
+        // A token the manifest does not sample (or no manifest at all) still gets a stand-in, so a bound component is
+        // drawn the way the banner will draw it instead of as an empty box. "Absent" (below) is how to see it empty.
+        if previewSource != .lastReal || lastItem == nil {
+            for cell in draft.cells {
+                for token in cell.component.referencedTokens
+                where f[token] == nil && !TemplateResolver.standardTokens.contains(token) && !token.hasPrefix("extra.") {
+                    switch cell.component {
+                    case .badge, .progress, .rive: f[token] = .number(3)
+                    default: f[token] = .text(TemplateResolver.sampleText(forKey: token))
+                    }
+                }
+            }
+        }
         for (k, v) in draft.extra where !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { f["extra.\(k)"] = .text(v) }
         if f["deliveredAt"] == nil { f["deliveredAt"] = .text(ISODate.string(from: lastItem?.deliveredAt ?? Date())) }
         // A stack counter shows a sample of 3, so the badge can be placed and styled on a banner that is alone.

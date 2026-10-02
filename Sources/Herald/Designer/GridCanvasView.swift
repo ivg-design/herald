@@ -215,12 +215,15 @@ struct DesignerCellView: View {
     var body: some View {
         let empty = isEmpty
         let rect = GridEditing.rect(of: cell, in: model.grid) ?? SlotRect(row: cell.row, col: cell.col)
-        Group {
-            if empty { EmptyMarker(cell: cell, behavior: model.draft.behavior(for: cell.component)) }
-            else if case .spacer = cell.component { SpacerMarker() }
-            else { DesignerComponent.view(cell.component, ctx: ctx, align: cell.align) }
+        // The cell is exactly its track (FitToProposal), whatever its content or annotation would like to be.
+        FitToProposal {
+            Group {
+                if empty { EmptyMarker(cell: cell, behavior: model.draft.behavior(for: cell.component)) }
+                else if case .spacer = cell.component { SpacerMarker() }
+                else { DesignerComponent.view(cell.component, ctx: ctx, align: cell.align) }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cell.align.alignment)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: cell.align.alignment)
         .clipped()
         .allowsHitTesting(false)
         .overlay {
@@ -260,6 +263,22 @@ private struct EmptySlotLayout: Layout {
     }
 }
 
+/// Sizes its one child with `CellFitSizing`: the proposal where there is one, the child's own size otherwise.
+struct FitToProposal: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let own = subviews.first?.sizeThatFits(proposal) ?? .zero
+        let s = CellFitSizing.size(proposedWidth: proposal.width.map(Double.init), proposedHeight: proposal.height.map(Double.init),
+                                   content: (Double(own.width), Double(own.height)))
+        return CGSize(width: s.width, height: s.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for sub in subviews {
+            sub.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+}
+
 /// Stand-in for a component with nothing to show: what it is bound to, and what happens to it.
 private struct EmptyMarker: View {
     let cell: HeraldCell
@@ -269,17 +288,28 @@ private struct EmptyMarker: View {
         cell.component.referencedTokens.first.map { "{\($0)}" } ?? DesignerPalette.title(for: cell.component.typeName).lowercased()
     }
 
+    private var note: String { behavior == .collapse ? "empty \u{00B7} collapses" : "empty \u{00B7} space kept" }
+
+    /// The labels are an overlay: they are drawn inside whatever size the cell has, never add to it, and the
+    /// second line only appears when there is room for it (the tooltip always says it).
     var body: some View {
-        VStack(spacing: 1) {
-            Text(title).font(.system(size: 10, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.7)
-            Text(behavior == .collapse ? "empty \u{00B7} collapses" : "empty \u{00B7} space kept")
-                .font(.system(size: 8.5)).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 4)
-        .frame(minWidth: 34, minHeight: 30)
-        .background(RoundedRectangle(cornerRadius: 3).fill(Color.secondary.opacity(behavior == .collapse ? 0.05 : 0.12)))
-        .opacity(behavior == .collapse ? 0.7 : 1)
+        RoundedRectangle(cornerRadius: 3).fill(Color.secondary.opacity(behavior == .collapse ? 0.05 : 0.12))
+            .frame(minWidth: 34, minHeight: 30)
+            .overlay {
+                GeometryReader { g in
+                    VStack(spacing: 1) {
+                        Text(title).font(.system(size: 10, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.7)
+                        if g.size.height >= 28 {
+                            Text(note).font(.system(size: 8.5)).lineLimit(1).minimumScaleFactor(0.7)
+                        }
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
+                    .frame(width: g.size.width, height: g.size.height)
+                }
+            }
+            .opacity(behavior == .collapse ? 0.7 : 1)
+            .help("\(title): \(note)")
     }
 }
 

@@ -323,12 +323,39 @@ final class RiveHostView: NSView {
         guard let vm = viewModel, let c = config?.component else { return }
         for (name, binding) in c.inputBindings where RiveInputBinding.pointerKeyword(binding) == keyword {
             switch inputKinds[name] {
-            case .bool?: vm.setInput(name, value: active)
-            case .number?: vm.setInput(name, value: active ? 1.0 : 0.0)
-            case .trigger?: if active { vm.triggerInput(name) }
+            case .bool?: vm.setInput(name, value: active); pointerWrites[name] = String(active)
+            case .number?: vm.setInput(name, value: active ? 1.0 : 0.0); pointerWrites[name] = active ? "1.0" : "0.0"
+            case .trigger?: if active { vm.triggerInput(name); pointerWrites[name] = "fired" }
             case nil: break
             }
         }
+    }
+
+    // MARK: Test hook (POST /v1/rive/check)
+
+    /// What the pointer handlers wrote to the state machine, by input name (last value).
+    private(set) var pointerWrites: [String: String] = [:]
+    /// Whether this view takes mouse buttons (a click action or a `pressed` binding) or lets clicks through to the banner.
+    var takesClicks: Bool { isInteractive }
+
+    /// Runs the same code the mouse handlers run, without an event: `hoverIn`, `hoverOut`, `pressDown`, `pressUp`
+    /// (a press released inside the view runs the click action) and returns the action id a click ran, if any.
+    @discardableResult
+    func simulate(_ step: String) -> String? {
+        switch step {
+        case "hoverIn": setPointer("hover", active: true)
+        case "hoverOut":
+            if pressing { pressing = false; setPointer("pressed", active: false) }
+            setPointer("hover", active: false)
+        case "pressDown": pressing = true; setPointer("pressed", active: true)
+        case "pressUp":
+            let was = pressing
+            pressing = false
+            setPointer("pressed", active: false)
+            if was, let id = clickActionID { onAction(id); return id }
+        default: break
+        }
+        return nil
     }
 
     // MARK: Pointer

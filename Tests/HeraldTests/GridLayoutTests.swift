@@ -597,3 +597,57 @@ final class EmptySlotSizingTests: XCTestCase {
         XCTAssertEqual(EmptySlotSizing.size(width: -5, height: 0).width, 0)
     }
 }
+
+// MARK: Designer cells honour the resolved track; annotations never change a cell's frame
+
+final class CellFitSizingTests: XCTestCase {
+    private func grid() -> HeraldGrid {
+        HeraldGrid(rows: 3, cols: 4, rowSizes: [.points(16), .auto, .auto],
+                   colSizes: [.points(69), .fill, .fill, .points(56)], gap: 8, padding: 14, width: 400)
+    }
+    /// A {count} component in row 1, column 2 (the reported case), plus the empty placeholders around it.
+    private func cells() -> [HeraldCell] {
+        var out = [HeraldCell(id: "count", row: 0, col: 1, component: .spacer)]
+        for r in 0..<3 { for c in 0..<4 where !(r == 0 && c == 1) { out.append(HeraldCell(id: "e\(r)\(c)", row: r, col: c, component: .spacer)) } }
+        return out
+    }
+    private func solve(contentHeight: @escaping (String) -> Double) -> GridSolution {
+        let g = grid(), cs = cells()
+        let measure = GridMeasure(
+            idealWidth: { _ in 34 },
+            height: { i, w in
+                let id = cs[i].id
+                // Every cell goes through FitToProposal: width proposed, height unspecified while measuring.
+                return CellFitSizing.size(proposedWidth: w, proposedHeight: nil, content: (w, contentHeight(id))).height
+            })
+        return GridSolver.solve(grid: g, cells: cs, plan: HeraldGridPlan(), width: g.width, measure: measure)
+    }
+
+    func testACellInAShortRowIsExactlyTheRowHeightWhateverItsContentWants() {
+        let s = solve(contentHeight: { $0 == "count" ? 30 : 34 })   // a 2-line "empty / collapses" marker is ~30 pt
+        XCTAssertEqual(s.rowHeights[0], 16)
+        let f = s.frames[0]!
+        let placed = CellFitSizing.size(proposedWidth: f.width, proposedHeight: f.height, content: (f.width, 30))
+        XCTAssertEqual(placed.height, 16, "the {count} cell is its 16 pt row, not its content's 30 pt")
+        XCTAssertEqual(placed.width, f.width)
+        XCTAssertEqual(f.width, s.colWidths[1])
+    }
+
+    func testAnnotationTextDoesNotChangeAnyFrame() {
+        // The empty marker's labels are an overlay: its measured size is the same with or without them, and
+        // the solution (every cell's frame) is identical however tall an annotation would have been.
+        let plain = solve(contentHeight: { _ in 34 })
+        let withAnnotation = solve(contentHeight: { _ in 34 })   // overlay text adds 0 to the measured height
+        XCTAssertEqual(plain, withAnnotation)
+        // Whereas annotation text laid out in the cell (the old marker, 30 pt minimum) would have reached row 2.
+        let oldMarker = CellFitSizing.size(proposedWidth: 126, proposedHeight: nil, content: (126, 30)).height
+        XCTAssertGreaterThan(plain.rowOrigins[0] + oldMarker, plain.rowOrigins[1], "regression guard: why it overlapped")
+    }
+
+    func testAutoRowsStillTakeTheContentSizeAndSizingRules() {
+        XCTAssertEqual(CellFitSizing.size(proposedWidth: nil, proposedHeight: nil, content: (50, 20)).height, 20)
+        XCTAssertEqual(CellFitSizing.size(proposedWidth: 80, proposedHeight: nil, content: (50, 20)).width, 80)
+        XCTAssertEqual(CellFitSizing.size(proposedWidth: .infinity, proposedHeight: .nan, content: (50, 20)).width, 50)
+        XCTAssertEqual(CellFitSizing.size(proposedWidth: 10, proposedHeight: -4, content: (50, 20)).height, 0)
+    }
+}

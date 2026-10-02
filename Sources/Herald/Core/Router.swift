@@ -576,6 +576,8 @@ public struct RiveCheckRequest: Decodable, Sendable {
     public var app: String
     public var component: HeraldRiveComponent
     public var fields: [String: HeraldFieldValue]?
+    /// Pointer steps to run in order: `hoverIn`, `hoverOut`, `pressDown`, `pressUp`.
+    public var simulate: [String]?
 }
 
 public struct RiveCheckReply: Codable, Equatable, Sendable {
@@ -600,7 +602,15 @@ public struct RiveCheckReply: Codable, Equatable, Sendable {
     /// The values written to inputs from the fields, as text.
     public var applied: [String: String]
     public var artboards: [Artboard]
-    public init(loaded: Bool, error: String? = nil, inputs: [String: String] = [:], applied: [String: String] = [:], artboards: [Artboard] = []) {
+    /// Whether the view takes clicks (a click action or a `pressed` binding) or lets them through to the banner body.
+    public var takesClicks: Bool
+    /// What the simulated pointer steps wrote to inputs.
+    public var pointerWrites: [String: String]
+    /// The action ids that simulated clicks (a `pressDown` then `pressUp`) ran.
+    public var clickedActions: [String]
+    public init(loaded: Bool, error: String? = nil, inputs: [String: String] = [:], applied: [String: String] = [:], artboards: [Artboard] = [],
+                takesClicks: Bool = false, pointerWrites: [String: String] = [:], clickedActions: [String] = []) {
         self.loaded = loaded; self.error = error; self.inputs = inputs; self.applied = applied; self.artboards = artboards
+        self.takesClicks = takesClicks; self.pointerWrites = pointerWrites; self.clickedActions = clickedActions
     }
 }
