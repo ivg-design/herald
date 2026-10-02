@@ -429,7 +429,7 @@ var Mailbox = class extends DurableObject {
       } catch {
       }
     }
-    for (const col of ["flow TEXT", "device_hash TEXT", "device_user_code TEXT", "last_poll INTEGER", "poll_interval INTEGER"]) {
+    for (const col of ["flow TEXT", "device_hash TEXT", "device_user_code TEXT", "last_poll INTEGER", "poll_interval INTEGER", "announced_at INTEGER"]) {
       try {
         this.ctx.storage.sql.exec(`ALTER TABLE oauth_requests ADD COLUMN ${col}`);
       } catch {
@@ -896,7 +896,8 @@ var Mailbox = class extends DurableObject {
     pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: this.lim.ttlMs / 1e3 }));
     this.expireSweep(Date.now());
     this.flush(true);
-    for (const r of this.pendingRequests()) this.sendConsent(r);
+    this.expireConsents(Date.now());
+    for (const r of this.pendingRequests()) this.sendConsent(r, r.announced_at != null);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
   async webSocketMessage(ws, message) {
@@ -963,11 +964,67 @@ var Mailbox = class extends DurableObject {
   dashed(c) {
     return c.slice(0, 4) + "-" + c.slice(4);
   }
-  sendConsent(r) {
+  /** `redelivered`: Herald has shown this one already (a reconnect): it updates its list and shows no banner. */
+  sendConsent(r, redelivered = false) {
     const ws = this.sockets()[0];
     if (!ws) return;
     try {
-      ws.send(JSON.stringify({ type: "consent", ...this.consentView(r) }));
+      ws.send(JSON.stringify({ type: "consent", ...this.consentView(r), ...redelivered ? { redelivered: true } : {} }));
+      if (!redelivered) this.sql("UPDATE oauth_requests SET announced_at = ? WHERE id = ?", Date.now(), r.id);
+    } catch {
+    }
+  }
+  /**
+   * Pending requests that ran out are dropped from the mailbox and Herald is told (`consent_resolved`, `expired`), so its banner and
+   * its pending list lose them without waiting for anything. Runs from the alarm, on connect and on every consent read.
+   */
+  expireConsents(now) {
+    for (const r of this.sql("SELECT * FROM oauth_requests WHERE status = 'pending' AND expires_at <= ?", now)) {
+      this.sql("DELETE FROM oauth_requests WHERE id = ?", r.id);
+      this.sendResolved({ ...r, status: "expired" });
+    }
+  }
+  /** The next time something here must wake up on its own: the earliest open consent running out (the hourly sweep is separate). */
+  async scheduleConsentAlarm() {
+    const next = this.sql("SELECT MIN(expires_at) AS t FROM oauth_requests WHERE status = 'pending'")[0]?.t;
+    if (next == null) return;
+    const cur = await this.ctx.storage.getAlarm();
+    if (cur == null || cur > next + 1e3) await this.ctx.storage.setAlarm(next + 1e3);
+  }
+  /**
+   * Another request of this client is open on this Mac: it is the same connection attempt again. The caller reuses the row (the
+   * Herald banner is updated in place with the new code). A request of the other flow is closed instead.
+   */
+  openRequestOf(clientId, flow, now) {
+    let reuse;
+    for (const r of this.sql("SELECT * FROM oauth_requests WHERE status = 'pending' AND client_id = ? AND expires_at > ? ORDER BY created_at DESC", clientId, now)) {
+      if (!reuse && (r.flow === "device" ? "device" : "code") === flow) {
+        reuse = r;
+        continue;
+      }
+      this.sql("UPDATE oauth_requests SET status = 'superseded', decided_at = ?, device_hash = NULL WHERE id = ?", now, r.id);
+      this.sendResolved({ ...r, status: "superseded" });
+    }
+    return reuse;
+  }
+  /** The same client asked for this Mac elsewhere or was decided: its other open requests on THIS mailbox are closed. */
+  supersedeClient(clientId, now) {
+    for (const r of this.sql("SELECT * FROM oauth_requests WHERE status = 'pending' AND client_id = ?", clientId)) {
+      this.sql("UPDATE oauth_requests SET status = 'superseded', decided_at = ?, device_hash = NULL WHERE id = ?", now, r.id);
+      this.sendResolved({ ...r, status: "superseded" });
+    }
+    return json(200, { ok: true });
+  }
+  /** A decision (or a newer request) on one Mac closes the same client's open requests on every other paired Mac. */
+  async supersedeOnOtherMacs(clientId) {
+    const me = this.getMeta("device_id");
+    try {
+      const r = await this.env.REGISTRY.get(this.env.REGISTRY.idFromName("registry")).fetch("https://registry/devices", { method: "POST", body: "{}" });
+      const { devices } = await r.json();
+      for (const d of devices) {
+        if (d.id === me) continue;
+        await this.env.MAILBOX.get(this.env.MAILBOX.idFromName(d.id)).fetch("https://mailbox/internal/oauth/supersede", { method: "POST", body: JSON.stringify({ client_id: clientId }) });
+      }
     } catch {
     }
   }
@@ -981,6 +1038,7 @@ var Mailbox = class extends DurableObject {
   }
   /** Requests of the last day, newest first (Herald shows them under Connector approvals). */
   consentList() {
+    this.expireConsents(Date.now());
     return this.sql("SELECT * FROM oauth_requests WHERE created_at > ? ORDER BY created_at DESC LIMIT 20", Date.now() - DAY_MS).map((r) => this.consentView(r));
   }
   oauthSweep(now) {
@@ -991,6 +1049,7 @@ var Mailbox = class extends DurableObject {
     const b = await req.json().catch(() => ({}));
     const now = Date.now();
     this.oauthSweep(now);
+    this.expireConsents(now);
     switch (op) {
       case "begin":
         return this.oauthBegin(b, now);
@@ -1004,6 +1063,8 @@ var Mailbox = class extends DurableObject {
         return this.oauthTokenEndpoint(b, now);
       case "device_begin":
         return this.deviceBegin(b, now);
+      case "supersede":
+        return this.supersedeClient(b.client_id ?? "", now);
       case "device_lookup":
         return this.deviceLookup(b.user_code ?? "", now);
       case "revoke":
@@ -1012,6 +1073,26 @@ var Mailbox = class extends DurableObject {
     return err(404, "not_found", "no such oauth operation");
   }
   async oauthBegin(b, now) {
+    const again = this.openRequestOf(b.clientId ?? "", "code", now);
+    if (again) {
+      const userCode2 = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6).padStart(6, "0");
+      this.sql(
+        "UPDATE oauth_requests SET client_name = ?, redirect_uri = ?, challenge = ?, state = ?, scope = ?, resource = ?, user_code = ?, attempts = 0, expires_at = ? WHERE id = ?",
+        (b.clientName ?? "").slice(0, 60),
+        b.redirectUri ?? "",
+        b.challenge ?? "",
+        b.state ?? null,
+        b.scope ?? "notify",
+        b.resource ?? "",
+        userCode2,
+        now + OAUTH_REQUEST_TTL_MS,
+        again.id
+      );
+      this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", again.id)[0]);
+      await this.scheduleConsentAlarm();
+      await this.supersedeOnOtherMacs(b.clientId ?? "");
+      return json(201, { id: again.id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online(), replaced: true });
+    }
     if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
     if (this.sql("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 36e5)[0].n >= OAUTH_BEGINS_PER_HOUR) {
       return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
@@ -1035,6 +1116,8 @@ var Mailbox = class extends DurableObject {
       now + OAUTH_REQUEST_TTL_MS
     );
     this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    await this.scheduleConsentAlarm();
+    await this.supersedeOnOtherMacs(b.clientId ?? "");
     return json(201, { id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online() });
   }
   // ---------- device authorization grant (RFC 8628)
@@ -1046,6 +1129,29 @@ var Mailbox = class extends DurableObject {
     }
   }
   async deviceBegin(b, now) {
+    const again = this.openRequestOf(b.clientId ?? "", "device", now);
+    if (again) {
+      const approval2 = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6).padStart(6, "0");
+      const userCode2 = this.newUserCode();
+      const deviceCode2 = oauthToken("hrv", this.getMeta("device_id") ?? "", randomHex(32));
+      this.sql(
+        "UPDATE oauth_requests SET client_name = ?, scope = ?, resource = ?, user_code = ?, attempts = 0, expires_at = ?, device_hash = ?, device_user_code = ?, last_poll = ?, poll_interval = ? WHERE id = ?",
+        (b.clientName ?? "").slice(0, 60),
+        b.scope ?? "notify",
+        b.resource ?? "",
+        approval2,
+        now + DEVICE_TTL_S * 1e3,
+        await sha256Hex(deviceCode2),
+        userCode2,
+        now,
+        DEVICE_INTERVAL_S,
+        again.id
+      );
+      this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", again.id)[0]);
+      await this.scheduleConsentAlarm();
+      await this.supersedeOnOtherMacs(b.clientId ?? "");
+      return json(201, { id: again.id, deviceCode: deviceCode2, userCode: this.dashed(userCode2), expiresIn: DEVICE_TTL_S, interval: DEVICE_INTERVAL_S, online: this.online(), replaced: true });
+    }
     if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
     if (this.sql("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 36e5)[0].n >= OAUTH_BEGINS_PER_HOUR) {
       return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
@@ -1073,6 +1179,8 @@ var Mailbox = class extends DurableObject {
       DEVICE_INTERVAL_S
     );
     this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    await this.scheduleConsentAlarm();
+    await this.supersedeOnOtherMacs(b.clientId ?? "");
     return json(201, { id, deviceCode, userCode: this.dashed(userCode), expiresIn: DEVICE_TTL_S, interval: DEVICE_INTERVAL_S, online: this.online() });
   }
   /** /activate: the request a typed user code belongs to (the page then asks for the approval code Herald shows). */
@@ -1121,6 +1229,7 @@ var Mailbox = class extends DurableObject {
   oauthStatus(id, now) {
     const r = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     if (!r) return json(404, { status: "unknown" });
+    if (r.status === "superseded") return json(200, { status: "expired" });
     if (r.status === "pending") return json(200, { status: r.expires_at <= now ? "expired" : "pending" });
     if (r.flow === "device") return json(200, { status: r.status === "pending" && r.expires_at <= now ? "expired" : r.status });
     if (r.status === "approved" && (!r.code || r.expires_at <= now)) return json(200, { status: "expired" });
@@ -1158,6 +1267,7 @@ var Mailbox = class extends DurableObject {
     }
     const done = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     this.sendResolved(done);
+    await this.supersedeOnOtherMacs(done.client_id);
     return json(200, { status: done.status, ...done.flow === "device" ? {} : { redirect: this.redirectFor(done) } });
   }
   /** One key per connector, kind "oauth". Re-authorizing the same client replaces its earlier key. */
@@ -1453,8 +1563,10 @@ var Mailbox = class extends DurableObject {
     this.sql("DELETE FROM notes WHERE created_at < ?", now - this.lim.ttlMs - 60 * 60 * 1e3);
     this.sql("DELETE FROM rate WHERE at < ?", now - RATE_WINDOW_MS);
     this.sql("DELETE FROM meta WHERE k LIKE 'usage:%' AND k < ?", "usage:" + new Date(now - 7 * DAY_MS).toISOString().slice(0, 10));
+    this.expireConsents(now);
     const left = this.sql("SELECT COUNT(*) AS n FROM notes")[0].n;
     if (left > 0) await this.ctx.storage.setAlarm(now + 60 * 60 * 1e3);
+    await this.scheduleConsentAlarm();
   }
 };
 

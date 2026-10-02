@@ -861,6 +861,77 @@ final class RelayConsentTests: XCTestCase {
         XCTAssertTrue(plain.delivered.isEmpty)
     }
 
+    func testARedeliveredFlagReachesTheHost() async {
+        let host = ConnectorConsentHost()
+        let again = consentFrame().replacingOccurrences(of: #""type":"consent""#, with: #""type":"consent","redelivered":true"#)
+        try? await make(host).session(FakeRelaySocket(incoming: [welcome, consentFrame(), again]))
+        XCTAssertEqual(host.requested.map(\.redelivered), [nil, true])
+    }
+
+    // One request, one banner (the ConsentBook rules the controller follows).
+
+    private func consent(_ id: String = "r1", code: String = "111111", userCode: String? = "BDFG-HJKM", redelivered: Bool? = nil,
+                         expires: String = "2099-01-01T00:00:00Z", status: String = "pending") -> RelayConsent {
+        RelayConsent(id: id, clientId: "hc_1", clientName: "Cloud agent", code: code, status: status, expiresAt: expires,
+                     flow: userCode == nil ? "code" : "device", userCode: userCode, redelivered: redelivered)
+    }
+
+    func testARepeatRequestIsOnePendingAndOneBannerUpdatedInPlace() {
+        var book = ConsentBook()
+        XCTAssertEqual(book.receive(consent()), .banner)                                  // the first: a banner
+        XCTAssertEqual(book.receive(consent(code: "222222", userCode: "WXZT-QRNM")), .banner)   // the same request, a new code: updated in place
+        XCTAssertEqual(book.receive(consent(code: "222222", userCode: "WXZT-QRNM")), .none)     // an identical repeat: nothing
+        XCTAssertEqual(book.pending.count, 1)                                              // never a second entry
+        XCTAssertEqual(book.pending.first?.userCode, "WXZT-QRNM")
+        XCTAssertEqual(book.receive(consent("r2")), .banner)                               // a different request is its own
+        XCTAssertEqual(book.pending.map(\.id), ["r2", "r1"])
+    }
+
+    func testAReconnectRefreshesTheListAndShowsNoBanner() {
+        var book = ConsentBook()
+        XCTAssertEqual(book.receive(consent()), .banner)
+        XCTAssertEqual(book.receive(consent(redelivered: true)), .listOnly)              // the relay re-sent it after a reconnect
+        XCTAssertEqual(book.receive(consent("r9", redelivered: true)), .listOnly)        // even one Herald had not seen (it was shown before a restart)
+        XCTAssertEqual(book.pending.count, 2)
+    }
+
+    func testAnExpiredRequestIsDroppedFromThePendingList() {
+        var book = ConsentBook()
+        let soon = ISO8601DateFormatter().string(from: Date().addingTimeInterval(60))
+        book.receive(consent("a", expires: soon)); book.receive(consent("b"))
+        XCTAssertEqual(book.nextExpiry.map { $0 < Date().addingTimeInterval(120) }, true)
+        XCTAssertEqual(book.receive(consent("c", expires: "2020-01-01T00:00:00Z")), .none)   // arrives already expired: not kept, no banner
+        XCTAssertEqual(book.pending.map(\.id), ["b", "a"])
+        let gone = book.expire(now: Date().addingTimeInterval(120))
+        XCTAssertEqual(gone.map(\.id), ["a"]); XCTAssertEqual(book.pending.map(\.id), ["b"])
+        // the relay says it expired (or was decided elsewhere): the same, by id
+        XCTAssertTrue(book.remove(id: "b")); XCTAssertFalse(book.remove(id: "b")); XCTAssertTrue(book.pending.isEmpty)
+    }
+
+    func testAnApprovedOrDeniedFrameRemovesTheRequestEverywhere() {
+        var book = ConsentBook()
+        book.receive(consent())
+        // a settled consent frame (status approved) is not pending: the entry goes
+        XCTAssertEqual(book.receive(consent(status: "approved")), .listOnly)
+        XCTAssertTrue(book.pending.isEmpty)
+        XCTAssertEqual(book.receive(consent(status: "superseded")), .none)
+    }
+
+    func testTheRelaysListIsReadSilently() {
+        var book = ConsentBook()
+        book.receive(consent("known"))
+        let fresh = book.replaceAll(with: [consent("known"), consent("new"), consent("old", expires: "2020-01-01T00:00:00Z"), consent("done", status: "approved")])
+        XCTAssertEqual(fresh.map(\.id), ["new"])                                           // not known before, still no banner is implied
+        XCTAssertEqual(Set(book.pending.map(\.id)), ["known", "new"])
+    }
+
+    func testTheBannerNamesTheClientAndTheCodeTheAgentPrinted() {
+        let q = BannerConfirmation.connectorConsent(name: "Cloud agent", host: "", code: "BDFG-HJKM")
+        XCTAssertTrue(q.title.contains("Cloud agent")); XCTAssertTrue(q.title.contains("BDFG-HJKM"))
+        XCTAssertTrue(q.detail.contains("BDFG-HJKM"))
+        XCTAssertEqual(q.buttons.map(\.title), ["Approve", "Deny"])
+    }
+
     func testAnExpiredConsentIsNotPending() {
         let past = RelayConsent(id: "i", clientName: "X", code: "123456", expiresAt: "2020-01-01T00:00:00.000Z")
         XCTAssertFalse(past.isPending())

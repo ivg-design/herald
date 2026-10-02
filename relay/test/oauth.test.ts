@@ -278,10 +278,14 @@ describe("consent", () => {
     const { key } = await mintKey(s.token);
     expect((await f("/v1/device/consent", { method: "POST", headers: auth(key), body: JSON.stringify({ id: rid, decision: "approve" }) })).status).toBe(403);
   });
-  it("limits approvals waiting at once", async () => {
+  it("limits approvals waiting at once (one per client: the same client asking again is the same request)", async () => {
     const s = await setup();
-    for (let i = 0; i < 3; i++) expect((await startAuth(s.deviceId, s.client.client_id, s.pk)).status).toBe(200);
-    expect((await startAuth(s.deviceId, s.client.client_id, s.pk)).status).toBe(429);
+    const more = [(await register()).body, (await register()).body];
+    expect((await startAuth(s.deviceId, s.client.client_id, s.pk)).status).toBe(200);
+    for (const c of more) expect((await startAuth(s.deviceId, c.client_id, s.pk)).status).toBe(200);
+    expect((await startAuth(s.deviceId, s.client.client_id, s.pk)).status).toBe(200);   // a repeat replaces, it does not count again
+    const fourth = (await register()).body;
+    expect((await startAuth(s.deviceId, fourth.client_id, s.pk)).status).toBe(429);
   });
   it("ignores a status or code request for a forged request id", async () => {
     const forged = "a".repeat(72);

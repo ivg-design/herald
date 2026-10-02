@@ -17,7 +17,8 @@ final class RelayController: RelayHost, RelayBackend {
     private(set) var pairingCode: String?
     private(set) var lastError: String?
     /// Connector requests the relay has pushed (the OAuth flow): pending ones show a banner and a code in Settings > Cloud.
-    private(set) var consents: [RelayConsent] = []
+    private(set) var consentBook = ConsentBook()
+    private var consentExpiry: Task<Void, Never>?
     static let consentApp = HeraldIdentity.app
     // Relay setup (Cloudflare deploy): see RelayController+Setup.swift.
     let cloudConfig: RelayCloudConfigStore
@@ -148,27 +149,49 @@ final class RelayController: RelayHost, RelayBackend {
     // MARK: Connector approvals (OAuth)
 
     /// Requests that can still be approved, newest first.
-    var pendingConsents: [RelayConsent] { consents.filter { $0.isPending() } }
+    var pendingConsents: [RelayConsent] { consentBook.pending }
+    var consents: [RelayConsent] { consentBook.consents }
 
     /// Connectors (oauth keys) that are connected now.
     var connectors: [RelayKeyInfo] { keys.filter { $0.isActive && $0.isOAuth } }
 
     func relayConsentRequested(_ consent: RelayConsent) {
-        guard consent.status == "pending" else { return }
-        let isNew = !consents.contains { $0.id == consent.id }
-        consents.removeAll { $0.id == consent.id }
-        consents.insert(consent, at: 0)
+        let action = consentBook.receive(consent)
         controller.changed()
-        // A reconnect re-sends what is still pending: ask once per request.
-        if isNew { Task { await presentConsentBanner(consent) } }
+        switch action {
+        case .banner:
+            // A new request, or the same one with a new code (its banner is updated in place). A reconnect's re-send never lands here.
+            Task { await presentConsentBanner(consent) }
+            scheduleConsentExpiry()
+        case .listOnly: scheduleConsentExpiry()
+        case .none:
+            if !consent.isPending() { dismissConsentBanner(id: consent.id) }
+        }
     }
 
     func relayConsentResolved(id: String, status: String) {
-        consents.removeAll { $0.id == id }
-        controller.confirmations.drop(app: Self.consentApp, id: id)
-        controller.dismissItem(app: Self.consentApp, id: id, action: nil)
+        consentBook.remove(id: id)
+        dismissConsentBanner(id: id)
         controller.changed()
         if status == "approved" { Task { await refreshKeys() } }
+    }
+
+    private func dismissConsentBanner(id: String) {
+        controller.confirmations.drop(app: Self.consentApp, id: id)
+        controller.dismissItem(app: Self.consentApp, id: id, action: nil)
+    }
+
+    /// A request that ran out leaves the pending list and its banner goes with it, without waiting for the relay to say so.
+    private func scheduleConsentExpiry() {
+        guard let next = consentBook.nextExpiry else { return }
+        consentExpiry?.cancel()
+        consentExpiry = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0.5, next.timeIntervalSinceNow + 0.5) * 1e9))
+            guard !Task.isCancelled, let self else { return }
+            for gone in self.consentBook.expire() { self.dismissConsentBanner(id: gone.id) }
+            self.controller.changed()
+            self.scheduleConsentExpiry()
+        }
     }
 
     /// The question lives on a banner (the inline strip of DESIGN 8): Approve / Deny, no window, no focus change. Closing the
@@ -209,20 +232,17 @@ final class RelayController: RelayHost, RelayBackend {
             controller.changed()
             return
         }
-        consents.removeAll { $0.id == id }
-        controller.confirmations.drop(app: Self.consentApp, id: id)
-        controller.dismissItem(app: Self.consentApp, id: id, action: nil)
+        consentBook.remove(id: id)
+        dismissConsentBanner(id: id)
         await refreshKeys()
     }
 
-    /// Settings > Cloud opens: what the relay still holds (a request pushed while Herald was off would not be on screen).
+    /// Settings > Cloud opens: what the relay still holds. The list is refreshed silently: a request is a banner once, when it arrives.
     func refreshConsents() async {
         guard let api = client.api, isPaired, let list = try? await api.consents() else { return }
-        let pending = list.filter { $0.isPending() }
-        let known = Set(consents.map(\.id))
-        consents = pending
+        consentBook.replaceAll(with: list)
+        scheduleConsentExpiry()
         controller.changed()
-        for c in pending where !known.contains(c.id) { await presentConsentBanner(c) }
     }
 
     func relayConnectors() async -> RelayConnectorsReply {
@@ -282,7 +302,7 @@ final class RelayController: RelayHost, RelayBackend {
         client.stop()
         tokens.delete()
         store.update { $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil }
-        keys = []; usage = nil; issuerKeys = []; consents = []; devices = []
+        keys = []; usage = nil; issuerKeys = []; consentBook = ConsentBook(); devices = []
         client.start()
         controller.changed()
     }

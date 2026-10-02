@@ -135,13 +135,15 @@ public struct RelayConsent: Codable, Equatable, Sendable, Identifiable {
     /// Device flow only: the code the agent printed (`BDFG-HJKM`), shown so the user can match it. `code` stays the 6-digit
     /// approval code for the relay's /activate page.
     public var userCode: String?
+    /// Set by the relay on a reconnect for a request Herald already got as a banner: update the list, show nothing.
+    public var redelivered: Bool?
 
     public init(id: String, clientId: String? = nil, clientName: String, redirectHost: String? = nil, scope: String? = "notify",
                 code: String, status: String = "pending", createdAt: String? = nil, expiresAt: String? = nil,
-                flow: String? = nil, userCode: String? = nil) {
+                flow: String? = nil, userCode: String? = nil, redelivered: Bool? = nil) {
         self.id = id; self.clientId = clientId; self.clientName = clientName; self.redirectHost = redirectHost; self.scope = scope
         self.code = code; self.status = status; self.createdAt = createdAt; self.expiresAt = expiresAt
-        self.flow = flow; self.userCode = userCode
+        self.flow = flow; self.userCode = userCode; self.redelivered = redelivered
     }
 
     public var isDevice: Bool { flow == "device" && userCode?.isEmpty == false }
@@ -233,4 +235,61 @@ public struct RelayLogEntry: Codable, Equatable, Sendable, Identifiable {
         if replied { parts.append("replied") }
         return parts.isEmpty ? "received" : parts.joined(separator: ", ")
     }
+}
+
+
+/// The connector requests Herald knows about, and what to do when one arrives: a banner once per request, an in-place update when the
+/// same request comes back with a new code, nothing visible for a redelivery after a reconnect, and nothing at all for one that has
+/// run out. Pure, so the rules are tested without a relay.
+public struct ConsentBook: Sendable, Equatable {
+    public private(set) var consents: [RelayConsent] = []
+
+    public init() {}
+
+    public enum Action: Equatable, Sendable {
+        /// Ask on a banner (a new request, or the same request with a new code: the banner is updated in place).
+        case banner
+        /// The list changed; no banner.
+        case listOnly
+        /// Nothing to show or keep (settled, expired or a repeat of what is already up).
+        case none
+    }
+
+    public var pending: [RelayConsent] { consents.filter { $0.isPending() } }
+
+    @discardableResult
+    public mutating func receive(_ c: RelayConsent, now: Date = Date()) -> Action {
+        guard c.isPending(now: now) else { return remove(id: c.id) ? .listOnly : .none }
+        let old = consents.first { $0.id == c.id }
+        consents.removeAll { $0.id == c.id }
+        consents.insert(c, at: 0)
+        if c.redelivered == true { return .listOnly }
+        if let old, old.code == c.code, old.userCode == c.userCode { return .none }
+        return .banner
+    }
+
+    @discardableResult
+    public mutating func remove(id: String) -> Bool {
+        let before = consents.count
+        consents.removeAll { $0.id == id }
+        return consents.count != before
+    }
+
+    /// Requests whose time ran out, removed. The controller dismisses their banners.
+    public mutating func expire(now: Date = Date()) -> [RelayConsent] {
+        let gone = consents.filter { !$0.isPending(now: now) }
+        consents.removeAll { !$0.isPending(now: now) }
+        return gone
+    }
+
+    /// The list the relay holds (Settings opens): only what is still pending, silently. Returns the ones that were not known.
+    @discardableResult
+    public mutating func replaceAll(with list: [RelayConsent], now: Date = Date()) -> [RelayConsent] {
+        let known = Set(consents.map(\.id))
+        consents = list.filter { $0.isPending(now: now) }
+        return consents.filter { !known.contains($0.id) }
+    }
+
+    /// When the next request runs out (to schedule its removal).
+    public var nextExpiry: Date? { consents.compactMap(\.expiresDate).min() }
 }
