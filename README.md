@@ -8,6 +8,13 @@ image previews, buttons, snooze, Add to Reminders and links.
 
 Requires macOS 13 or later.
 
+## Cloud agents
+
+**Settings > Cloud > Enable relay** puts a small relay in your own Cloudflare account (free plan is enough) with one token and one button, pairs
+this Mac with it, and gives you the connector URL and ready-made instructions for ChatGPT / OpenAI cloud agents (OAuth, approve on the Mac) and
+Claude Code / Codex (a key). No shared server, nothing listens on the Mac. See [docs/CLOUD.md](docs/CLOUD.md). An agent can do the whole setup
+through the local MCP tools ([docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md)).
+
 ## What's new in 1.1
 
 - **Manifests.** An app declares the fields it can send (with samples), its actions and assets.

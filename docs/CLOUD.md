@@ -10,17 +10,83 @@ cloud agent --HTTPS or remote MCP (agent key)--> relay (Worker + Durable Object 
                                                          receipts and replies flow back the same way
 ```
 
-Deployed relay: **https://herald-relay.ivg-design.workers.dev** (account: ivg-design, workers.dev subdomain, no custom domain).
-Source: `relay/`. Herald's side: `Sources/Herald/Relay/`. Settings > Cloud.
+The relay is **yours**: Herald puts it in your own Cloudflare account (free plan is enough) with one switch, **Settings > Cloud > Enable relay**.
+Nobody else's server is involved and there is no shared default relay. Source: `relay/`. Herald's side: `Sources/Herald/Relay/`.
+
+## Set up your relay (Enable relay)
+
+1. **Settings > Cloud > Enable relay.** With no relay yet, a sheet opens: *Create your relay on Cloudflare (free)*.
+2. **Create a token.** *Open Cloudflare...* opens Cloudflare's token page with the three permissions already filled in and the name
+   "Herald relay". (No account? *I need a free Cloudflare account* opens the sign-up page.) Press *Continue to summary*, then *Create Token*,
+   and copy the token.
+3. **Paste it and press Deploy.** Herald does the rest through Cloudflare's API, naming each step in the sheet: check the token, find your
+   account, find (or create) your `workers.dev` address, create the voice-reply bucket and its 7-day expiry, upload the relay, switch on its
+   address, wait until `GET /health` answers, then **pair this Mac automatically** (the pairing code never shows). The sheet ends with the
+   switch on and a green **Online**.
+4. The relay's connector URL is `https://herald-relay.<your-subdomain>.workers.dev/mcp`, shown in Settings with a Copy button, together
+   with two ready-made instruction blocks: **ChatGPT / OpenAI cloud agents** (add the URL as a connector, choose OAuth, approve in Herald)
+   and **Claude Code / Codex CLI** (a static key). Below them: connected agents with Revoke, and Usage today.
+
+If a step fails, the sheet shows Cloudflare's own message and **Retry**. Running Deploy again **upgrades the Worker in place** (same name,
+same data, same secrets). Settings shows *Update available* when the relay bundled with your Herald differs from the one running (Herald
+reads the bundle hash from `GET /health`, set as the Worker var `BUNDLE_HASH`).
+
+**Turning the switch off** unpairs this Mac, which revokes every agent key and connector. The Worker stays in your Cloudflare account until
+you press *Delete relay from Cloudflare* (Advanced).
+
+### The API token
+
+| Permission (Cloudflare name, template key) | Why |
+|---|---|
+| Workers Scripts: Edit (`workers_scripts`) | upload the relay, switch on its workers.dev address, set its variables and secrets |
+| Workers R2 Storage: Edit (`workers_r2`) | create the voice-reply bucket and its expiry rule |
+| Account Settings: Read (`account_settings`) | find your account id |
+
+The page Herald opens is `https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=[...]&accountId=*&zoneId=all&name=Herald relay`
+(Cloudflare's "create a token from a link" format, [docs](https://developers.cloudflare.com/fundamentals/api/how-to/account-owned-token-template/)).
+You can narrow the token to your account on that page.
+
+### What Herald stores where
+
+| What | Where |
+|---|---|
+| Cloudflare API token | macOS Keychain (`com.ivg.herald.cloudflare`), this device only. Sent only to `api.cloudflare.com`. Never shown again, never returned by the local API or MCP. *Forget the token* (Advanced) deletes it. |
+| Pairing secret (made at the first deploy) | Keychain; also a secret on the Worker. The relay demands it (`X-Pairing-Secret`) when a Mac pairs, so a stranger who finds the URL cannot pair. Shown under Advanced. |
+| Relay signing secret (`RELAY_SECRET`, made at the first deploy) | Keychain and a Worker secret; signs device ids. Kept so a deploy from scratch is possible. |
+| Device token (`hrd_...`) | Keychain (see below). |
+| Account id, worker name, subdomain, bucket, limits, deployed bundle hash | `relay-cloudflare.json` in Herald's support folder (no secrets). |
+
+### Upgrade, redeploy, delete
+
+- **Upgrade**: Deploy again (the *Update the relay* button, or `relay_deploy`). The Worker is uploaded with the same bindings, the Durable
+  Object classes are not migrated again and the existing secrets are kept.
+- **Change a setting** (Advanced): a value that lives in the Worker (limits, retention, worker name, bucket) redeploys it; the rest is Herald's.
+- **Delete relay from Cloudflare** (Advanced, with a confirmation): deletes the Worker with every mailbox, key and queued notification,
+  and the bucket when it is empty (Cloudflare refuses to delete a bucket that still holds voice replies; Herald says so).
+
+### Advanced
+
+Everything is visible and editable: relay URL (any relay, not only Cloudflare), account id, worker name, workers.dev subdomain, R2 bucket,
+voice replies kept (days, default 7), undelivered kept (hours, default 24), notifications per day (500), most waiting at once (100),
+largest request (32 KB), per key per 10 minutes (60), Macs that may pair (5), this Mac's name, keep-alive seconds (300), the pairing
+secret; plus **Apply settings**, **Redeploy**, **Test connection** (health, then a notification through the relay and its receipt),
+**Pair with a code** (for a relay Herald did not deploy), **Unpair**, **Forget token** and **Delete relay from Cloudflare**.
+The same fields are `relay_settings` in the local MCP and `GET|PUT /v1/relay/settings`.
+
+### Your own relay without Herald's deploy
+
+Any relay that speaks this protocol works: put its address in Advanced > Relay URL and use *Pair with a code* (or `POST /v1/relay/pair`).
+`cd relay && npm install && npm run deploy` still deploys the same Worker with wrangler ([Operating the relay](#operating-the-relay)).
+`conformance/` is a black-box suite any implementation can run: `RELAY_URL=https://... npm test -w conformance`.
 
 ## Connect a cloud agent
 
-1. **Pair this Mac** (once): Herald > Settings > Cloud > **Pair...** The relay hands out a one-time code (shown in Settings,
-   valid 10 minutes), Herald redeems it and stores the device token in the Keychain. Status turns to Online.
+1. **Enable relay** (once; see above). Herald pairs itself: it asks the relay for a one-time code (valid 10 minutes), redeems it and stores the
+   device token in the Keychain. Status turns to Online.
 2. **Create an agent key**: Settings > Cloud > Agent keys > name (for example `build-bot`), Agent (Claude, Codex or Other) > **Create key**.
    The key and a ready-to-paste connector block are shown **once** (the relay keeps only a hash). **Copy connector config**.
-3. **Give the block to the agent**: URL `https://herald-relay.ivg-design.workers.dev/mcp` and `Authorization: Bearer hrk_...`.
-   - Claude Code: `claude mcp add --transport http herald https://herald-relay.ivg-design.workers.dev/mcp --header "Authorization: Bearer hrk_..."`
+3. **Give the block to the agent**: URL `https://herald-relay.<your-subdomain>.workers.dev/mcp` and `Authorization: Bearer hrk_...`.
+   - Claude Code: `claude mcp add --transport http herald https://herald-relay.<your-subdomain>.workers.dev/mcp --header "Authorization: Bearer hrk_..."`
    - Claude.ai custom connector / ChatGPT / any remote MCP client: URL and Bearer header.
    - Codex `~/.codex/config.toml`: `[mcp_servers.herald]`, `url = ".../mcp"`, `bearer_token_env_var = "HERALD_RELAY_KEY"`.
    - Plain HTTPS works too (below).
@@ -41,7 +107,7 @@ custom connectors support it too). Both land on the same `/mcp` and `/v1/notify`
 
 1. In ChatGPT open **Settings > Connectors** (the exact labels vary by plan and version; custom MCP connectors may need
    **Advanced > Developer mode**) and choose **Create** / **Add a custom connector**.
-2. Name it `Herald`. **MCP server URL**: `https://herald-relay.ivg-design.workers.dev/mcp`. **Authentication: OAuth**. Leave any client id
+2. Name it `Herald`. **MCP server URL**: `https://herald-relay.<your-subdomain>.workers.dev/mcp`. **Authentication: OAuth**. Leave any client id
    and secret fields empty: ChatGPT registers itself with the relay (dynamic client registration). Create / Connect.
 3. ChatGPT opens a Herald page in your browser: **"ChatGPT wants to connect to Herald"**, naming the scope (send notifications to your Mac,
    read receipts and your replies) and the address it returns to.
@@ -171,39 +237,53 @@ up until answered and marks it as a question.
   own relay (`wrangler deploy` from `relay/`) if that matters; Settings > Cloud takes any URL.
 - **Revoke**: Revoke a key in Settings > Cloud; Unpair wipes the mailbox (queue, keys, audio) and forgets the token.
 
-## Free plan budget
+## Free plan budget and per-device limits
 
-The relay is built to live on Cloudflare's free plan (limits checked on developers.cloudflare.com on 2026-10-02).
+The relay is built to live on Cloudflare's free plan (limits checked on developers.cloudflare.com on 2026-10-02). Every paired Mac has its
+own mailbox, so **every cap is per device, never global**: one noisy Mac or key cannot use up another Mac's allowance, and a relay shared
+by several Macs divides the plan between them. The defaults (Worker vars; Advanced edits them) are sized so about **20 devices can each
+hit every cap on the same day** without exceeding the free plan, and a normal Mac uses about 1% of its caps.
 
-| Resource | Free plan limit | What Herald's relay does |
+| Cap (per device) | Default | Worker var | When reached |
+|---|---|---|---|
+| Notifications per day | 500 | `DEVICE_NOTIFICATIONS_PER_DAY` | 429 `daily_cap` until midnight UTC |
+| Undelivered waiting for the Mac | 100 | `DEVICE_QUEUE_MAX` | 429 `queue_full` |
+| Requests that reach the mailbox per day | 5,000 | `DEVICE_REQUESTS_PER_DAY` | 503 `budget_exhausted` until midnight UTC (the Mac can still connect and drain its queue) |
+| Voice replies per day / bytes per day | 40 / 20 MB | `DEVICE_AUDIO_UPLOADS_PER_DAY`, `DEVICE_AUDIO_BYTES_PER_DAY` | 429 `daily_cap` |
+| Long-poll seconds per day | 3,000 | `DEVICE_POLL_SECONDS_PER_DAY` | polls stop waiting (answer at once) |
+| Undelivered kept | 24 h | `QUEUE_TTL_HOURS` | `suppressed` receipt `expired` |
+| Notifications per 10 min per key | 60 | `RATE_LIMIT_PER_KEY` | 429 + `Retry-After` |
+| Largest notify request | 32 KB | `MAX_BODY_BYTES` | 413 |
+| Receipt/reply reads per 10 min per key | 600 | (fixed) | 429 |
+| Macs that may pair | 5 | `MAX_DEVICES` | 403 `device_limit` |
+
+**Pairing limits are per client address**: 6 pairing starts an hour (`PAIR_STARTS_PER_HOUR`) and 10 wrong codes per 10 minutes per address
+(stored hashed), at most 3 codes waiting per address, and flood guards of 300 starts an hour and 60 waiting codes across all addresses.
+One address cannot lock the others out. With a pairing secret set (Herald sets one) a stranger cannot even start.
+
+| Resource | Free plan limit | What the relay does |
 |---|---|---|
-| Workers requests | 100,000 / day, 10 ms CPU each | Auth is a hash and an HMAC (about 1 ms); no work is done in the Worker beyond routing. |
-| Durable Object requests | 100,000 / day (WebSocket messages in count 20:1) | Herald sends only `hello`, `ack`, receipts and a status change: about 3 messages per notification = 0.15 requests. |
-| DO duration | 13,000 GB-s / day | The WebSocket Hibernation API: Herald's idle socket does not keep the object awake. Keepalive is `setWebSocketAutoResponse("ping" -> "pong")`, answered without waking it, every 5 minutes. Long-polls keep it awake while they wait (7.5 GB-s per full minute), so waiting is capped at 6,000 s a day. |
-| DO SQLite rows written | 100,000 / day | About 10 per notification; counters are kept in memory and written once a minute; read rate limits are in memory. |
-| DO SQLite rows read | 5,000,000 / day | Queue scans are over at most 200 rows. |
+| Workers requests | 100,000 / day, 10 ms CPU each | Auth is a hash and an HMAC (about 1 ms); routing only. Each device is capped at 5,000 mailbox requests a day; unauthenticated junk is rejected in the Worker. |
+| Durable Object requests | 100,000 / day (WebSocket messages count 20:1) | Herald sends only `hello`, `ack`, receipts and a status change: about 3 messages per notification = 0.15 requests. |
+| DO duration | 13,000 GB-s / day | WebSocket Hibernation: Herald's idle socket does not keep the object awake; keepalive is answered without waking it. Long-polls keep it awake (7.5 GB-s per full minute), capped per device. |
+| DO SQLite rows written | 100,000 / day | About 10 per notification; counters are kept in memory and written once a minute. |
 | DO storage | 5 GB | Notifications are deleted after 25 hours; an empty mailbox is about 12 KB. |
-| R2 storage | 10 GB-month | Voice replies only, at most 1 MB each, at most 200 a day, deleted after 7 days by a bucket lifecycle rule (`relay/r2-lifecycle.json`, `npm run r2:setup`). |
-| R2 Class A / Class B | 1,000,000 / 10,000,000 a month | One put per voice reply, one get per download. |
+| R2 storage | 10 GB-month | Voice replies only, at most 1 MB each and 20 MB a day per device, deleted after 7 days by the bucket's lifecycle rule (Herald creates it). |
 | KV, Queues, Cron | not used | No cron triggers; no polling from Herald (only the socket). |
 
-**One notification costs**: 1 Worker request + 1 Durable Object request to send, about the same for each receipt read or poll the agent makes
-(say 3), 0.15 request for Herald's side, about 10 rows written, about 1 KB stored for 25 hours. A few dozen notifications a day is
-about 100-200 requests (0.2% of the day), 1,000 rows written (1%), a few MB of storage.
-
-**Worst case under the limits**: 20 keys at 60 per 10 minutes would be 172,800 a day, so a per-Mac daily cap of 2,000 notifications comes
-first (about 20,000 rows written, 20% of the allowance), reads are limited to 600 per 10 minutes per key, and the relay answers `503`
-(`budget_exhausted`, `Retry-After` until midnight UTC) once it has served 90,000 requests in a UTC day, ahead of Cloudflare's own 100,000.
-Junk traffic to the public URL (not authenticated) is counted by Cloudflare against the 100,000 Workers requests; it is rejected in the
-Worker for about 1 ms each.
+**Worst case for N devices** (every device at every cap): rows written 500 x 10 = 5,000 per device a day, so **20 devices fill the 100,000
+rows** and the 5,000-request cap fills the 100,000 requests at 20 as well. Beyond that Cloudflare itself answers 429/1027 (Herald shows
+*Relay offline - limit reached* and retries) or you move to Workers Paid. **Typical**: a few dozen notifications a day is 100-200
+requests and 300 rows per device, so a free account serves several hundred such devices; the per-device caps are what protect them from
+each other.
 
 **When a limit is hit**: agents get `429` (rate, daily cap, queue full) or `503` with `Retry-After`; Herald shows
 **"Relay offline - limit reached"** in Settings > Cloud and retries with backoff (at least the `Retry-After`). Nothing is lost silently: the
-queue is stored in the Mac's mailbox, items are delivered when the Mac reconnects, and an item older than 24 hours gets a `suppressed`
-receipt with reason `expired`. If Cloudflare itself cuts the account off (error 1027 or 429 on the WebSocket) the same applies.
+queue is stored in the Mac's mailbox, items are delivered when the Mac reconnects, and an item older than the queue TTL gets a `suppressed`
+receipt with reason `expired`.
 
 **See it**: Settings > Cloud > **Usage today** (requests, notifications, queued, storage), `relay_usage` in the local MCP,
-`GET /v1/relay/usage`, or `GET /v1/device/usage` on the relay with the device token.
+`GET /v1/relay/usage`, or `GET /v1/device/usage` on the relay with the device token (it includes this device's `limits`).
 
 ## Operating the relay
 

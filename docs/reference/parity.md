@@ -115,6 +115,24 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Tooltips level (`tooltipLevel`) | `PUT /v1/settings` | `settings set` | `set_settings` | gap | ok |
 | Cmd-Tab presence while windows are open (#55) | none | none | none | automatic, not a setting | n/a |
 
+### Settings > Cloud (Enable relay, [CLOUD.md](../CLOUD.md))
+
+| Capability | HTTP route | MCP tool |
+|---|---|---|
+| Setup state (none, token needed, deploying, online, error), version, update available | `GET /v1/relay/setup`, `GET /v1/relay/status` | `relay_status` |
+| The pre-filled Cloudflare token page and its permissions | `GET /v1/relay/token-url` | `relay_token_url` |
+| Store the Cloudflare API token (Keychain; never read back) | `POST /v1/relay/token` | `relay_set_cloudflare_token` |
+| Deploy / upgrade (Deploy, Update the relay, Redeploy), with the step log | `POST /v1/relay/deploy` | `relay_deploy` |
+| Enable relay off (unpair, revokes everything); Pair with a code | `POST /v1/relay/unpair`, `POST /v1/relay/pair` | `relay_unpair`, `relay_pair` |
+| Every Advanced field, read and write (a Worker value redeploys) | `GET`, `PUT /v1/relay/settings` | `relay_settings` |
+| Delete relay from Cloudflare (confirmation = `confirm: true`) | `POST /v1/relay/delete` | `relay_delete` |
+| Test connection | `POST /v1/relay/test` | `relay_test` |
+| ChatGPT / Claude / Codex instruction blocks | `GET /v1/relay/instructions` | `relay_instructions` |
+| Connected agents, revoke; create a key | `GET /v1/relay/connectors`, `GET /v1/relay/keys`, `DELETE`, `POST /v1/relay/keys` | `list_connectors`, `revoke_agent_key`, `create_agent_key` |
+| Usage today | `GET /v1/relay/usage` | `relay_usage` |
+| Read the Cloudflare token back | none | none (by design) |
+| Approve a connector request | none | none (by design: only on the Mac) |
+
 Settings keys are validated against one table (`SettingsSchema`; a new setting is one more row); an unknown key, a wrong type or an out-of-range
 value is `400` and nothing is changed. `GET /v1/settings` returns the same table as `schema`, so an agent can
 discover the keys.

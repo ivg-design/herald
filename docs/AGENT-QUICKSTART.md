@@ -36,7 +36,25 @@ Herald().notify(app="bidbot", title="Bid accepted", body="…", url="https://…
 
 ## 4. Cloud agents (not on this Mac)
 
-An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at `https://herald-relay.ivg-design.workers.dev/mcp` with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications, read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
+An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at the relay's `/mcp` URL (`relay_status` > `mcpURL`) with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications, read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
+
+### Set up the cloud relay (scripted walkthrough)
+
+The relay lives in the user's own Cloudflare account; you can set the whole thing up with the local MCP tools. The user does two things only:
+create a token, and approve a connector on the Mac.
+
+1. `relay_status`: read `setup.state`. `online` means it is done (go to step 7). `token-needed` or `ready` means continue.
+2. `relay_token_url`: tell the user to open `url` (the sign-up link is `signUpURL` if they have no Cloudflare account), press Continue to
+   summary, then Create Token, and paste the token to you. The page already has the three permissions.
+3. `relay_set_cloudflare_token {token}`. Do not echo the token anywhere.
+4. Optional: `relay_settings` to read the Advanced values, `relay_settings {settings: {...}}` to change them before deploying.
+5. `relay_deploy`: takes up to about a minute; the reply is the step log. On failure the error is Cloudflare's message (for example a
+   missing permission): fix it and call `relay_deploy` again, which is safe to repeat and upgrades in place.
+6. `relay_test`: `roundTrip: true` means a notification went through the relay and reached this Mac.
+7. Connect the agent: `relay_instructions {client: "chatgpt"}` (OAuth: the user adds the URL as a connector in ChatGPT and approves on the Mac;
+   `list_connectors` shows pending requests and who is connected) or `relay_instructions {client: "claude"|"codex"}` plus
+   `create_agent_key {name, client}` (the key is shown once; hand over the connector block).
+8. Turn off with `relay_unpair` (revokes everything); remove with `relay_delete {confirm: true}` after asking the user.
 
 ## Conventions
 

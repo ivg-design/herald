@@ -361,7 +361,18 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `relay_usage` | Today's relay traffic against the Cloudflare free plan. |
 | `list_connectors` | Connectors that signed in to the relay with OAuth (ChatGPT and clients without custom-key support) and the requests waiting for approval. Approval happens only on the Mac. Revoke a connector with `revoke_agent_key`. |
 | `create_agent_key` | `{name, client?}`: mints a notify-only key. The reply holds the key once and a connector block (URL and Bearer) for Claude, Codex and any remote MCP client. |
-| `revoke_agent_key` | `{id}`: revokes a key. |
+| `revoke_agent_key` | `{id}`: revokes a key or a connector. |
+| `relay_token_url` | The pre-filled Cloudflare token page, the sign-up link and the permissions to give the token. The user creates the token. |
+| `relay_set_cloudflare_token` | `{token}` (sensitive): stores it in the Keychain; never returned. |
+| `relay_deploy` | Deploys or upgrades the relay in the user's Cloudflare account, waits until it answers, pairs this Mac; returns the step log. Idempotent. |
+| `relay_pair` / `relay_unpair` | Pair with the configured relay / turn the relay off (revokes every key and connector; changes nothing if the relay cannot be reached). |
+| `relay_settings` | No arguments: every Advanced setting. `{settings: {...}}`: validate, save, and redeploy when a Worker value changed. |
+| `relay_delete` | `{confirm: true}`: delete the relay from Cloudflare (destructive). |
+| `relay_instructions` | `{client: chatgpt\|claude\|codex}`: the exact text for that agent. |
+| `relay_test` | `/health`, then a test notification through the relay with its receipt. |
+
+`relay_status` carries the setup state machine as `setup.state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`).
+Connected agents are `list_connectors` (OAuth) and the keys in `relay_status`; revoke either with `revoke_agent_key`.
 
 These manage the keys on this Mac's side. The cloud agent uses the relay's own remote MCP endpoint, which has exactly four tools
 (`send_notification`, `get_receipt`, `wait_for_reply`, `herald_status`): [../CLOUD.md](../CLOUD.md).

@@ -415,7 +415,15 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `POST /v1/relay/keys` | `{name, client?}` (`client`: `claude`, `codex`, `other`) mints a notify-only key. The reply has `key` (shown once), `mcpURL` and `connectorConfig`, the block to paste into the agent. 409 when the name is taken. |
 | `DELETE /v1/relay/keys/{id}` | Revokes the key at once. |
 | `GET /v1/relay/connectors` | Connectors that signed in with OAuth: `connectors` (the `oauth` keys: `id`, `name`, `displayName`, `kind`, `createdAt`, `lastUsedAt`) and `pending` (requests waiting for approval: `id`, `clientName`, `redirectHost`, `expiresAt`). The 6-digit approval code is never returned; approving happens on the Mac. Revoke with `DELETE /v1/relay/keys/{id}`. |
-| `GET /v1/relay/usage` | Today's relay traffic against the free plan: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
+| `GET /v1/relay/usage` | Today's relay traffic against this device's caps: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
+| `GET /v1/relay/setup` | The setup state machine: `state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`), `hasToken`, `paired`, `online`, `relayURL`, `mcpURL`, `bundledVersion`, `deployedVersion`, `updateAvailable`, `message`, `steps`, `usage`. Also returned as `setup` by `GET /v1/relay/status`. |
+| `GET /v1/relay/token-url` | The pre-filled Cloudflare token page `url`, the sign-up URL, the three `permissions` with the reason for each, and `steps` to tell the user. |
+| `POST /v1/relay/token` | `{token}` stores the Cloudflare API token in the Keychain. Never returned by any route. |
+| `POST /v1/relay/deploy` | Deploys or upgrades the Worker in the user's Cloudflare account, waits for `/health`, pairs this Mac. Replies `{deployed, upgraded, relayURL, paired, online, steps}`; a failure is `4xx/5xx` with Cloudflare's message. |
+| `GET /v1/relay/settings`, `PUT /v1/relay/settings` | Every Advanced field (`relayURL`, `accountId`, `workerName`, `subdomain`, `bucket`, `audioRetentionDays`, `queueTTLHours`, `notificationsPerDay`, `maxQueue`, `bodyLimitBytes`, `ratePerKey`, `maxDevices`, `deviceName`, `pingSeconds`, write-only `pairingSecret`). PUT validates (400 names the field) and redeploys when a Worker value changed (`redeployed`, `steps`). |
+| `POST /v1/relay/delete` | `{confirm: true}` deletes the Worker, every mailbox and key, and the bucket when empty, from Cloudflare. |
+| `POST /v1/relay/test` | `/health`, then a notification through the relay with a temporary key and its receipt: `{healthy, paired, online, roundTrip, receipt, detail}`. |
+| `GET /v1/relay/instructions?client=chatgpt\|claude\|codex` | `{client, text}`: the exact instructions to give that agent. |
 
 Keys carry `kind` (`static`, or `oauth` for a connector approved through the relay's OAuth flow, with `displayName`).
 
@@ -424,6 +432,24 @@ Errors: 409 when not paired, 429 when the relay reports a limit, 502 when the re
 The relay's own OAuth 2.1 endpoints (discovery, `/register`, `/authorize`, `/token`, `/revoke`) are documented in
 [../CLOUD.md](../CLOUD.md#connect-chatgpt-oauth); a connector's access token works wherever an `hrk_` key does on `/mcp`, `/v1/notify`,
 `/v1/status`, `/v1/receipts/*` and `/v1/replies/*`, and nowhere else.
+
+**Cloudflare API calls Herald makes** (only on Deploy / Delete / settings changes; token in `Authorization: Bearer`, host `api.cloudflare.com/client/v4`):
+
+| Call | Purpose |
+|---|---|
+| `GET /user/tokens/verify` | the token is active |
+| `GET /accounts` | the account id (unless set in Advanced) |
+| `GET /accounts/{id}/workers/subdomain`, `PUT` when none | the workers.dev subdomain |
+| `POST /accounts/{id}/r2/buckets` (409 = exists) | the voice-reply bucket |
+| `PUT /accounts/{id}/r2/buckets/{bucket}/lifecycle` | delete objects after the retention days |
+| `GET /accounts/{id}/workers/scripts/{name}/settings` | does the Worker exist (first deploy or upgrade) |
+| `PUT /accounts/{id}/workers/scripts/{name}` (multipart: `metadata` + `worker.js`) | upload the relay: main module, compatibility date, Durable Object bindings + migration (first deploy only), R2 binding, vars, secrets (`RELAY_SECRET` first deploy, `PAIRING_SECRET`), `keep_bindings: ["secret_text"]` on upgrades |
+| `POST /accounts/{id}/workers/scripts/{name}/subdomain` | switch on the workers.dev address |
+| `DELETE /accounts/{id}/workers/scripts/{name}?force=true`, `DELETE /accounts/{id}/r2/buckets/{bucket}` | Delete relay from Cloudflare |
+
+then `GET https://<name>.<subdomain>.workers.dev/health` (unauthenticated; `{service, ok, bundle}`).
+
+Two implementations of the relay protocol can exist; `conformance/` is the black-box suite (`RELAY_URL=... npm test -w conformance`).
 
 A notification from the cloud arrives as an ordinary notification of the app `cloud.<key name>` with `id` = the relay's delivery id, so it
 appears in `/v1/history` and `/v1/apps` like any other. A `reply` action may carry `voice: true` (the Record button): the banner shows the
