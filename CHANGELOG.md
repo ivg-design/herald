@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.4.1 (Build 8) - 2026-10-02
+
+### Added
+
+- **Rich text.** A `text` component can hold real line breaks; inline markup (`**bold**`, `*italic*`, `` `mono` ``,
+  `__underline__`, `~~strike~~`, `{{size=14 color=#FF3B30 font=serif weight=medium}}…{{/}}`, `{{align=center}}` per
+  line) or the structured `lines: [{align, runs: [...]}]` form; per-run styling overrides the component's style and a
+  line's align overrides the component's. The Designer's Text field is a multi-line editor with a formatting bar
+  (Bold, Italic, Mono, Underline, Strike, Size, Color, per-line Align), the `{}` token menu at the caret and a live
+  preview; markup ⇄ lines is lossless. `component_schema`, `validate_template` and `render_preview` know it.
+- **Agent notifications that make sense.** The agent default template has Open (brings the host app forward — Claude.app
+  for Claude Desktop, the terminal or editor the install ran from for Claude Code / Codex, changeable under
+  Settings → MCP → Opens), Reply (an inline text field in the banner; the answer lands on the history record and in a
+  queue read by the new `get_replies` / `wait_for_reply` tools — "Ask the user a question" in docs/MCP.md) and Open
+  link only when a link is present. Done and the Dismiss button are gone; × is the only close. `reply` is also an
+  issuer action kind for any app.
+- Settings → General shows the version and build bottom-right (click to copy).
+
+### Fixed
+
+- App icon: the source PNG carried a fully opaque 1 px seam on its left and right edges, visible as bright lines in
+  the Dock; trimmed, and the artwork now sits on Apple's 824/1024 icon grid.
+- Grid columns always sum to the inner width: resizing trades width between neighbours, the last column absorbs any
+  remainder when nothing fills, 24 pt minimum per column (drags, inspector, context menu, `put_template`), templates
+  that load short are auto-fixed with a warning, rulers show every column's resolved width.
+- An actions row set to trailing (or in a trailing-aligned cell) now sits at the right edge.
+- The style dropdown in action rows, the action editor and the issuer-action menu is labelled "Button style".
+- Tooltips say what a control is or does ("Badge — a small capsule showing a short status or count"), never how to
+  click it; the palette reads from the catalog.
+
+1025 tests.
+
 ## 1.4.0 (Build 7) - 2026-10-02
 
 ### Added
