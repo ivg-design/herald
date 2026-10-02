@@ -100,15 +100,7 @@ struct GridContext {
     /// A colour spec from a template: `#RGB` / `#RRGGBB` / `#RRGGBBAA`, or `accent`, `primary`, `secondary`.
     /// Hex colours are nudged until they read on the current appearance (`legible`), keywords follow the system.
     func color(_ spec: String?, legible: Bool = true) -> Color? {
-        guard let spec = spec?.trimmingCharacters(in: .whitespaces), !spec.isEmpty else { return nil }
-        switch spec.lowercased() {
-        case "accent": return accent ?? .accentColor
-        case "primary": return .primary
-        case "secondary": return .secondary
-        default: break
-        }
-        guard let ns = BannerModel.color(fromHex: spec) else { return nil }
-        return Color(nsColor: legible ? BannerView.legible(ns, dark: scheme == .dark) : ns)
+        GridStyle.color(spec, accent: accent, scheme: scheme, legible: legible)
     }
 }
 
@@ -168,6 +160,47 @@ extension HeraldTextAlignment {
 // MARK: - Text styles
 
 enum GridStyle {
+    @MainActor static func color(_ spec: String?, accent: Color?, scheme: ColorScheme, legible: Bool = true) -> Color? {
+        guard let spec = spec?.trimmingCharacters(in: .whitespaces), !spec.isEmpty else { return nil }
+        switch spec.lowercased() {
+        case "accent": return accent ?? .accentColor
+        case "primary": return .primary
+        case "secondary": return .secondary
+        default: break
+        }
+        guard let ns = BannerModel.color(fromHex: spec) else { return nil }
+        return Color(nsColor: legible ? BannerView.legible(ns, dark: scheme == .dark) : ns)
+    }
+
+    /// A text run's font: the style's font with the run's size, weight, family and italic laid over it.
+    static func runFont(_ style: HeraldTextStyle, size: Double?, weight: HeraldFontWeight?, family: HeraldFontFamily?, italic: Bool) -> Font {
+        var f = font(style, size: size, weight: weight)
+        if let family {
+            let design: Font.Design
+            switch family {
+            case .sans: design = .default
+            case .mono: design = .monospaced
+            case .serif: design = .serif
+            case .rounded: design = .rounded
+            }
+            f = .system(size: CGFloat(size ?? Self.baseSize(style)), weight: Self.weight(weight, style), design: design)
+        }
+        return italic ? f.italic() : f
+    }
+
+    static func baseSize(_ style: HeraldTextStyle) -> Double {
+        switch style { case .title: return 13; case .subtitle, .body: return 12; case .caption: return 10; case .mono: return 11 }
+    }
+
+    static func weight(_ w: HeraldFontWeight?, _ style: HeraldTextStyle) -> Font.Weight {
+        switch w {
+        case .regular?: return .regular
+        case .medium?: return .medium
+        case .semibold?: return .semibold
+        case .bold?: return .bold
+        case nil: return style == .title ? .semibold : .regular
+        }
+    }
     static func font(_ style: HeraldTextStyle, size: Double? = nil, weight: HeraldFontWeight? = nil) -> Font {
         let base: (size: CGFloat, weight: Font.Weight, design: Font.Design)
         switch style {

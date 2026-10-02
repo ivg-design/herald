@@ -303,8 +303,23 @@ public enum ComponentSchema {
         let color = ref("color")
         let all: [(String, JSONValue)] = [
             comp("text", "Text from a binding, e.g. a title, subtitle or body line. Style sets font, size and default colour.",
-                 required: ["binding"], emptyWhen: "every {token} in binding is absent", [
-                "binding": prop("string", "Text with {tokens}, e.g. \"{title}\" or \"{count} new from {sender}\"."),
+                 required: [], emptyWhen: "every {token} in binding (or in every line of lines) is absent", [
+                "binding": prop("string", "Text with {tokens}, e.g. \"{title}\" or \"{count} new from {sender}\". Required unless lines is set. May contain real line breaks (\\n in JSON) and the rich-text markup: **bold**, *italic*, `mono`, __underline__, ~~strike~~, {{size=14 color=#FF3B30 font=serif weight=medium}}text{{/}} (span), {{align=center}} at the very start of a line (leading|center|trailing), and \\* \\_ \\~ \\` \\{ for literal characters. An unmatched marker prints literally and validate_template warns. A line that has tokens, all absent, collapses (or stays blank with emptyBehavior keep); a line of literal text stays."),
+                "lines": prop("array", "Structured rich text; takes precedence over binding. Each line: {align?: leading|center|trailing (overrides the component's alignment for that line), runs: [run]}. Each run: {text?: string (markup allowed), token?: \"{field}\", weight?: regular|medium|semibold|bold, italic?: bool, font?: sans|mono|serif|rounded, size?: 6-72, color?: colour, underline?: bool, strike?: bool}. A run key left out inherits the component's style. Lines are stacked with lineSpacing; maxLines truncates.", items: o(["type": s("object"), "properties": o([
+                    "align": prop("string", "This line's alignment.", values: HeraldTextAlignment.allCases.map(\.rawValue)),
+                    "runs": prop("array", "Styled pieces, drawn one after another.", items: o(["type": s("object"), "properties": o([
+                        "text": prop("string", "Literal text (markup allowed)."),
+                        "token": prop("string", "A field, \"{project}\"; its value follows text."),
+                        "weight": prop("string", "Font weight.", values: HeraldFontWeight.allCases.map(\.rawValue)),
+                        "italic": prop("boolean", "Italic."),
+                        "font": prop("string", "Font family.", values: HeraldFontFamily.allCases.map(\.rawValue)),
+                        "size": prop("number", "Points (6-72).", min: 6, max: 72),
+                        "color": color,
+                        "underline": prop("boolean", "Underline."),
+                        "strike": prop("boolean", "Strikethrough."),
+                    ])])),
+                ])])),
+                "lineSpacing": prop("number", "Extra points between lines (default 0). Applies to lines made with line breaks or lines."),
                 "style": prop("string", "Typography preset.", values: HeraldTextStyle.allCases.map(\.rawValue), def: s("body")),
                 "maxLines": prop("integer", "Line limit; omit for the style's default.", min: 1),
                 "color": color,
@@ -312,7 +327,7 @@ public enum ComponentSchema {
                 "weight": prop("string", "Font weight; omit for the style's weight.", values: HeraldFontWeight.allCases.map(\.rawValue)),
                 "alignment": prop("string", "Horizontal text alignment inside the cell.", values: HeraldTextAlignment.allCases.map(\.rawValue)),
                 "markdown": prop("boolean", "Render inline Markdown ([text](url) links). Default true for style body, false otherwise."),
-            ], example: #"{"type":"text","binding":"{title}","style":"title","maxLines":2}"#),
+            ], example: #"{"type":"text","binding":"**Project:**\n{{align=trailing}}*`{project}`*","style":"body"}"#),
             comp("image", "A picture from a binding (file path, data: URI or https URL).",
                  emptyWhen: "the binding's token is absent", [
                 "binding": prop("string", "Default \"{image}\"."),

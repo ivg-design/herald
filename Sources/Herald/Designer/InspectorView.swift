@@ -492,7 +492,11 @@ private struct TextComponentEditor: View {
     let id: String
     var body: some View {
         let b = PayloadBinder<HeraldTextComponent>.of(model, id)
-        FieldRow("Text") { TokenTextField(model: model, title: "{title} \u{2014} {count}", text: b.binding(\.binding, ""), multiline: true) }
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Text").font(.caption).foregroundStyle(.secondary)
+            RichTextField(model: model, id: id)
+        }
+        FieldRow("Spacing") { OptionalNumberField(value: b.binding(\.lineSpacing, nil), placeholder: "0").heraldHelp(.designerFontSize) }
         FieldRow("Style") {
             Picker("", selection: b.binding(\.style, .body)) {
                 ForEach(HeraldTextStyle.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }

@@ -719,7 +719,9 @@ public extension HeraldTemplate {
 
         switch comp {
         case .text(let t):
-            binding("binding", t.binding)
+            if t.lines == nil || t.lines!.isEmpty { binding("binding", t.binding) }
+            for issue in HeraldRichText.issues(binding: t.binding, lines: t.lines) { warn("\(p).\(t.lines == nil ? "binding" : "lines")", "rich text: \(issue)") }
+            if let ls = t.lineSpacing, ls < 0 { err("\(p).lineSpacing", "lineSpacing must be 0 or greater") }
             if let m = t.maxLines, m < 1 { err("\(p).maxLines", "maxLines must be at least 1") }
             if let f = t.fontSize, !(6...72).contains(f) { err("\(p).fontSize", "fontSize must be 6 to 72") }
             color("color", t.color)

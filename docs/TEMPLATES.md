@@ -180,6 +180,18 @@ template to a bundle leaves the path pointing at this Mac, so re-pick the image 
 from tokens; `hover` and `pressed` follow the mouse over the banner. A failed load renders a placeholder
 with the error and never crashes the banner.
 
+## Rich text
+
+A `text` binding may hold several lines and light markup: `**bold**`, `*italic*`, `` `mono` ``, `__underline__`,
+`~~strike~~`, spans `{{size=14 color=#FF3B30}}...{{/}}` and `{{align=center}}` at the start of a line. For full
+control use `lines` (lines of styled runs); it takes precedence over `binding`. A line whose tokens are all absent
+collapses. Everything is in [reference/components/text.md](reference/components/text.md).
+
+```json
+{"id":"project","row":0,"col":0,"component":{"type":"text","style":"body","lineSpacing":2,
+  "binding":"**Project:**\n{{align=trailing}}*`{project}`*"}}
+```
+
 ## Symbols
 
 `button`, `iconButton`, `actions`, `issuerIcon` and `badge` (and every action, see ACTIONS.md) can carry an SF Symbol. `symbol` is a plain name, or an object with the full styling. An unknown name is a validation warning, never an error: the component keeps its current look (an `iconButton` draws a question mark so the typo is visible).

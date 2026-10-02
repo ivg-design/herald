@@ -168,7 +168,7 @@ struct GridBannerView: View {
     @ViewBuilder private func component(of cell: HeraldCell, _ gridCtx: GridContext, replay: HeraldSpeech? = nil) -> some View {
         let ctx = gridCtx.forCell(cell.id)
         switch cell.component {
-        case .text(let c): TextComponentView(component: c, ctx: ctx, align: cell.align)
+        case .text(let c): TextComponentView(component: c, ctx: ctx, align: cell.align, keepEmptyLines: model.grid.behavior(for: cell.component) == .keep)
         case .image(let c): ImageComponentView(component: c, ctx: ctx)
         case .issuerIcon(let c): IssuerIconComponentView(component: c, ctx: ctx)
         case .timestamp(let c):

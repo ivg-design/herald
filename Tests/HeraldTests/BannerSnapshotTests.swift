@@ -174,6 +174,7 @@ enum Fixtures {
             }
         }
         for appearance in BannerSnapshotTests.appearances { names.append("grid3x4-\(appearance)") }
+        names += ["richtext-two-lines-light", "richtext-two-lines-dark"]
         names += ["matrix-collapse-light", "matrix-keep-light"]
         names += ["actions-row-6-light", "actions-row-max2-light", "actions-wrap-6-light", "actions-stack-max2-light"]
         return names
@@ -508,6 +509,53 @@ final class BannerSnapshotTests: XCTestCase {
             let size = pixelSize(png, "grid3x4-\(appearance)")
             XCTAssertEqual(size.width, 400 + 32, "the card is the grid's width plus the preview's 16 pt frame on each side")
         }
+    }
+
+    // MARK: Rich text (issue #64)
+
+    private static func richTemplate(_ binding: String, keep: Bool = false) -> JSONValue {
+        let escaped = binding.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\n", with: "\\n")
+        return json(#"{"name":"rich","app":"\#(app)","layoutVersion":2,"grid":{"rows":1,"cols":1,"rowSizes":["auto"],"colSizes":["fill"],"gap":6,"padding":14,"width":240},"cells":[{"id":"t","row":0,"col":0,"component":{"type":"text","binding":"\#(escaped)","style":"body","maxLines":6\#(keep ? ",\"emptyBehavior\":\"keep\"" : "")}}]}"#)
+    }
+
+    /// Mean x of the dark (text) pixels in the rows [from, to) of the card, light appearance.
+    private func inkCentroid(_ png: Data, rows: Range<Double>) throws -> Double {
+        let bmp = try XCTUnwrap(Bitmap(png: png))
+        var sum = 0.0, n = 0.0
+        for y in Int(Double(bmp.height) * rows.lowerBound)..<Int(Double(bmp.height) * rows.upperBound) {
+            for x in 0..<bmp.width {
+                let p = bmp.pixel(x, y)
+                if p.r < 90, p.g < 90, p.b < 90, p.a > 200 { sum += Double(x); n += 1 }
+            }
+        }
+        return n == 0 ? -1 : sum / n
+    }
+
+    /// "Project:" bold on line 1, {project} italic mono on line 2, line 2 right-aligned, drawn by the real renderer.
+    func testRichTextTwoLinesSnapshot() async throws {
+        let client = try await client()
+        let data = Self.json(#"{"title":"x","project":"Herald"}"#)
+        let markup = "**Project:**\n{{align=trailing}}*`{project}`*"
+        for appearance in Self.appearances {
+            let png = try await render(Self.richTemplate(markup), data: data, appearance: appearance, client: client)
+            assertSnapshot(png, named: "richtext-two-lines-\(appearance)")
+        }
+        let right = try await render(Self.richTemplate(markup), data: data, client: client)
+        let left = try await render(Self.richTemplate("**Project:**\n*`{project}`*"), data: data, client: client)
+        XCTAssertNotEqual(right, left, "the line alignment changes the picture")
+        let rTop = try inkCentroid(right, rows: 0.0..<0.5), rBottom = try inkCentroid(right, rows: 0.5..<1.0)
+        let lBottom = try inkCentroid(left, rows: 0.5..<1.0)
+        XCTAssertGreaterThan(rBottom, rTop + 20, "line 2 sits to the right of line 1 (\(rBottom) vs \(rTop))")
+        XCTAssertGreaterThan(rBottom, lBottom + 20, "line 2 moved right when aligned trailing")
+        // The structured form draws the same picture as the markup.
+        let structured = try await render(Self.json(#"{"name":"rich","app":"\#(Self.app)","layoutVersion":2,"grid":{"rows":1,"cols":1,"rowSizes":["auto"],"colSizes":["fill"],"gap":6,"padding":14,"width":240},"cells":[{"id":"t","row":0,"col":0,"component":{"type":"text","style":"body","maxLines":6,"lines":[{"runs":[{"text":"Project:","weight":"bold"}]},{"align":"trailing","runs":[{"token":"{project}","italic":true,"font":"mono"}]}]}}]}"#), data: data, client: client)
+        assertSnapshot(structured, named: "richtext-two-lines-light")
+        // A line whose tokens are all absent collapses: the card is as tall as the two-line one.
+        let withGap = try await render(Self.richTemplate("**Project:**\n{missing}\n{{align=trailing}}*`{project}`*"), data: data, client: client)
+        XCTAssertEqual(pixelSize(withGap, "gap").height, pixelSize(right, "right").height, "an all-empty line takes no height")
+        let kept = try await render(Self.richTemplate("**Project:**\n{missing}\nend", keep: true), data: data, client: client)
+        let collapsed = try await render(Self.richTemplate("**Project:**\n{missing}\nend"), data: data, client: client)
+        XCTAssertGreaterThan(pixelSize(kept, "kept").height, pixelSize(collapsed, "collapsed").height, "keep holds the blank line")
     }
 
     // MARK: SF Symbols (issue #45)

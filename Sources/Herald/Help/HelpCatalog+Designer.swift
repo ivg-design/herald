@@ -75,6 +75,16 @@ extension HelpEntry {
     static let designerSearchShortcuts = HelpEntry("designer.searchShortcuts", "Search Shortcuts", "Narrows the list of Shortcuts to names matching the text")
     static let designerInsertField = HelpEntry("designer.insertField", "Insert field", "A token such as {title} that is filled from the notification when shown")
     static let designerFieldBinding = HelpEntry("designer.fieldBinding", "Field binding", "Fixed text, or tokens like {title} filled from the notification")
+    static let designerRichEditor = HelpEntry("designer.richEditor", "Text editor", "The text with its markup visible: **bold**, *italic*, `mono`, __underline__, ~~strike~~, one line per line")
+    static let designerRichBold = HelpEntry("designer.richBold", "Bold", "Bold weight for the selected text")
+    static let designerRichItalic = HelpEntry("designer.richItalic", "Italic", "Italic for the selected text")
+    static let designerRichMono = HelpEntry("designer.richMono", "Monospace", "A monospaced font for the selected text")
+    static let designerRichUnderline = HelpEntry("designer.richUnderline", "Underline", "An underline for the selected text")
+    static let designerRichStrike = HelpEntry("designer.richStrike", "Strikethrough", "A line through the selected text")
+    static let designerRichSizeUp = HelpEntry("designer.richSizeUp", "Larger", "The selected text one point bigger than it is now")
+    static let designerRichSizeDown = HelpEntry("designer.richSizeDown", "Smaller", "The selected text one point smaller than it is now")
+    static let designerRichColor = HelpEntry("designer.richColor", "Text color", "A color for the selected text only")
+    static let designerRichLineAlign = HelpEntry("designer.richLineAlign", "Line alignment", "How the line holding the cursor is aligned; Cell follows the component")
     static let designerColorMode = HelpEntry("designer.colorMode", "Color", "Where the color comes from: the style, a named color or a custom one")
     static let designerColorWell = HelpEntry("designer.colorWell", "Custom color", "A custom color chosen in the system color panel")
     static let designerColorHex = HelpEntry("designer.colorHex", "Hex color", "The color written as #RRGGBB")
@@ -230,6 +240,16 @@ extension HeraldHelpCatalog {
         .designerInsertField,
         .designerFieldBinding,
         .designerColorMode,
+        .designerRichEditor,
+        .designerRichBold,
+        .designerRichItalic,
+        .designerRichMono,
+        .designerRichUnderline,
+        .designerRichStrike,
+        .designerRichSizeUp,
+        .designerRichSizeDown,
+        .designerRichColor,
+        .designerRichLineAlign,
         .designerColorWell,
         .designerColorHex,
         .designerAlignPoint,
