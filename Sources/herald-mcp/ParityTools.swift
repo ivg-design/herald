@@ -213,6 +213,12 @@ enum ParityTools {
             route: { _ in RouteCall(method: "GET", path: "/v1/relay/usage") }),
 
         ParityTool(definition: MCPToolDefinition(
+            name: "list_connectors", title: "List cloud connectors",
+            description: "Connectors that signed in to the relay with OAuth (ChatGPT and other clients that cannot send a custom key): who is connected, when they last used it, and the requests still waiting for the user's approval. A connector appears as an agent key of kind oauth, so revoke_agent_key removes it. Approving happens only on the Mac (a banner, or the 6-digit code in Settings > Cloud); it cannot be done here.",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/connectors") }),
+
+        ParityTool(definition: MCPToolDefinition(
             name: "create_agent_key", title: "Create a cloud agent key",
             description: """
             Mint a notify-only key for a cloud agent (Settings > Cloud > Agent keys). The reply holds the key ONCE (the relay keeps only a hash)             and a connector block with the MCP URL and Bearer for Claude, Codex and any remote MCP client. The key can send notifications and             read their receipts and replies; it cannot run commands, set callbacks or change anything on this Mac. Its notifications arrive as             the app cloud.<name>. Requires the Mac to be paired (relay_status).

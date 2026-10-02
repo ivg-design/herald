@@ -434,6 +434,7 @@ final class RelayRoutesTests: XCTestCase {
         func relayStatus() async -> RelayStatusReply {
             RelayStatusReply(paired: true, state: "Online", online: true, relayURL: "https://r", mcpURL: "https://r/mcp", deviceId: "d", lastSeenAt: nil, keys: [], log: [])
         }
+        func relayConnectors() async -> RelayConnectorsReply { RelayConnectorsReply() }
         func relayPair() async throws -> (code: String, deviceId: String) { ("ABCD-EFGH", "d") }
         func relayUnpair() async throws {}
         func relayCreateKey(name: String, client: String) async throws -> RelayKeyCreated {
@@ -672,5 +673,150 @@ final class VoiceReplySessionTests: XCTestCase {
         s.cancel()
         XCTAssertTrue(rec.cancelled)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+    }
+}
+
+// MARK: - Connector approvals (OAuth)
+
+private func consentFrame(id: String = String(repeating: "a", count: 72), name: String = "ChatGPT", code: String = "042917",
+                          expiresAt: String = "2099-01-01T00:00:00.000Z") -> String {
+    let o: [String: Any] = ["type": "consent", "id": id, "clientId": "hc_1", "clientName": name, "redirectHost": "chatgpt.com",
+                            "scope": "notify", "code": code, "status": "pending", "createdAt": "2026-10-02T10:00:00.000Z", "expiresAt": expiresAt]
+    return String(data: try! JSONSerialization.data(withJSONObject: o), encoding: .utf8)!
+}
+
+@MainActor
+final class ConnectorConsentHost: RelayHost {
+    var requested: [RelayConsent] = []
+    var resolved: [(String, String)] = []
+    func relayInputs(for envelope: RelayEnvelope) -> (muted: Bool, quiet: HeraldQuietStatus) { (false, HeraldQuietStatus()) }
+    func relayStatusNow() -> (muted: Bool, quiet: HeraldQuietStatus) { (false, HeraldQuietStatus()) }
+    func relayEnsureIssuer(_ key: RelayKeyRef) async {}
+    func relayDeliver(_ notification: HeraldNotification) async throws {}
+    func relayConsentRequested(_ consent: RelayConsent) { requested.append(consent) }
+    func relayConsentResolved(id: String, status: String) { resolved.append((id, status)) }
+}
+
+@MainActor
+final class RelayConsentTests: XCTestCase {
+    private func make(_ host: ConnectorConsentHost) -> RelayClient {
+        let store = RelayStateStore(file: nil)
+        store.update { $0.deviceId = "dev" }
+        return RelayClient(host: host, store: store, dedupe: RelayDedupe(file: nil), tokens: MemoryTokenStore(token: "hrd_x"))
+    }
+
+    func testAConsentFrameReachesTheHostWithTheCodeAndTheClientName() async {
+        let host = ConnectorConsentHost()
+        let socket = FakeRelaySocket(incoming: [welcome, consentFrame()])
+        try? await make(host).session(socket)
+        XCTAssertEqual(host.requested.count, 1)
+        let c = host.requested[0]
+        XCTAssertEqual(c.clientName, "ChatGPT")
+        XCTAssertEqual(c.redirectHost, "chatgpt.com")
+        XCTAssertEqual(c.code, "042917")
+        XCTAssertEqual(c.spacedCode, "042 917")
+        XCTAssertEqual(c.scope, "notify")
+        XCTAssertTrue(c.isPending())
+        XCTAssertTrue(socket.receipts("displayed").isEmpty, "a consent is not a notification: no receipt, no ack")
+        XCTAssertTrue(socket.frames.filter { $0["type"] as? String == "ack" }.isEmpty)
+    }
+
+    func testAResolvedFrameTellsTheHost() async {
+        let host = ConnectorConsentHost()
+        let socket = FakeRelaySocket(incoming: [welcome, #"{"type":"consent_resolved","id":"abc","status":"approved"}"#])
+        try? await make(host).session(socket)
+        XCTAssertEqual(host.resolved.count, 1)
+        XCTAssertEqual(host.resolved[0].0, "abc")
+        XCTAssertEqual(host.resolved[0].1, "approved")
+    }
+
+    func testAMalformedConsentIsIgnoredAndAHostWithoutConsentSupportIsUnaffected() async {
+        let host = ConnectorConsentHost()
+        let socket = FakeRelaySocket(incoming: [welcome, #"{"type":"consent","id":"x"}"#])
+        try? await make(host).session(socket)
+        XCTAssertTrue(host.requested.isEmpty)
+        // The older fake host has no consent methods: the defaults ignore the frame.
+        let plain = FakeRelayHost()
+        let store = RelayStateStore(file: nil); store.update { $0.deviceId = "dev" }
+        let c = RelayClient(host: plain, store: store, dedupe: RelayDedupe(file: nil), tokens: MemoryTokenStore(token: "hrd_x"))
+        try? await c.session(FakeRelaySocket(incoming: [welcome, consentFrame()]))
+        XCTAssertTrue(plain.delivered.isEmpty)
+    }
+
+    func testAnExpiredConsentIsNotPending() {
+        let past = RelayConsent(id: "i", clientName: "X", code: "123456", expiresAt: "2020-01-01T00:00:00.000Z")
+        XCTAssertFalse(past.isPending())
+        XCTAssertTrue(RelayConsent(id: "i", clientName: "X", code: "123456", expiresAt: "2099-01-01T00:00:00Z").isPending())
+        XCTAssertFalse(RelayConsent(id: "i", clientName: "X", code: "123456", status: "approved").isPending())
+    }
+
+    func testKeyListShowsAnOAuthKeyUnderTheConnectorsName() throws {
+        let json = #"{"keys":[{"id":"a1b2c3d4","name":"chatgpt","client":"other","scope":"notify","kind":"oauth","displayName":"ChatGPT","createdAt":"2026-10-02T10:00:00.000Z"},{"id":"e5f6a7b8","name":"bot","client":"claude","scope":"notify","kind":"static"},{"id":"11112222","name":"old","client":"claude","scope":"notify"}]}"#
+        struct R: Decodable { var keys: [RelayKeyInfo] }
+        let keys = try JSONDecoder().decode(R.self, from: Data(json.utf8)).keys
+        XCTAssertTrue(keys[0].isOAuth)
+        XCTAssertEqual(keys[0].title, "ChatGPT")
+        XCTAssertFalse(keys[1].isOAuth)
+        XCTAssertEqual(keys[1].title, "bot")
+        XCTAssertFalse(keys[2].isOAuth, "a relay from before OAuth sends no kind")
+    }
+
+    func testTheBannerAsksApproveOrDenyAndNeverAnythingElse() {
+        let c = BannerConfirmation.connectorConsent(name: "ChatGPT", host: "chatgpt.com")
+        XCTAssertEqual(c.kind, .connectorConsent)
+        XCTAssertEqual(c.title, "Let ChatGPT send you notifications?")
+        XCTAssertEqual(c.buttons.map(\.title), ["Approve", "Deny"])
+        XCTAssertEqual(c.buttons.map(\.choice), [.approve, .deny])
+        XCTAssertTrue(c.detail.contains("chatgpt.com"))
+        XCTAssertTrue(c.detail.contains("Nothing else"))
+        XCTAssertFalse(c.offers(.always), "no lasting approval for a connector")
+        let p = try? BannerConfirmation.fromPreview("connectorConsent", defaultName: "ChatGPT")
+        XCTAssertEqual(p?.kind, .connectorConsent)
+    }
+
+    func testTheConsentStripResolvesOnTheBannerAndCancelLeavesItPending() {
+        let surface = FakeSurface()
+        surface.up = ["herald.connectors/r1"]
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("herald-consent-\(UUID().uuidString)")
+        let flow = ConfirmationFlow(registry: AppRegistry(file: dir.appendingPathComponent("apps.json")),
+                                    approvals: TemplateCommandApprovals(file: dir.appendingPathComponent("a.json")))
+        flow.surface = surface
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var answers: [ConfirmationChoice] = []
+        flow.ask(.connectorConsent(name: "ChatGPT", host: "chatgpt.com"), app: "herald.connectors", id: "r1") { answers.append($0) }
+        XCTAssertEqual(surface.shown["herald.connectors/r1"]?.kind, .connectorConsent)
+        XCTAssertFalse(flow.answer(app: "herald.connectors", id: "r1", .once), "only Approve and Deny are offered")
+        XCTAssertTrue(flow.answer(app: "herald.connectors", id: "r1", .approve))
+        XCTAssertEqual(answers, [.approve])
+        // a banner that goes away without an answer cancels: the caller treats that as "still pending"
+        flow.ask(.connectorConsent(name: "ChatGPT", host: "chatgpt.com"), app: "herald.connectors", id: "r1") { answers.append($0) }
+        flow.drop(app: "herald.connectors", id: "r1")
+        XCTAssertEqual(answers, [.approve, .cancel])
+    }
+
+    func testApprovingAndDenyingGoToTheRelayAsDeviceConsentCalls() async throws {
+        let http = RecordingHTTP()
+        let api = RelayAPI(baseURL: URL(string: "https://r.example")!, token: "hrd_x", http: http)
+        try await api.decideConsent(id: "rid", approve: true)
+        try await api.decideConsent(id: "rid", approve: false)
+        XCTAssertEqual(http.requests.map { $0.url?.path }, ["/v1/device/consent", "/v1/device/consent"])
+        XCTAssertEqual(http.requests.map(\.httpMethod), ["POST", "POST"])
+        XCTAssertEqual(http.requests[0].value(forHTTPHeaderField: "Authorization"), "Bearer hrd_x")
+        let bodies = try http.requests.map { try JSONSerialization.jsonObject(with: $0.httpBody!) as! [String: String] }
+        XCTAssertEqual(bodies[0], ["id": "rid", "decision": "approve"])
+        XCTAssertEqual(bodies[1], ["id": "rid", "decision": "deny"])
+    }
+
+    func testTheConnectorsRouteNeedsTheTokenAndNeverCarriesACode() async throws {
+        let b = RelayRoutesTests.FakeBackend()
+        let denied = await RelayRoutes.handle(HTTPRequest(method: "GET", path: "/v1/relay/connectors", headers: [:], body: Data()), token: "tok", backend: b)
+        XCTAssertEqual(denied?.status, 401)
+        let ok = await RelayRoutes.handle(HTTPRequest(method: "GET", path: "/v1/relay/connectors", headers: ["authorization": "Bearer tok"], body: Data()), token: "tok", backend: b)
+        XCTAssertEqual(ok?.status, 200)
+        let o = try JSONSerialization.jsonObject(with: ok!.body) as! [String: Any]
+        XCTAssertNotNil(o["connectors"])
+        XCTAssertNotNil(o["pending"])
+        let withPending = try JSONEncoder().encode(RelayConnectorsReply(pending: [.init(id: "i", clientName: "ChatGPT", redirectHost: "chatgpt.com", expiresAt: nil)]))
+        XCTAssertFalse(String(decoding: withPending, as: UTF8.self).lowercased().contains("code"), "the 6-digit code stays on the Mac's screen")
     }
 }

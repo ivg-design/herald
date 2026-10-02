@@ -24,7 +24,23 @@ public struct RelayKeyCreated: Codable, Equatable, Sendable {
     public var connectorConfig: String
 }
 
+/// Connectors approved through OAuth (they are `oauth` agent keys) and requests still waiting for a decision. The 6-digit
+/// codes are never returned here: they are for the person at the Mac.
+public struct RelayConnectorsReply: Codable, Equatable, Sendable {
+    public struct Pending: Codable, Equatable, Sendable {
+        public var id: String
+        public var clientName: String
+        public var redirectHost: String?
+        public var expiresAt: String?
+    }
+    public var connectors: [RelayKeyInfo]
+    public var pending: [Pending]
+
+    public init(connectors: [RelayKeyInfo] = [], pending: [Pending] = []) { self.connectors = connectors; self.pending = pending }
+}
+
 public protocol RelayBackend: Sendable {
+    func relayConnectors() async -> RelayConnectorsReply
     func relayStatus() async -> RelayStatusReply
     func relayPair() async throws -> (code: String, deviceId: String)
     func relayUnpair() async throws
@@ -42,6 +58,7 @@ public protocol RelayBackend: Sendable {
 ///   POST /v1/relay/keys            {name, client?} mints a notify-only key; the reply holds the key once and a connector block
 ///   DELETE /v1/relay/keys/{id}     revokes a key
 ///   GET  /v1/relay/usage           what today has cost of the free plan
+///   GET  /v1/relay/connectors      connectors approved through OAuth (kind oauth) and requests waiting for approval (no codes)
 struct RevokedReply: Encodable { var revoked: Bool; var id: String }
 struct KeysReply: Encodable { var keys: [RelayKeyInfo] }
 struct PairReply: Encodable { var paired: Bool; var code: String; var deviceId: String }
@@ -76,6 +93,7 @@ public enum RelayRoutes {
                 let b = (try? HeraldJSON.decoder().decode(Body.self, from: req.body)) ?? Body()
                 guard let name = b.name, !name.isEmpty else { throw BackendError(400, "name is required") }
                 return HTTPResponse.json(201, try await backend.relayCreateKey(name: name, client: b.client ?? "other"))
+            case ("GET", "connectors"): return HTTPResponse.json(200, await backend.relayConnectors())
             case ("GET", "usage"): return HTTPResponse.json(200, try await backend.relayUsage())
             default:
                 if req.method == "DELETE", sub.hasPrefix("keys/") {

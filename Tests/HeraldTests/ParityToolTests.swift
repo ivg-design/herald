@@ -81,6 +81,7 @@ final class ParityToolTests: XCTestCase {
             Case(tool: "wait_for_reply", args: ["notificationId": s("n1"), "app": s("demo"), "timeoutSeconds": .number(30)], method: "GET", path: "/v1/replies/wait", query: ["app": "demo", "id": "n1", "timeout": "30"]),
             Case(tool: "relay_status", args: [:], method: "GET", path: "/v1/relay/status"),
             Case(tool: "relay_usage", args: [:], method: "GET", path: "/v1/relay/usage"),
+            Case(tool: "list_connectors", args: [:], method: "GET", path: "/v1/relay/connectors"),
             Case(tool: "create_agent_key", args: ["name": s("build-bot"), "client": s("claude")], method: "POST", path: "/v1/relay/keys", body: ["name": s("build-bot"), "client": s("claude")]),
             Case(tool: "revoke_agent_key", args: ["id": s("a1b2c3d4")], method: "DELETE", path: "/v1/relay/keys/a1b2c3d4"),
             Case(tool: "list_approvals", args: [:], method: "GET", path: "/v1/actions/approvals"),

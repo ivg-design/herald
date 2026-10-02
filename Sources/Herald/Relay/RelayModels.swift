@@ -79,10 +79,51 @@ public struct RelayKeyInfo: Codable, Equatable, Sendable, Identifiable {
     public var name: String
     public var client: String
     public var scope: String
+    /// `static` for a key made in Settings, `oauth` for a connector approved through the OAuth flow (ChatGPT and friends).
+    public var kind: String?
+    /// The connector's own name for an oauth key ("ChatGPT"); `name` is its slug.
+    public var displayName: String?
     public var createdAt: String?
     public var lastUsedAt: String?
     public var revokedAt: String?
     public var isActive: Bool { revokedAt == nil }
+    public var isOAuth: Bool { kind == "oauth" }
+    /// What a person calls it: the connector's name for an oauth key, otherwise the key name.
+    public var title: String { isOAuth ? (displayName ?? name) : name }
+}
+
+/// A connector asking to be approved (the OAuth flow, docs/CLOUD.md "Connect ChatGPT"): the relay pushes it down the socket,
+/// Herald asks on a banner, and the 6-digit `code` is the fallback the user can type on the consent page.
+public struct RelayConsent: Codable, Equatable, Sendable, Identifiable {
+    public var id: String
+    public var clientId: String?
+    public var clientName: String
+    /// Where the browser goes after the decision (the connector's own host), so a look-alike name is visible.
+    public var redirectHost: String?
+    public var scope: String?
+    public var code: String
+    /// `pending`, `approved`, `denied` or `expired`.
+    public var status: String
+    public var createdAt: String?
+    public var expiresAt: String?
+
+    public init(id: String, clientId: String? = nil, clientName: String, redirectHost: String? = nil, scope: String? = "notify",
+                code: String, status: String = "pending", createdAt: String? = nil, expiresAt: String? = nil) {
+        self.id = id; self.clientId = clientId; self.clientName = clientName; self.redirectHost = redirectHost; self.scope = scope
+        self.code = code; self.status = status; self.createdAt = createdAt; self.expiresAt = expiresAt
+    }
+
+    public var expiresDate: Date? {
+        guard let expiresAt else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: expiresAt) ?? ISO8601DateFormatter().date(from: expiresAt)
+    }
+    public func isPending(now: Date = Date()) -> Bool {
+        status == "pending" && (expiresDate.map { $0 > now } ?? true)
+    }
+    /// "123 456": the code as it is read off the screen.
+    public var spacedCode: String { code.count == 6 ? String(code.prefix(3)) + " " + String(code.suffix(3)) : code }
 }
 
 /// A key just minted: the only time its secret is ever shown.

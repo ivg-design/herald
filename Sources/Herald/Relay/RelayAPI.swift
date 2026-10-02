@@ -112,6 +112,19 @@ public struct RelayAPI: Sendable {
     public func info() async throws -> RelayDeviceInfo { try await run(try request("GET", "/v1/device/info"), as: RelayDeviceInfo.self) }
     public func usage() async throws -> RelayUsage { try await run(try request("GET", "/v1/device/usage"), as: RelayUsage.self) }
 
+    // MARK: Connector approvals (OAuth)
+
+    public func consents() async throws -> [RelayConsent] {
+        struct R: Decodable { var consents: [RelayConsent] }
+        return try await run(try request("GET", "/v1/device/consents"), as: R.self).consents
+    }
+
+    /// 409 (already decided) and 410 (expired) come back as `RelayError.http`.
+    public func decideConsent(id: String, approve: Bool) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["id": id, "decision": approve ? "approve" : "deny"])
+        try await perform(try request("POST", "/v1/device/consent", body: body))
+    }
+
     // MARK: Receipts and voice replies
 
     public func sendReceipt(_ receipt: RelayReceipt) async throws {

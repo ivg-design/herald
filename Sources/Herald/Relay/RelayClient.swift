@@ -65,6 +65,15 @@ public protocol RelayHost: AnyObject {
     /// Sends the notification through the normal path and returns once its banner is up (or the item is in History when the
     /// banner is not shown). Throws when it could not be delivered.
     func relayDeliver(_ notification: HeraldNotification) async throws
+    /// A connector (ChatGPT, ...) asks to be approved. Herald shows the question on a banner; it never takes focus.
+    func relayConsentRequested(_ consent: RelayConsent)
+    /// The request was settled somewhere else (the 6-digit code on the consent page, the page's Deny, a timeout).
+    func relayConsentResolved(id: String, status: String)
+}
+
+public extension RelayHost {
+    func relayConsentRequested(_ consent: RelayConsent) {}
+    func relayConsentResolved(id: String, status: String) {}
 }
 
 public enum RelayBackoff {
@@ -250,6 +259,15 @@ public final class RelayClient {
     public func handle(frame: String) async {
         guard let data = frame.data(using: .utf8),
               let type = ((try? JSONSerialization.jsonObject(with: data)) as? [String: Any])?["type"] as? String else { return }
+        if type == "consent" {
+            if let c = try? JSONDecoder().decode(RelayConsent.self, from: data) { host?.relayConsentRequested(c) }
+            return
+        }
+        if type == "consent_resolved" {
+            let o = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            if let id = o?["id"] as? String { host?.relayConsentResolved(id: id, status: o?["status"] as? String ?? "") }
+            return
+        }
         guard type == "notify" else { return }   // "welcome", "pong" and anything unknown are ignored
         guard let env = try? JSONDecoder().decode(RelayEnvelope.self, from: data) else { return }
         await handleNotify(env)

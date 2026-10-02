@@ -16,6 +16,9 @@ final class RelayController: RelayHost, RelayBackend {
     private(set) var usage: RelayUsage?
     private(set) var pairingCode: String?
     private(set) var lastError: String?
+    /// Connector requests the relay has pushed (the OAuth flow): pending ones show a banner and a code in Settings > Cloud.
+    private(set) var consents: [RelayConsent] = []
+    static let consentApp = "herald.connectors"
     private var issuerKeys = Set<String>()
     private var monitor: NWPathMonitor?
     private var observers: [NSObjectProtocol] = []
@@ -102,6 +105,86 @@ final class RelayController: RelayHost, RelayBackend {
 
     func relayDeliver(_ notification: HeraldNotification) async throws { _ = try await controller.notify(notification) }
 
+    // MARK: Connector approvals (OAuth)
+
+    /// Requests that can still be approved, newest first.
+    var pendingConsents: [RelayConsent] { consents.filter { $0.isPending() } }
+
+    /// Connectors (oauth keys) that are connected now.
+    var connectors: [RelayKeyInfo] { keys.filter { $0.isActive && $0.isOAuth } }
+
+    func relayConsentRequested(_ consent: RelayConsent) {
+        guard consent.status == "pending" else { return }
+        let isNew = !consents.contains { $0.id == consent.id }
+        consents.removeAll { $0.id == consent.id }
+        consents.insert(consent, at: 0)
+        controller.changed()
+        // A reconnect re-sends what is still pending: ask once per request.
+        if isNew { Task { await presentConsentBanner(consent) } }
+    }
+
+    func relayConsentResolved(id: String, status: String) {
+        consents.removeAll { $0.id == id }
+        controller.confirmations.drop(app: Self.consentApp, id: id)
+        controller.dismissItem(app: Self.consentApp, id: id, action: nil)
+        controller.changed()
+        if status == "approved" { Task { await refreshKeys() } }
+    }
+
+    /// The question lives on a banner (the inline strip of DESIGN 8): Approve / Deny, no window, no focus change. Closing the
+    /// banner without answering leaves the request pending; its code is still in Settings > Cloud.
+    private func presentConsentBanner(_ c: RelayConsent) async {
+        _ = try? controller.register(HeraldAppRegistration(app: Self.consentApp, appName: "Herald connectors"))
+        var n = HeraldNotification(app: Self.consentApp, id: c.id, title: "Connector request", body: "\(c.clientName) is asking to connect to Herald.")
+        n.persistent = true
+        n.metadata = .object(["source": .string("connector-approval")])
+        guard (try? await controller.notify(n)) != nil else { return }
+        let host = c.redirectHost ?? "its own site"
+        controller.confirmations.ask(.connectorConsent(name: c.clientName, host: host), app: Self.consentApp, id: c.id) { [weak self] choice in
+            switch choice {
+            case .approve: Task { await self?.decideConsent(id: c.id, approve: true) }
+            case .deny: Task { await self?.decideConsent(id: c.id, approve: false) }
+            default: break
+            }
+        }
+    }
+
+    /// Approve or deny from the banner or Settings. A request already settled elsewhere (409) or expired (410) just goes away.
+    func decideConsent(id: String, approve: Bool) async {
+        guard let api = client.api, isPaired else { return }
+        do {
+            try await api.decideConsent(id: id, approve: approve)
+            lastError = nil
+        } catch RelayError.http(let code, _) where code == 409 || code == 410 {
+            lastError = code == 410 ? "That connector request expired. Start the connection again." : nil
+        } catch {
+            lastError = error.localizedDescription
+            controller.changed()
+            return
+        }
+        consents.removeAll { $0.id == id }
+        controller.confirmations.drop(app: Self.consentApp, id: id)
+        controller.dismissItem(app: Self.consentApp, id: id, action: nil)
+        await refreshKeys()
+    }
+
+    /// Settings > Cloud opens: what the relay still holds (a request pushed while Herald was off would not be on screen).
+    func refreshConsents() async {
+        guard let api = client.api, isPaired, let list = try? await api.consents() else { return }
+        let pending = list.filter { $0.isPending() }
+        let known = Set(consents.map(\.id))
+        consents = pending
+        controller.changed()
+        for c in pending where !known.contains(c.id) { await presentConsentBanner(c) }
+    }
+
+    func relayConnectors() async -> RelayConnectorsReply {
+        if isPaired { await refreshKeys(); await refreshConsents() }
+        return RelayConnectorsReply(
+            connectors: connectors,
+            pending: pendingConsents.map { .init(id: $0.id, clientName: $0.clientName, redirectHost: $0.redirectHost, expiresAt: $0.expiresAt) })
+    }
+
     // MARK: Hooks from the rest of the app
 
     static func isCloud(_ app: String) -> Bool { app.hasPrefix(RelayDefaults.appPrefix) }
@@ -140,7 +223,7 @@ final class RelayController: RelayHost, RelayBackend {
         client.stop()
         tokens.delete()
         store.update { $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil }
-        keys = []; usage = nil; issuerKeys = []
+        keys = []; usage = nil; issuerKeys = []; consents = []
         client.start()
         controller.changed()
     }

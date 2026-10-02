@@ -18,6 +18,9 @@ public enum ConfirmationChoice: String, Sendable, Equatable {
     case ok
     /// Acknowledge and open System Settings > Privacy > Reminders.
     case openSettings
+    /// Approve a connector's request to use this Mac's relay (the OAuth flow).
+    case approve
+    case deny
 }
 
 public extension BannerConfirmationButton.Role {
@@ -50,7 +53,7 @@ public struct BannerConfirmationButton: Sendable, Equatable, Identifiable {
 
 public struct BannerConfirmation: Sendable, Equatable, Identifiable {
     public enum Kind: String, Sendable, Equatable, CaseIterable {
-        case callbackHost, command, script, shortcut, templateCommand, remindersError, remindersDenied, destructiveAction
+        case callbackHost, command, script, shortcut, templateCommand, remindersError, remindersDenied, destructiveAction, connectorConsent
     }
 
     /// `caution` asks a question; `error` reports a failure.
@@ -160,6 +163,16 @@ public extension BannerConfirmation {
             buttons: [.init(.once, short(label, limit: 24), .danger), .init(.cancel, "Cancel", .cancel)])
     }
 
+    /// A cloud connector (ChatGPT, Claude, ...) asks to connect through the relay's OAuth flow. Approving mints a notify-only
+    /// key for it. Not answering leaves the request pending (its 6-digit code is in Settings > Cloud).
+    static func connectorConsent(name: String, host: String) -> BannerConfirmation {
+        BannerConfirmation(
+            kind: .connectorConsent,
+            title: "Let \(short(name, limit: 40)) send you notifications?",
+            detail: "\(name) can send notifications to this Mac and read their receipts and your replies. Nothing else: no commands, files or settings. It returns to \(host). Approve only if you just started this connection.",
+            buttons: [.init(.approve, "Approve", .primary), .init(.deny, "Deny", .cancel)])
+    }
+
     /// "Couldn't add to Reminders". A denied permission offers a shortcut to the Privacy settings.
     static func remindersError(message: String, canOpenSettings: Bool) -> BannerConfirmation {
         var buttons = [BannerConfirmationButton(.ok, "OK", .primary)]
@@ -223,6 +236,8 @@ public extension BannerConfirmation {
                                     replacedIssuerLabel: try text("replaces"))
         case .destructiveAction:
             return .destructiveAction(label: try text("label") ?? "Delete", name: name)
+        case .connectorConsent:
+            return .connectorConsent(name: name, host: host)
         case .remindersError, .remindersDenied:
             return .remindersError(message: try text("message") ?? "Herald does not have permission to use Reminders.",
                                    canOpenSettings: kind == .remindersDenied)

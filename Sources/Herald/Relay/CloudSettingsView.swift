@@ -42,6 +42,7 @@ struct CloudSettingsView: View {
                 if let e = relay.lastError ?? message { Text(e).font(.caption).foregroundStyle(.red) }
             }
             if relay.isPaired {
+                connectorSection
                 Section("Agent keys") {
                     ForEach(relay.keys.filter(\.isActive)) { k in keyRow(k) }
                     if relay.keys.allSatisfy({ !$0.isActive }) { Text("No keys yet.").font(.caption).foregroundStyle(.secondary) }
@@ -77,7 +78,7 @@ struct CloudSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             urlText = relay.relayURL
-            if relay.isPaired { Task { await relay.refreshKeys(); _ = try? await relay.relayUsage() } }
+            if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); _ = try? await relay.relayUsage() } }
         }
     }
 
@@ -96,13 +97,49 @@ struct CloudSettingsView: View {
     @ViewBuilder private func keyRow(_ k: RelayKeyInfo) -> some View {
         HStack {
             VStack(alignment: .leading) {
-                Text(k.name)
-                Text("cloud.\(HeraldAgent.slug(k.name)) \u{00B7} \(k.client) \u{00B7} notify").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                Text(k.title)
+                Text("cloud.\(HeraldAgent.slug(k.name)) \u{00B7} \(k.isOAuth ? "connector (oauth)" : k.client) \u{00B7} notify").font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
             }
             Spacer()
             Button("Design\u{2026}") { DesignerWindow.show(controller: controller, app: "cloud." + HeraldAgent.slug(k.name), template: AgentIdentity.templateName) }
                 .heraldHelp(.cloudDesign)
             Button("Revoke", role: .destructive) { run { try await relay.relayRevokeKey(id: k.id) } } .heraldHelp(.cloudRevoke)
+        }
+    }
+
+    /// ChatGPT and other connectors that sign in with OAuth: the requests waiting for a decision (with the 6-digit code to type
+    /// on the consent page when the banner was missed) and the connectors that are connected.
+    @ViewBuilder private var connectorSection: some View {
+        let _ = ticker.tick
+        Section("Connector approvals") {
+            Text("A connector such as ChatGPT asks to connect from its own settings; the request shows up here and as a banner. Approve it there, or type the code on the page that opened in your browser.")
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(relay.pendingConsents) { c in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(c.clientName) wants to connect")
+                        Text("returns to \(c.redirectHost ?? "its own site")").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(c.spacedCode).font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled)
+                        .accessibilityLabel("Approval code \(c.code)")
+                    Button("Approve") { Task { await relay.decideConsent(id: c.id, approve: true) } }
+                        .heraldHelp(name: "Approve connector", detail: "lets this connector send notifications to this Mac")
+                    Button("Deny", role: .destructive) { Task { await relay.decideConsent(id: c.id, approve: false) } }
+                        .heraldHelp(name: "Deny connector", detail: "refuses this connection request")
+                }
+            }
+            if relay.pendingConsents.isEmpty { Text("Nothing is waiting for approval.").font(.caption).foregroundStyle(.secondary) }
+            ForEach(relay.connectors) { k in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(k.title)
+                        Text("connected \u{00B7} notify only").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Revoke", role: .destructive) { run { try await relay.relayRevokeKey(id: k.id) } } .heraldHelp(.cloudRevoke)
+                }
+            }
         }
     }
 
