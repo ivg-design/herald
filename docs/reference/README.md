@@ -73,6 +73,7 @@ and dark, limits.
 | [api.md](api.md) | Every HTTP endpoint with request, response and errors, limits. |
 | [cli.md](cli.md) | The `herald` command line tool. |
 | [mcp-tools.md](mcp-tools.md) | Every MCP tool and its arguments, resources. |
+| [parity.md](parity.md) | Every Designer, History and Settings capability against its route, CLI command and MCP tool. |
 
 ### Reference
 
