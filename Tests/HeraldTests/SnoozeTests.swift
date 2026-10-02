@@ -398,3 +398,32 @@ final class SnoozeRouteTests: XCTestCase {
         XCTAssertEqual(backend.snoozed.first?.2, 10)
     }
 }
+
+// MARK: Re-arm after sleep / clock change (issue #23)
+
+final class SnoozeRearmTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+    private func p(_ id: String, _ dt: TimeInterval) -> PendingSnooze { PendingSnooze(app: "a", id: id, until: now.addingTimeInterval(dt)) }
+
+    func testSleepPastDueFiresOldestFirstAndFutureOnesAreRescheduled() {
+        let plan = Snooze.rearmPlan([p("late", -10), p("future", 600), p("early", -300), p("edge", 0)], now: now)
+        XCTAssertEqual(plan.fireNow.map(\.id), ["early", "late", "edge"])
+        XCTAssertEqual(plan.schedule.map(\.id), ["future"])
+    }
+    func testClockMovedBackwardMakesNothingDueAndKeepsDates() {
+        // The clock was set back an hour: what was due is now 55 min away; the plan reschedules the same stored date.
+        let behind = now.addingTimeInterval(-3600)
+        let plan = Snooze.rearmPlan([p("x", -300)], now: behind)
+        XCTAssertTrue(plan.fireNow.isEmpty)
+        XCTAssertEqual(plan.schedule, [p("x", -300)])
+    }
+    func testClockMovedForwardFiresEverythingNowDue() {
+        let ahead = now.addingTimeInterval(86_400)
+        let plan = Snooze.rearmPlan([p("a1", 60), p("a2", 3600)], now: ahead)
+        XCTAssertEqual(plan.fireNow.map(\.id), ["a1", "a2"])
+        XCTAssertTrue(plan.schedule.isEmpty)
+    }
+    func testNothingPending() {
+        XCTAssertEqual(Snooze.rearmPlan([], now: now), SnoozeRearmPlan(fireNow: [], schedule: []))
+    }
+}

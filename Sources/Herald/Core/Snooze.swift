@@ -83,6 +83,32 @@ public extension Snooze {
     }
 }
 
+// MARK: Re-arm after wake or clock change
+
+/// One snoozed notification and when it is due.
+public struct PendingSnooze: Equatable, Sendable {
+    public var app: String
+    public var id: String
+    public var until: Date
+    public init(app: String, id: String, until: Date) { self.app = app; self.id = id; self.until = until }
+}
+
+public struct SnoozeRearmPlan: Equatable, Sendable {
+    /// Already due: bring back now, oldest due first, chiming once for the lot.
+    public var fireNow: [PendingSnooze]
+    /// Still pending: (re)arm a timer for the wall-clock date.
+    public var schedule: [PendingSnooze]
+}
+
+public extension Snooze {
+    /// What to do with the pending snoozes after the Mac woke from sleep or the clock changed (a timer set for a
+    /// wall-clock time may have been missed, or now be too early or late). Pure, so it is unit tested (issue #23).
+    static func rearmPlan(_ pending: [PendingSnooze], now: Date) -> SnoozeRearmPlan {
+        SnoozeRearmPlan(fireNow: pending.filter { $0.until <= now }.sorted { $0.until < $1.until },
+                        schedule: pending.filter { $0.until > now })
+    }
+}
+
 // MARK: History marker
 
 public enum SnoozeMarker {

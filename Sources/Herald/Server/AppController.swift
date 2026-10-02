@@ -700,12 +700,12 @@ final class AppController {
     /// Arms a timer for every pending snooze and fires the ones that are already due. Runs at launch and
     /// again after sleep or a clock change, when a timer set for a wall-clock time may have been missed.
     private func rearmSnoozes() {
-        let now = Date()
-        for item in history.undismissed() {
-            guard let until = item.snoozedUntil else { continue }
-            if until <= now { fireSnooze(app: item.app, id: item.id, playSound: true) }
-            else { banners.scheduleSnooze(app: item.app, id: item.id, at: until) }
+        let pending = history.undismissed().compactMap { item in
+            item.snoozedUntil.map { PendingSnooze(app: item.app, id: item.id, until: $0) }
         }
+        let plan = Snooze.rearmPlan(pending, now: Date())
+        for (i, p) in plan.fireNow.enumerated() { fireSnooze(app: p.app, id: p.id, playSound: i == 0) }
+        for p in plan.schedule { banners.scheduleSnooze(app: p.app, id: p.id, at: p.until) }
     }
 
     func bannerExpired(app: String, id: String) { dismissItem(app: app, id: id, action: "timeout", supersedePending: false) }
