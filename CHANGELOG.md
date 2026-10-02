@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.6.0 (Build 10) - 2026-10-02
+
+### Added
+
+- **Enable relay, one switch.** Settings → Cloud → Enable relay creates the user's OWN relay on their free Cloudflare
+  account: Herald opens the pre-filled API-token page, takes the token once (Keychain), and deploys the bundled Worker
+  itself through Cloudflare's API — account, workers.dev address, voice-reply bucket with 7-day expiry, upload,
+  secrets, health check — then pairs this Mac. Step log with Retry; deploying again upgrades in place; "Update available"
+  when Herald ships a newer relay. Off = unpair and revoke everything. No wrangler, no Node, no shared relay: the
+  maintainer's deployment is no longer a default.
+- **Advanced**: every relay parameter visible and editable (relay URL for any relay, account, worker name, subdomain,
+  bucket, retention, queue TTL, daily cap, max queue, body limit, per-key rate, max devices, device name, ping interval,
+  pairing secret) with Apply, Redeploy, Test connection, Pair with a code, Unpair, Forget token, Delete relay.
+- **OAuth 2.1 on the relay** (MCP authorization spec): discovery documents, dynamic client registration, PKCE,
+  consent page with "Approve in Herald" (a banner with Approve / Deny, never taking focus) or a 6-digit code under
+  Settings → Cloud → Connector approvals, access + rotating refresh tokens bound to a revocable agent key, revoke.
+  ChatGPT and OpenAI cloud agents connect by adding `…/mcp` as a connector with Authentication: OAuth. Static `hrk_`
+  keys still work for Claude Code / Codex.
+- **MCP setup parity**: `relay_token_url`, `relay_set_cloudflare_token` (write-only), `relay_deploy`, `relay_pair`,
+  `relay_unpair`, `relay_settings`, `relay_delete` (confirm), `relay_instructions`, `relay_test`, plus `list_connectors`
+  and `create_agent_key` — an agent can walk a user through the whole setup (docs/AGENT-QUICKSTART.md).
+- Worker hardened for many devices: per-device daily caps (500 notifications, 100 queued, 40 voice replies / 20 MB,
+  5,000 requests), pairing limits per client address, `MAX_DEVICES`, re-audited Durable Object routing, `/health`
+  reports the bundle hash. Free-plan budget for N devices in docs/CLOUD.md.
+
+### Changed
+
+- The relay bundle ships inside Herald (`Resources/relay/worker.js`, built by `make relay-bundle`; a test fails when
+  it is stale).
+
+1107 tests · 87 relay tests · 33 conformance checks.
+
 ## 1.5.0 (Build 9) - 2026-10-02
 
 ### Added
