@@ -623,13 +623,13 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
     public var referencedTokens: [String] {
         var strings = bindingStrings
         for a in inlineActions { strings += [a.label, a.url, a.input].compactMap { $0 } }
-        for sym in symbols { strings += (sym.colors ?? []) + [sym.variableValue].compactMap { $0 } }
+        for sym in symbols + inlineActions.compactMap(\.symbol) { strings += (sym.colors ?? []) + [sym.variableValue].compactMap { $0 } }
         var seen: [String] = []
         for s in strings { for t in TemplateResolver.placeholders(in: s) where !seen.contains(t) { seen.append(t) } }
         return seen
     }
 
-    /// The symbols the component carries (its own and those of its inline actions).
+    /// The symbols the component carries itself (inline actions' symbols are checked with the action).
     public var symbols: [HeraldSymbol] {
         var out: [HeraldSymbol] = []
         switch self {
@@ -640,7 +640,6 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
         case .iconButton(let p): out.append(p.fullSymbol)
         default: break
         }
-        out += inlineActions.compactMap(\.symbol)
         return out
     }
 

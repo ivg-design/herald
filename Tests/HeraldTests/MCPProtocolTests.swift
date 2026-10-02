@@ -1015,6 +1015,50 @@ final class MCPProtocolTests: XCTestCase {
         XCTAssertEqual(fake.calls("POST", "/v1/dismissAll").last?.json?["app"]?.stringValue, "a")
     }
 
+    // MARK: SF Symbols (issue #45)
+
+    func testComponentSchemaCarriesTheSymbolDefinition() async throws {
+        fake.components = nil
+        let one = try payload(try await call("component_schema", .object(["component": .string("button")])))
+        XCTAssertNotNil(one["schema"]?["properties"]?["symbol"])
+        let sym = try XCTUnwrap(one["definitions"]?["symbol"], "the symbol definition travels with the component")
+        for k in ["name", "weight", "scale", "placement", "renderingMode", "colors", "variableValue", "effect"] {
+            XCTAssertNotNil(sym["properties"]?[k], k)
+        }
+    }
+
+    func testValidateAndPutWarnAboutAnUnknownSymbolButSave() async throws {
+        let t = MCPFixtures.template(name: "sym", cells: """
+        {"id":"a","row":0,"col":0,"component":{"type":"badge","binding":"{title}","symbol":{"name":"no.such.symbol.here","variableValue":2}}}
+        """)
+        let v = try payload(try await call("validate_template", .object(["template": MCPFixtures.json(t)])))
+        XCTAssertEqual(v["valid"]?.boolValue, true, "an unknown symbol is a warning, not an error: \(v)")
+        let warnings = try XCTUnwrap(v["warnings"]?.arrayValue).compactMap { $0["message"]?.stringValue }
+        XCTAssertTrue(warnings.contains { $0.contains("not an SF Symbol") }, "\(warnings)")
+        XCTAssertTrue(warnings.contains { $0.contains("variableValue") }, "\(warnings)")
+        let put = try await call("put_template", .object(["template": MCPFixtures.json(t)]))
+        XCTAssertFalse(isError(put), (try? text(put)) ?? "")
+    }
+
+    func testAddActionRuleAcceptsASymbolOnAnAddedAndAMatchedAction() async throws {
+        let rule: JSONValue = MCPFixtures.json("""
+        {"add":{"id":"log","label":"Log it","kind":"url","url":"https://example.com","symbol":{"name":"checkmark.circle.fill","renderingMode":"palette","colors":["white","#34C759"]}}}
+        """)
+        let r = try await call("add_action_rule", .object(["app": .string("webwatcher.email"), "template": .string("email-accumulated"), "rule": rule]))
+        XCTAssertFalse(isError(r), (try? text(r)) ?? "")
+        var saved = try HeraldJSON.decoder().decode(HeraldTemplate.self, from: try XCTUnwrap(fake.calls("PUT", "/v1/templates").last).body)
+        XCTAssertEqual(saved.actionRules.last?.add?.symbol?.renderingMode, .palette)
+        XCTAssertEqual(saved.actionRules.last?.add?.symbol?.colors, ["white", "#34C759"])
+        let rule2: JSONValue = MCPFixtures.json(#"{"match":"markRead","symbol":"checkmark"}"#)
+        let r2 = try await call("add_action_rule", .object(["app": .string("webwatcher.email"), "template": .string("email-accumulated"), "rule": rule2]))
+        XCTAssertFalse(isError(r2), (try? text(r2)) ?? "")
+        saved = try HeraldJSON.decoder().decode(HeraldTemplate.self, from: try XCTUnwrap(fake.calls("PUT", "/v1/templates").last).body)
+        XCTAssertEqual(saved.actionRules.last?.symbol, HeraldSymbol(name: "checkmark"))
+        let bad: JSONValue = MCPFixtures.json(#"{"match":"markRead","symbol":{"name":"checkmark","weight":"chonky"}}"#)
+        let rb = try await call("add_action_rule", .object(["app": .string("webwatcher.email"), "template": .string("email-accumulated"), "rule": bad]))
+        XCTAssertTrue(isError(rb), "an unknown weight is a decode error with a path")
+    }
+
     // MARK: add_action_rule
 
     func testAddActionRuleAddsAShortcutAndShowsTheResult() async throws {

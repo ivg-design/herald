@@ -240,7 +240,7 @@ enum MCPToolCatalog {
             name: "add_action_rule", title: "Add action rule",
             description: """
             Add one rule to a saved template's actionRules: the two-way button system. A rule either changes an issuer action \
-            {match: "<id|label|*>", hide?, relabel?, style?, position?} or adds one of your own {add: {id, label, kind, ...}} \
+            {match: "<id|label|*>", hide?, relabel?, style?, symbol?, position?} or adds one of your own {add: {id, label, kind, ...}} \
             with kind url, command (shell), script (a file in Application Support/Herald/scripts, which herald_status lists: write \
             the file there first; it gets the notification JSON on stdin), shortcut (an Apple Shortcut from list_shortcuts; \
             input is text with {tokens}, or omitted for the full JSON), dismiss or snooze. A command, script or shortcut you add \
@@ -249,12 +249,16 @@ enum MCPToolCatalog {
             actions replaces that button, and the prompt says so. Example: \
             {"add": {"id": "followup", "label": "Follow up", "kind": "shortcut", "shortcut": "Create follow-up", \
             "input": "{title}\\n{url}"}}. Adding an action id that an earlier add-rule already has replaces that rule. \
+            Any action (an add, or a match rule's `symbol`) can carry an SF Symbol: a name ("checkmark.circle") or the full \
+            styling {name, weight, scale, placement, renderingMode, colors, variableValue, effect} (see component_schema \
+            definitions.symbol); an unknown name is a warning, not an error. Example: \
+            {"match": "markRead", "symbol": {"name": "checkmark.circle.fill", "renderingMode": "palette", "colors": ["white", "#34C759"]}}. \
             Validated before saving; returns the resulting button list.
             """,
             inputSchema: Schema.input([
                 "app": Schema.string("The app id."),
                 "template": Schema.string("The saved template's name (built-ins are read-only: copy one with put_template first)."),
-                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: default|destructive|cancel, position?, add?: {id, label, kind, url?|command?|script?|shortcut?, input?, snoozeMinutes?, style?}}."),
+                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: default|destructive|cancel, symbol?: <SF Symbol name or object>, position?, add?: {id, label, kind, url?|command?|script?|shortcut?, input?, snoozeMinutes?, style?, symbol?}}."),
             ], required: ["app", "template", "rule"]),
             destructive: true, idempotent: false),
 
