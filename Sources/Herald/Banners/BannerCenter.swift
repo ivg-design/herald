@@ -182,6 +182,9 @@ final class BannerCenter {
         }
         model.onReplySend = { [weak self] prompt, text in self?.controller.sendReply(app: item.app, id: item.id, prompt: prompt, text: text) }
         model.onReplyCancel = { [weak self] prompt in self?.controller.cancelReply(app: item.app, id: item.id, prompt: prompt) }
+        model.onRecordStop = { [weak self] p in self?.controller.stopRecording(app: item.app, id: item.id, prompt: p) }
+        model.onRecordSend = { [weak self] p in self?.controller.sendRecording(app: item.app, id: item.id, prompt: p) }
+        model.onRecordCancel = { [weak self] p in self?.controller.cancelRecording(app: item.app, id: item.id, prompt: p) }
 
         let stackModel = StackModel()
         stackModel.onExpand = { [weak self] in self?.setStackOpen(key: key, true) }
@@ -550,6 +553,21 @@ final class BannerCenter {
         return true
     }
 
+    // MARK: Inline record strip
+
+    /// Puts the record strip on a banner (or takes it off with nil) in place of the actions row. It needs no key status: its
+    /// buttons are clickable on the non-activating panel. A banner that was being answered counts down again from the start.
+    @discardableResult
+    func setRecord(app: String, id: String, _ prompt: BannerRecordPrompt?) -> Bool {
+        guard let e = entries[Self.key(app, id)] else { return false }
+        let wasRecording = e.model.record != nil
+        let heightMayChange = e.model.record?.phase != prompt?.phase
+        e.model.record = prompt
+        if prompt == nil, wasRecording { e.remaining = e.timeout }
+        if heightMayChange { relayout(animated: true) }   // the elapsed counter ticks without a layout
+        return true
+    }
+
     // MARK: Stacks (DESIGN section 9)
 
     /// Pushes the stack plan onto the banners: which card is on top, how many it stands for, what is open and which
@@ -728,7 +746,7 @@ final class BannerCenter {
             let hovered = e.shown && e.panel.frame.contains(mouse)
             if e.model.hovering != hovered { e.model.hovering = hovered }
             // A stack counts down as one: hovering its card or having it open holds every member, hidden ones too.
-            guard let rem = e.remaining, !hovered, !stackHeld(e, mouse: mouse), e.model.confirmation == nil, e.model.reply == nil else { continue }
+            guard let rem = e.remaining, !hovered, !stackHeld(e, mouse: mouse), e.model.confirmation == nil, e.model.reply == nil, e.model.record == nil else { continue }
             e.remaining = rem - 0.25
             if e.remaining! <= 0, let pair = split(e.key) { expired.append(pair) }
         }

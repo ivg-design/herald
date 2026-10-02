@@ -69,6 +69,8 @@ final class AppController {
     private(set) var confirmations: ConfirmationFlow!
     /// The MCP/API parity routes (settings, assets, bundles, History search, symbols...); see ParityService.
     private(set) var parityService: ParityService!
+    /// The cloud relay: the outbound socket, agent keys and receipts (docs/CLOUD.md).
+    private(set) var relay: RelayController!
     private var listener: HTTPLoopbackListener?
     private var token = ""
     private(set) var serverStatus = "Not started"
@@ -89,6 +91,7 @@ final class AppController {
         // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
+        relay = RelayController(controller: self)
     }
 
     var muted: Bool {
@@ -106,12 +109,14 @@ final class AppController {
             banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record)
             changed()
         }
+        voice.onSpoken = { [unowned self] app, id in relay.speechFinished(app: app, id: id) }
         voice.start()
         // Installed agents (agent.claude-code, ...) get the current default manifest and template; the user's own edits stay.
         AgentIssuer.refreshInstalled(supportDirectory: supportDirectory, registry: registry, manifests: manifests, templates: templates,
                                      detectedHost: HeraldHostApp.detectCurrent())
         startServer()
         restoreBanners()
+        relay.start()
         changed()
     }
 
@@ -119,7 +124,8 @@ final class AppController {
         listener?.stop(); listener = nil; serverRunning = false
         let router = Router(token: token, backend: BackendAdapter(self, parity: parityService), version: Self.version)
         // /v1/snooze and /v1/unsnooze are answered ahead of the router (see SnoozeRoutes); everything else falls through to it.
-        let handler = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self, parity: parityService)) { await router.handle($0) }
+        let snoozing = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self, parity: parityService)) { await router.handle($0) }
+        let handler = RelayRoutes.handler(token: token, backend: relay, fallback: snoozing)
         // The token is checked on the request head too, so an unauthenticated caller is turned away before
         // any of its body is buffered (the router still checks it again).
         let l = HTTPLoopbackListener(port: settings.effectivePort, headCheck: BearerAuth.headCheck(token: token), handler: handler)
@@ -589,7 +595,8 @@ final class AppController {
         case .openApp(let bundleId, let path):
             openApplication(bundleId: bundleId, path: path, action: action, item: item, manifest: manifest)
         case .reply(let reply):
-            beginReply(reply, action: action, origin: origin, item: item, manifest: manifest)
+            if reply.voice == true { beginRecording(item: item) }
+            else { beginReply(reply, action: action, origin: origin, item: item, manifest: manifest) }
         case .dismiss:
             dismissItem(app: app, id: id, action: action.label)
         case .snooze(let minutes):
@@ -635,6 +642,7 @@ final class AppController {
               let stored = ReplyRecorder.record(app: app, id: id, text: text, history: history, queue: replyQueue),
               let item = history.item(app: app, id: id) else { return }
         let clean = stored.text
+        relay.replySent(app: app, id: id, text: clean)
         pendingReplies[key] = nil
         banners.setReply(app: app, id: id, nil)
         changed()
@@ -661,6 +669,74 @@ final class AppController {
         let key = BannerCenter.key(app, id)
         guard pendingReplies.removeValue(forKey: key) != nil else { return }
         banners.setReply(app: app, id: id, nil)
+    }
+
+    // MARK: Voice reply (the Record button of a cloud notification)
+
+    private struct Recording { let session: VoiceReplySession; let ticker: Task<Void, Never> }
+    private var recordings: [String: Recording] = [:]
+
+    /// Record was pressed: the buttons give way to the record strip, the microphone is asked for on first use, and recording
+    /// starts. Nothing here starts by itself; this runs only from the button.
+    private func beginRecording(item: HeraldHistoryItem) {
+        let key = BannerCenter.key(item.app, item.id)
+        guard recordings[key] == nil else { return }
+        confirmations.drop(app: item.app, id: item.id)
+        dropReply(app: item.app, id: item.id)
+        let file = supportDirectory.appendingPathComponent("history/audio/replies/\(item.id).m4a")
+        let session = VoiceReplySession(recorder: MicRecorder(), transcriber: OnDeviceTranscriber(),
+                                        permission: { await MicRecorder.requestPermission() }, file: file)
+        session.onChange = { [weak self] prompt in self?.banners.setRecord(app: item.app, id: item.id, prompt) }
+        guard banners.setRecord(app: item.app, id: item.id, session.prompt) else {
+            flashFailure(app: item.app, id: item.id, reason: "the banner is not on screen to record on")
+            return
+        }
+        let ticker = Task { @MainActor [weak session] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                session?.tick(0.1)
+            }
+        }
+        recordings[key] = Recording(session: session, ticker: ticker)
+        Task { await session.start() }
+    }
+
+    func stopRecording(app: String, id: String, prompt: UUID) {
+        guard let r = recordings[BannerCenter.key(app, id)], r.session.prompt.id == prompt else { return }
+        r.session.stop()
+    }
+
+    func cancelRecording(app: String, id: String, prompt: UUID) {
+        let key = BannerCenter.key(app, id)
+        guard let r = recordings[key], r.session.prompt.id == prompt else { return }
+        r.session.cancel()
+        endRecording(key: key, app: app, id: id)
+    }
+
+    /// Send: transcribe on this Mac, upload the m4a and the transcript to the relay, keep a copy in History.
+    func sendRecording(app: String, id: String, prompt: UUID) {
+        let key = BannerCenter.key(app, id)
+        guard let r = recordings[key], r.session.prompt.id == prompt else { return }
+        r.ticker.cancel()
+        Task {
+            let result = await r.session.send { [relay] res in
+                try await relay!.client.reportVoiceReply(id: id, m4a: res.m4a, transcript: res.transcript, seconds: res.seconds)
+            }
+            guard let result else { return }   // the strip shows why; Cancel closes it
+            history.update(app: app, id: id) {
+                $0.reply = result.transcript ?? "(voice reply)"
+                $0.repliedAt = Date()
+                $0.replyAudioPath = result.file.path
+                $0.replyTranscript = result.transcript
+            }
+            endRecording(key: key, app: app, id: id)
+            dismissItem(app: app, id: id, action: "reply")
+        }
+    }
+
+    private func endRecording(key: String, app: String, id: String) {
+        recordings.removeValue(forKey: key)?.ticker.cancel()
+        banners.setRecord(app: app, id: id, nil)
     }
 
     // MARK: Open app

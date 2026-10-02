@@ -28,6 +28,8 @@ final class BannerModel: ObservableObject {
     /// The inline reply field (a `reply` action was pressed). Like `confirmation` it takes the actions row's place; only one
     /// of the two is up at a time. Sent through `onReplySend`, dropped through `onReplyCancel`.
     @Published var reply: BannerReplyPrompt?
+    /// The inline record strip (a voice `reply` action, "Record"). Takes the actions row's place like `reply`.
+    @Published var record: BannerRecordPrompt?
     @Published var hovering = false
     /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
     /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
@@ -82,6 +84,10 @@ final class BannerModel: ObservableObject {
     /// The reply field's Send (the id of its prompt, the text) and its cancel button.
     var onReplySend: (UUID, String) -> Void = { _, _ in }
     var onReplyCancel: (UUID) -> Void = { _ in }
+    /// The record strip's Stop, Send and cancel buttons (the id of the prompt they belong to).
+    var onRecordStop: (UUID) -> Void = { _ in }
+    var onRecordSend: (UUID) -> Void = { _ in }
+    var onRecordCancel: (UUID) -> Void = { _ in }
     var onHeight: (CGFloat) -> Void = { _ in }
 
     init(item: HeraldHistoryItem, appName: String, icon: NSImage, image: NSImage?,
@@ -104,7 +110,7 @@ final class BannerModel: ObservableObject {
     }
 
     /// A question or the reply field is on the banner in place of its actions row.
-    var replacesActions: Bool { confirmation != nil || reply != nil }
+    var replacesActions: Bool { confirmation != nil || reply != nil || record != nil }
 
     /// A button on the confirmation row was pressed (a preview leaves `onConfirmationAnswer` a no-op).
     func answerConfirmation(_ confirmation: BannerConfirmation, _ choice: ConfirmationChoice) {
@@ -314,6 +320,10 @@ struct BannerView: View {
                 BannerReplyView(prompt: prompt, inset: model.grid.grid?.padding ?? 14, accent: model.accent(dark: scheme == .dark),
                                 editable: model.liveAnimations,
                                 send: { model.onReplySend(prompt.id, $0) }, cancel: { model.onReplyCancel(prompt.id) })
+            } else if let rec = model.record {
+                BannerRecordView(prompt: rec, inset: model.grid.grid?.padding ?? 14, accent: model.accent(dark: scheme == .dark),
+                                 stop: { model.onRecordStop(rec.id) }, send: { model.onRecordSend(rec.id) },
+                                 cancel: { model.onRecordCancel(rec.id) })
             } else if let line = model.failureLine {
                 FailureLine(text: line, inset: model.grid.grid?.padding ?? 14)
             }

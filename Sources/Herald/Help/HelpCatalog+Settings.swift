@@ -47,6 +47,17 @@ extension HelpEntry {
     static let quietSounds = HelpEntry("settings.quietSounds", "Silence sounds", "Mutes notification sounds during this window")
     static let quietBanners = HelpEntry("settings.quietBanners", "Hide banners", "Holds back banners during this window")
     static let quietSummary = HelpEntry("settings.quietSummary", "Speak queued messages", "Reads aloud the messages held back once the window ends")
+    static let cloudRelayURL = HelpEntry("settings.cloudRelayURL", "Relay URL", "The cloud relay this Mac connects to; Herald only ever connects out")
+    static let cloudPair = HelpEntry("settings.cloudPair", "Pair", "Pairs this Mac with the relay using a one-time code")
+    static let cloudUnpair = HelpEntry("settings.cloudUnpair", "Unpair", "Forgets this pairing and revokes every agent key")
+    static let cloudReconnect = HelpEntry("settings.cloudReconnect", "Reconnect", "Drops the connection and connects to the relay again now")
+    static let cloudNewKey = HelpEntry("settings.cloudNewKey", "Create key", "Makes a notify-only key for a cloud agent; it is shown once")
+    static let cloudKeyName = HelpEntry("settings.cloudKeyName", "Key name", "Names the agent; its notifications arrive as cloud.<name>")
+    static let cloudKeyClient = HelpEntry("settings.cloudKeyClient", "Agent", "Claude and Codex keys use that app's icon")
+    static let cloudRevoke = HelpEntry("settings.cloudRevoke", "Revoke", "Stops this key working at once")
+    static let cloudCopyConfig = HelpEntry("settings.cloudCopyConfig", "Copy connector config", "Copies the URL and Bearer block to paste into the agent's connector settings")
+    static let cloudUsage = HelpEntry("settings.cloudUsage", "Usage today", "What today's relay traffic has used of the Cloudflare free plan")
+    static let cloudDesign = HelpEntry("settings.cloudDesign", "Design notifications", "Opens the Designer on this agent's banner")
     static let mcpReveal = HelpEntry("settings.mcpReveal", "Reveal server file", "The MCP server executable that AI clients launch, shown in Finder")
     static let mcpTest = HelpEntry("settings.mcpTest", "Test connection", "Starts the MCP server and checks that it answers")
     static let mcpInstallCLI = HelpEntry("settings.mcpInstallCLI", "Install command line tool", "Installs the herald command into your shell path")
@@ -101,6 +112,8 @@ extension HeraldHelpCatalog {
         .quietSounds,
         .quietBanners,
         .quietSummary,
+        .cloudRelayURL, .cloudPair, .cloudUnpair, .cloudReconnect, .cloudNewKey, .cloudKeyName, .cloudKeyClient,
+        .cloudRevoke, .cloudCopyConfig, .cloudUsage, .cloudDesign,
         .mcpReveal,
         .mcpTest,
         .mcpInstallCLI,

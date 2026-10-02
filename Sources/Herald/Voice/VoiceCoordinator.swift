@@ -12,6 +12,8 @@ final class VoiceCoordinator: ObservableObject {
     var showBanner: ((HeraldHistoryItem) -> Void)?
     /// Set by the app controller: where history lives.
     var history: HistoryStore?
+    /// Set by the app controller: a notification's speech played to the end (the cloud relay's `spoken` receipt).
+    var onSpoken: ((String, String) -> Void)?
 
     let settings = VoiceSettings.shared
     @Published private(set) var availableVoices: [VoiceInfo] = kokoroDefaultVoices
@@ -150,7 +152,7 @@ final class VoiceCoordinator: ObservableObject {
             record(item, HeraldSpeech(text: text, voice: plan.voice))
             let request = VoiceRequest(text: text, voice: plan.voice, speed: plan.speed, lang: plan.lang)
             let engine = currentEngine(), cache = audioCache
-            queue.enqueue(.init(key: k) { [weak self] in
+            queue.enqueue(.init(key: k, finished: { [weak self] played in if played { self?.onSpoken?(item.app, item.id) } }) { [weak self] in
                 do {
                     let prepared = try await engine.prepare(request, cache: cache)
                     await MainActor.run {

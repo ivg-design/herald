@@ -199,6 +199,40 @@ enum ParityTools {
                 return RouteCall(method: "GET", path: "/v1/replies/wait", query: q, timeout: seconds + 15)
             }),
 
+        // MARK: Cloud relay (docs/CLOUD.md)
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_status", title: "Cloud relay status",
+            description: "The cloud relay this Mac is paired with: whether it is paired and online, the relay URL, the MCP connector URL for cloud agents, the agent keys (name, client, scope, last used; never a secret) and the last 20 relay items with their receipt states (displayed, spoken, replied, suppressed and why).",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/status") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_usage", title: "Cloud relay usage today",
+            description: "What today's relay traffic has used of the Cloudflare free plan: requests, notifications, queued items and storage, with the relay's own daily limits.",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/usage") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "create_agent_key", title: "Create a cloud agent key",
+            description: """
+            Mint a notify-only key for a cloud agent (Settings > Cloud > Agent keys). The reply holds the key ONCE (the relay keeps only a hash)             and a connector block with the MCP URL and Bearer for Claude, Codex and any remote MCP client. The key can send notifications and             read their receipts and replies; it cannot run commands, set callbacks or change anything on this Mac. Its notifications arrive as             the app cloud.<name>. Requires the Mac to be paired (relay_status).
+            """,
+            inputSchema: Schema.input([
+                "name": Schema.string("A short name for the agent: a-z, 0-9 and hyphens, for example build-bot."),
+                "client": Schema.string("claude, codex or other: the first two use that app's icon."),
+            ], required: ["name"]), readOnly: false, idempotent: false),
+            route: { a in RouteCall(method: "POST", path: "/v1/relay/keys", body: body(a, ["name", "client"])) }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "revoke_agent_key", title: "Revoke a cloud agent key",
+            description: "Revoke an agent key by its id (from relay_status). It stops working at once; notifications it already queued are still delivered.",
+            inputSchema: Schema.input(["id": Schema.string("The key id (8 hex characters) from relay_status.")], required: ["id"]),
+            destructive: true, idempotent: true),
+            route: { a in
+                guard let id = try text(a, "id") else { throw ToolFailure("id is required") }
+                return RouteCall(method: "DELETE", path: "/v1/relay/keys/\(id)")
+            }),
+
         ParityTool(definition: MCPToolDefinition(
             name: "list_approvals", title: "List template command approvals",
             description: "The commands, scripts and Shortcuts the user approved for templates (Settings > Actions): app, template, the exact commands and when. Approvals are granted by the user when a banner asks; they cannot be granted here.",

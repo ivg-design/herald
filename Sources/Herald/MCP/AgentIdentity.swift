@@ -28,10 +28,32 @@ public struct AgentIdentity: Equatable, Sendable {
     public let homepage: String
 
     public static let templateName = "agent"
-    public var appID: String { HeraldAgent.prefix + slug }
+    /// `agent.` for an installed MCP client, `cloud.` for an agent key of the cloud relay (docs/CLOUD.md).
+    public let idPrefix: String
+    public var isCloud: Bool { idPrefix == Self.cloudPrefix }
+    public static let cloudPrefix = "cloud."
+    public var appID: String { idPrefix + slug }
+
+    /// The issuer of one cloud agent key: `cloud.<key name>`. `client` is the key's client (`claude`, `codex`, anything else);
+    /// the first two take the real client's icon and symbol, the rest a generic one.
+    public init?(cloudKeyName: String, client: String) {
+        let s = HeraldAgent.slug(cloudKeyName)
+        guard !s.isEmpty else { return nil }
+        let base: AgentIdentity?
+        switch client {
+        case "claude": base = AgentIdentity(kind: .claudeCode)
+        case "codex": base = AgentIdentity(kind: .codex)
+        default: base = AgentIdentity(kind: .generic, genericName: s)
+        }
+        guard let b = base else { return nil }
+        kind = b.kind; slug = s; name = cloudKeyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        symbol = b.kind == .generic ? "cloud" : b.symbol; sound = b.sound; homepage = b.homepage
+        idPrefix = Self.cloudPrefix
+    }
 
     public init?(kind: Kind, genericName: String? = nil) {
         self.kind = kind
+        self.idPrefix = HeraldAgent.prefix
         switch kind {
         case .claudeCode: (slug, name, symbol, sound, homepage) = ("claude-code", "Claude Code", "terminal", "Glass", "https://claude.com/claude-code")
         case .codex: (slug, name, symbol, sound, homepage) = ("codex", "Codex", "sparkles", "Tink", "https://openai.com/codex")
@@ -86,6 +108,17 @@ public struct AgentIdentity: Equatable, Sendable {
             HeraldButton(label: "Reply", reply: HeraldReply(placeholder: "Reply to \(name)\u{2026}")),
             HeraldButton(label: "Open link", url: "{link}"),
         ]
+        if isCloud {
+            // A cloud agent runs somewhere else: there is nothing on this Mac to "Open". The user answers by text (Reply) or by
+            // voice (Record, transcribed on this Mac), and a notification's own https link opens from "Open link".
+            let cloudActions = [
+                HeraldButton(label: "Reply", reply: HeraldReply(placeholder: "Reply to \(name)\u{2026}")),
+                HeraldButton(label: "Record", reply: HeraldReply(voice: true)),
+                HeraldButton(label: "Open link", url: "{link}"),
+            ]
+            return HeraldManifest(app: appID, appName: name, icon: icon, fields: fields, actions: cloudActions,
+                                  actionIDs: ["reply", "record", "open-link"], defaultTemplate: Self.templateName, family: "cloud")
+        }
         let target = opens ?? defaultOpens()
         var m = HeraldManifest(app: appID, appName: name, icon: icon, fields: fields, actions: actions,
                                actionIDs: ["open", "reply", "open-link"], defaultTemplate: Self.templateName, family: "agent")

@@ -28,7 +28,8 @@ const NOTIFY_PROPS = {
     ],
   },
   notificationId: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$", description: "Your own id. Sending the same id again within 24 hours never shows a second banner (idempotent)." },
-  expectReply: { type: "boolean", description: "Show Reply and Record buttons so the user can answer by text or voice. Read the answer with wait_for_reply." },
+  expectReply: { type: "boolean", description: "The notification asks a question and stays on screen until answered. Every banner has Reply (text) and Record (voice) buttons; read the answer with wait_for_reply." },
+  allowVoiceReply: { type: "boolean", description: "Default true. Set false to hide the Record button on this notification." },
 } as const;
 
 const TOOLS = [

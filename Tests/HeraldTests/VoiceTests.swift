@@ -158,6 +158,30 @@ final class SpeechQueueTests: XCTestCase {
         XCTAssertEqual(player.started, [.file(wavURL("b"))])
     }
 
+    /// The cloud relay's `spoken` receipt hangs on this: true only when the audio played to the end.
+    func testFinishedCallbackSaysWhetherTheSpeechPlayedToTheEnd() async {
+        let player = FakePlayer()
+        var results: [String: Bool] = [:]
+        let q = SpeechQueue(player: player, isMuted: { false })
+        q.enqueue(.init(key: "ok", finished: { results["ok"] = $0 }) { .file(wavURL("ok")) })
+        q.enqueue(.init(key: "none", finished: { results["none"] = $0 }) { nil })
+        await q.waitUntilIdle()
+        XCTAssertEqual(results, ["ok": true, "none": false])
+
+        let muted = SpeechQueue(player: FakePlayer(), isMuted: { true })
+        muted.enqueue(.init(key: "m", finished: { results["m"] = $0 }) { .file(wavURL("m")) })
+        await muted.waitUntilIdle()
+        XCTAssertEqual(results["m"], false)
+
+        let slow = FakePlayer(); slow.duration = 400_000_000
+        let cut = SpeechQueue(player: slow)
+        cut.enqueue(.init(key: "c", finished: { results["c"] = $0 }) { .file(wavURL("c")) })
+        try? await Task.sleep(nanoseconds: 60_000_000)
+        cut.cancel(key: "c")
+        await cut.waitUntilIdle()
+        XCTAssertEqual(results["c"], false)
+    }
+
     func testMuteSkipsButReplayIgnoresIt() async {
         let player = FakePlayer()
         let q = SpeechQueue(player: player, isMuted: { true })

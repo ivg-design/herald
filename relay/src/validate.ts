@@ -13,14 +13,14 @@ export const DANGEROUS = new Set([
 
 const ALLOWED = new Set([
   "notificationId", "title", "subtitle", "body", "status", "project", "session", "task", "tool", "duration",
-  "link", "group", "priority", "speak", "expectReply",
+  "link", "group", "priority", "speak", "expectReply", "allowVoiceReply",
 ]);
 
 export interface Speak { text?: string; voice?: string; speed?: number; lang?: string }
 export interface Cleaned {
   title: string; subtitle?: string; body?: string; status?: string; project?: string; session?: string; task?: string;
   tool?: string; duration?: string; link?: string; group?: string; priority?: "normal" | "urgent";
-  speak?: true | Speak; expectReply: boolean;
+  speak?: true | Speak; expectReply: boolean; allowVoiceReply?: boolean;
 }
 
 export type Validated =
@@ -107,6 +107,11 @@ export function validateNotification(input: unknown): Validated {
   if (o.expectReply !== undefined && o.expectReply !== null) {
     if (typeof o.expectReply !== "boolean") return bad("expectReply must be true or false", ["expectReply"]);
     out.expectReply = o.expectReply;
+  }
+
+  if (o.allowVoiceReply !== undefined && o.allowVoiceReply !== null) {
+    if (typeof o.allowVoiceReply !== "boolean") return bad("allowVoiceReply must be true or false", ["allowVoiceReply"]);
+    out.allowVoiceReply = o.allowVoiceReply;
   }
 
   if (o.speak !== undefined && o.speak !== null && o.speak !== false) {

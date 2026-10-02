@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { env, runInDurableObject } from "cloudflare:test";
 import toml from "../wrangler.toml?raw";
 import lifecycle from "../r2-lifecycle.json?raw";
 import r2setup from "../r2-setup.sh?raw";
@@ -92,7 +93,8 @@ describe("scope and validation", () => {
     expect((await notify(key, { title: "t", link: "file:///etc/passwd" })).status).toBe(400);
     expect((await notify(key, { title: "t", link: "javascript:alert(1)" })).status).toBe(400);
     expect((await notify(key, { title: "t", speak: { text: "hi", command: "x" } })).status).toBe(400);
-    expect((await notify(key, { title: "t", link: "https://example.com/a", speak: true })).status).toBe(202);
+    expect((await notify(key, { title: "t", link: "https://example.com/a", speak: true, allowVoiceReply: false })).status).toBe(202);
+    expect((await notify(key, { title: "t", allowVoiceReply: "no" })).status).toBe(400);
   });
   it("caps the body at 32 KB", async () => {
     const { token } = await pair();
@@ -307,6 +309,62 @@ describe("remote MCP", () => {
     const r = await j(await rpc(key, { jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "wait_for_reply", arguments: { notificationId: "mv", timeoutSeconds: 1 } } }));
     expect(r.result.structuredContent).toMatchObject({ replied: true, transcript: "ok" });
     expect(r.result.structuredContent.audioUrl).toContain("/v1/audio/");
+  });
+});
+
+async function setUsage(deviceId: string, usage: Record<string, number>) {
+  const stub = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
+  await runInDurableObject(stub, async (_i, state) => {
+    state.storage.sql.exec("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", "usage:" + new Date().toISOString().slice(0, 10), JSON.stringify(usage));
+  });
+}
+
+describe("free-plan guards", () => {
+  it("answers 503 with Retry-After once the daily request budget is used, and nothing queued is lost", async () => {
+    const { token, deviceId } = await pair();
+    const { key } = await mintKey(token);
+    await notify(key, { title: "queued before", notificationId: "keep" });
+    await setUsage(deviceId, { requests: 90_000 });
+    const r = await notify(key, { title: "late" });
+    expect(r.status).toBe(503);
+    expect(Number(r.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await j(r)).error).toBe("budget_exhausted");
+    const u = await j(await f("/v1/device/usage", { headers: auth(token) }));
+    expect(u.budgetExhausted).toBe(true);
+    // the Mac can still connect and drain the queue
+    const c = await connect(token);
+    expect((await c.next()).notificationId).toBe("keep");
+  });
+  it("caps notifications per day", async () => {
+    const { token, deviceId } = await pair();
+    const { key } = await mintKey(token);
+    await setUsage(deviceId, { notifications: 2000 });
+    const r = await notify(key, { title: "x" });
+    expect(r.status).toBe(429);
+    expect((await j(r)).error).toBe("daily_cap");
+    expect(r.headers.get("retry-after")).toBeTruthy();
+  });
+  it("rate-limits receipt reads per key", async () => {
+    const { token, deviceId } = await pair();
+    const { key, id } = await mintKey(token);
+    await notify(key, { title: "x", notificationId: "n" });
+    expect((await f("/v1/receipts/n", { headers: auth(key) })).status).toBe(200);
+    const stub = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
+    await runInDurableObject(stub, async (_i, state) => {
+      for (let i = 0; i < 600; i++) state.storage.sql.exec("INSERT INTO rate (key_id, at) VALUES (?, ?)", "r:" + id, Date.now());
+    });
+    const r = await f("/v1/receipts/n", { headers: auth(key) });
+    expect(r.status).toBe(429);
+    expect(r.headers.get("retry-after")).toBeTruthy();
+  });
+  it("stops holding long-polls once the day's poll allowance is gone", async () => {
+    const { token, deviceId } = await pair();
+    const { key } = await mintKey(token);
+    await notify(key, { title: "q", notificationId: "p", expectReply: true });
+    await setUsage(deviceId, { pollSeconds: 6000 });
+    const t0 = Date.now();
+    await f("/v1/replies/p?wait=30", { headers: auth(key) });
+    expect(Date.now() - t0).toBeLessThan(1500);
   });
 });
 
