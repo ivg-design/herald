@@ -80,7 +80,7 @@ struct ActionEditorView: View {
                             Label(k.designerTitle, systemImage: k.designerSymbol).lineLimit(1).minimumScaleFactor(0.8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .controlSize(.small)
+                        .controlSize(.small).heraldHelp(.designerAddActionKind)
                     }
                 }
                 Text("Your actions are yours: a command, script or Shortcut you add runs after one confirmation per template.")
@@ -108,7 +108,7 @@ private struct ActionRowView: View {
                     Button { model.setActionHidden(row.id, !row.hidden) } label: {
                         Image(systemName: row.hidden ? "eye.slash" : "eye")
                     }
-                    .buttonStyle(.borderless).help(row.hidden ? "Show this button" : "Hide this button")
+                    .buttonStyle(.borderless).heraldHelp(.designerHideAction)
                 }
                 Image(systemName: row.action.kind.designerSymbol).foregroundStyle(row.hidden ? Color.secondary : Color.accentColor).frame(width: 16)
                 if isIssuer {
@@ -119,9 +119,9 @@ private struct ActionRowView: View {
                 }
                 if let p = position {
                     Button { model.moveAction(row.id, by: -1) } label: { Image(systemName: "chevron.up") }
-                        .buttonStyle(.borderless).disabled(p == 0).help("Move up")
+                        .buttonStyle(.borderless).disabled(p == 0).heraldHelp(.designerMoveActionUp)
                     Button { model.moveAction(row.id, by: 1) } label: { Image(systemName: "chevron.down") }
-                        .buttonStyle(.borderless).disabled(p >= count - 1).help("Move down")
+                        .buttonStyle(.borderless).disabled(p >= count - 1).heraldHelp(.designerMoveActionDown)
                 }
             }
             HStack(spacing: 8) {
@@ -136,16 +136,16 @@ private struct ActionRowView: View {
                             }
                         }
                     } label: { Text(row.action.style ?? "default").font(.caption2) }
-                        .menuStyle(.borderlessButton).fixedSize().disabled(row.hidden)
+                        .menuStyle(.borderlessButton).fixedSize().disabled(row.hidden).heraldHelp(.designerActionStyle)
                     if row.isRelabeled || row.isRestyled || row.hidden {
                         Button { model.resetAction(row.id) } label: { Image(systemName: "arrow.counterclockwise") }
-                            .buttonStyle(.borderless).help("Back to what the issuer sent")
+                            .buttonStyle(.borderless).heraldHelp(.designerResetIssuerAction)
                     }
                 } else {
                     Button { model.editTemplateAction(row.id) } label: { Image(systemName: "pencil") }
-                        .buttonStyle(.borderless).help("Edit")
+                        .buttonStyle(.borderless).heraldHelp(.designerEditTemplateAction)
                     Button(role: .destructive) { model.removeTemplateAction(row.id) } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless).help("Remove")
+                        .buttonStyle(.borderless).heraldHelp(.designerRemoveTemplateAction)
                 }
             }
             .padding(.leading, isIssuer ? 22 : 0)
@@ -167,7 +167,7 @@ private struct RelabelField: View {
         TextField(row.base?.label ?? "Label", text: $text)
             .textFieldStyle(.plain)
             .font(.system(size: 12, weight: .medium))
-            .strikethrough(row.hidden)
+            .strikethrough(row.hidden).heraldHelp(.designerActionLabel)
             .onAppear { text = row.action.label }
             .onChange(of: text) { t in
                 if t != row.action.label { model.setActionLabel(row.id, label: t, original: row.base?.label ?? "") }
@@ -199,16 +199,16 @@ struct ExtraRowsEditor: View {
                           hint: "Your own values. Every action receives them with the issuer\u{2019}s fields, and a binding can read one as {extra.key}.")
             ForEach($rows) { $row in
                 HStack(spacing: 4) {
-                    TextField("key", text: $row.key).font(.system(size: 11, design: .monospaced)).frame(width: 90)
+                    TextField("key", text: $row.key).font(.system(size: 11, design: .monospaced)).frame(width: 90).heraldHelp(.designerExtraKey)
                         .foregroundStyle(row.key.isEmpty || DesignerModel.isTokenName(row.key) ? Color.primary : Color.red)
-                    TextField("value", text: $row.value).font(.system(size: 11))
+                    TextField("value", text: $row.value).font(.system(size: 11)).heraldHelp(.designerExtraValue)
                     Button { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless).help("Remove")
+                        .buttonStyle(.borderless).heraldHelp(.designerRemoveExtraValue)
                 }
                 .textFieldStyle(.roundedBorder)
             }
             Button { rows.append(Row(key: "", value: "")) } label: { Label("Add value", systemImage: "plus") }
-                .buttonStyle(.borderless).controlSize(.small)
+                .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerAddExtraValue)
             if rows.contains(where: { !$0.key.isEmpty && !DesignerModel.isTokenName($0.key) }) {
                 Text("Keys use letters, digits, _ . and -.").font(.caption2).foregroundStyle(.red)
             }
@@ -260,16 +260,16 @@ struct ActionFormView: View {
             Form {
                 Section(title) {
                     HStack {
-                        TextField("Label", text: action.label)
+                        TextField("Label", text: action.label).heraldHelp(.designerEditorLabel)
                         TokenMenu(model: model) { action.wrappedValue.label += $0 }
                     }
                     Picker("Does this", selection: kindBinding) {
                         ForEach(HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
-                    }
+                    }.heraldHelp(.designerEditorKind)
                     Picker("Style", selection: Binding(get: { request.action.style ?? "default" },
                                                        set: { request.action.style = $0 == "default" ? nil : $0 })) {
                         Text("Default").tag("default"); Text("Destructive").tag("destructive"); Text("Quiet").tag("cancel")
-                    }
+                    }.heraldHelp(.designerEditorStyle)
                 }
                 detail
                 Section {
@@ -278,9 +278,9 @@ struct ActionFormView: View {
                 Section {
                     DisclosureGroup("Advanced") {
                         TextField("Id", text: Binding(get: { request.action.id }, set: { request.action.id = $0; idEdited = true }))
-                            .font(.system(size: 12, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced)).heraldHelp(.designerEditorId)
                         Text("What rules and button cells refer to. Letters, digits, - and _.").font(.caption2).foregroundStyle(.secondary)
-                    }
+                    }.heraldHelp(.designerEditorAdvanced)
                 }
             }
             .formStyle(.grouped)
@@ -288,9 +288,9 @@ struct ActionFormView: View {
             HStack {
                 if let e = formError { Text(e).font(.caption).foregroundStyle(.red).lineLimit(2) }
                 Spacer()
-                Button("Cancel") { model.actionEditor = nil }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { model.actionEditor = nil }.keyboardShortcut(.cancelAction).heraldHelp(.designerEditorCancel)
                 Button("Save") { model.commitActionEditor(request) }
-                    .keyboardShortcut(.defaultAction).disabled(formError != nil)
+                    .keyboardShortcut(.defaultAction).disabled(formError != nil).heraldHelp(.designerEditorSave)
             }
             .padding(12)
         }
@@ -350,21 +350,21 @@ struct ActionFormView: View {
         case .url:
             Section("Link") {
                 HStack {
-                    TextField("https://\u{2026}", text: optional(action.url)).font(.system(size: 12, design: .monospaced))
+                    TextField("https://\u{2026}", text: optional(action.url)).font(.system(size: 12, design: .monospaced)).heraldHelp(.designerActionUrl)
                     TokenMenu(model: model) { action.wrappedValue.url = (action.wrappedValue.url ?? "") + $0 }
                 }
                 note("Opens in your browser. Tokens such as {url} are filled in from the notification. Only http, https and mailto links open.")
             }
         case .command:
             Section("Shell command") {
-                TextEditor(text: optional(action.command)).font(.system(size: 12, design: .monospaced)).frame(height: 80)
+                TextEditor(text: optional(action.command)).font(.system(size: 12, design: .monospaced)).frame(height: 80).heraldHelp(.designerActionCommand)
                 note("Runs with /bin/zsh -lc. The notification arrives as JSON on stdin and as HERALD_* variables, never pasted into the command line. Herald asks you to confirm it once per template.")
             }
         case .script: scriptSection
         case .shortcut: shortcutSection
         case .callback:
             Section("Payload sent to the issuer") {
-                TextEditor(text: $payloadText).font(.system(size: 12, design: .monospaced)).frame(height: 70)
+                TextEditor(text: $payloadText).font(.system(size: 12, design: .monospaced)).frame(height: 70).heraldHelp(.designerCallbackPayload)
                     .onChange(of: payloadText) { t in
                         let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
                         let v = trimmed.isEmpty ? nil : try? HeraldJSON.decoder().decode(JSONValue.self, from: Data(trimmed.utf8))
@@ -377,10 +377,10 @@ struct ActionFormView: View {
             Section("Snooze") {
                 Stepper("For \(request.action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes) min",
                         value: Binding(get: { request.action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes },
-                                       set: { request.action.snoozeMinutes = $0 }), in: 1...10080, step: 5)
+                                       set: { request.action.snoozeMinutes = $0 }), in: 1...10080, step: 5).heraldHelp(.designerSnoozeStepper)
                 HStack {
                     ForEach([(5, "5 min"), (15, "15 min"), (60, "1 h"), (240, "4 h"), (1440, "1 day")], id: \.0) { m in
-                        Button(m.1) { request.action.snoozeMinutes = m.0 }.controlSize(.small)
+                        Button(m.1) { request.action.snoozeMinutes = m.0 }.controlSize(.small).heraldHelp(.designerSnoozePreset)
                     }
                 }
             }
@@ -403,16 +403,16 @@ struct ActionFormView: View {
         let files = model.backend.scripts()
         Section("Script") {
             HStack {
-                TextField("script.sh", text: optional(action.script)).font(.system(size: 12, design: .monospaced))
+                TextField("script.sh", text: optional(action.script)).font(.system(size: 12, design: .monospaced)).heraldHelp(.designerScriptName)
                 Menu {
                     if files.isEmpty { Text("The scripts folder is empty") }
                     ForEach(files, id: \.self) { f in Button(f) { request.action.script = f } }
                 } label: { Image(systemName: "chevron.down.circle") }
-                    .menuStyle(.borderlessButton).fixedSize()
+                    .menuStyle(.borderlessButton).fixedSize().heraldHelp(.designerScriptMenu)
             }
             if let folder = model.backend.scriptsFolder() {
                 Button { NSWorkspace.shared.open(folder) } label: { Label("Open scripts folder", systemImage: "folder") }
-                    .buttonStyle(.borderless).controlSize(.small)
+                    .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerOpenScripts)
             }
             note("A file in Herald\u{2019}s scripts folder. It gets the notification as JSON on stdin and HERALD_* variables, and runs after one confirmation per template.")
         }
@@ -423,9 +423,9 @@ struct ActionFormView: View {
     @ViewBuilder private var shortcutSection: some View {
         Section("Apple Shortcut") {
             HStack {
-                TextField("Shortcut name", text: optional(action.shortcut))
+                TextField("Shortcut name", text: optional(action.shortcut)).heraldHelp(.designerShortcutName)
                 Button { Task { await loadShortcuts() } } label: { Image(systemName: "arrow.clockwise") }
-                    .buttonStyle(.borderless).help("Reload the list of Shortcuts")
+                    .buttonStyle(.borderless).heraldHelp(.designerReloadShortcuts)
             }
             shortcutList
             Picker("Input", selection: Binding(get: { request.action.input != nil },
@@ -433,10 +433,10 @@ struct ActionFormView: View {
                 Text("Notification (JSON)").tag(false)
                 Text("Text").tag(true)
             }
-            .pickerStyle(.segmented)
+            .pickerStyle(.segmented).heraldHelp(.designerShortcutInput)
             if request.action.input != nil {
                 HStack(alignment: .top) {
-                    TextEditor(text: optional(action.input)).font(.system(size: 12, design: .monospaced)).frame(height: 64)
+                    TextEditor(text: optional(action.input)).font(.system(size: 12, design: .monospaced)).frame(height: 64).heraldHelp(.designerShortcutText)
                     TokenMenu(model: model) { action.wrappedValue.input = (action.wrappedValue.input ?? "") + $0 }
                 }
                 note("Handed to the Shortcut as text; tokens such as {title} are filled in.")
@@ -460,11 +460,11 @@ struct ActionFormView: View {
                 HStack {
                     Text("No Shortcuts found.").font(.caption).foregroundStyle(.secondary)
                     Button("Open Shortcuts") { NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Shortcuts.app")) }
-                        .buttonStyle(.borderless).controlSize(.small)
+                        .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerOpenShortcuts)
                 }
             } else {
                 let shown = query.isEmpty ? names : names.filter { $0.localizedCaseInsensitiveContains(query) }
-                if names.count > 8 { TextField("Search \(names.count) Shortcuts", text: $query).textFieldStyle(.roundedBorder).controlSize(.small) }
+                if names.count > 8 { TextField("Search \(names.count) Shortcuts", text: $query).textFieldStyle(.roundedBorder).controlSize(.small).heraldHelp(.designerSearchShortcuts) }
                 List(shown, id: \.self, selection: Binding<String?>(get: { request.action.shortcut }, set: { if let n = $0 { request.action.shortcut = n } })) { name in
                     Label(name, systemImage: "wand.and.stars").lineLimit(1)
                 }

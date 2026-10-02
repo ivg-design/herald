@@ -91,7 +91,7 @@ struct TokenMenu: View {
                 }
             }
         } label: { Image(systemName: "curlybraces") }
-            .menuStyle(.borderlessButton).fixedSize().help("Insert a field")
+            .menuStyle(.borderlessButton).fixedSize().heraldHelp(.designerInsertField)
     }
 }
 
@@ -106,7 +106,7 @@ struct TokenTextField: View {
     var body: some View {
         HStack(alignment: .top, spacing: 4) {
             TextField(title, text: $text, axis: multiline ? .vertical : .horizontal)
-                .lineLimit(multiline ? 1...4 : 1...1)
+                .lineLimit(multiline ? 1...4 : 1...1).heraldHelp(.designerFieldBinding)
                 .font(.system(size: 12, design: .monospaced))
                 .textFieldStyle(.roundedBorder)
             TokenMenu(model: model) { picked in
@@ -209,13 +209,13 @@ struct ColorFieldRow: View {
                     Text("Accent").tag(Mode.accent); Text("Primary").tag(Mode.primary); Text("Secondary").tag(Mode.secondary)
                 }
                 Text("Custom").tag(Mode.custom)
-            }
+            }.heraldHelp(.designerColorMode)
             .labelsHidden().fixedSize()
             if mode == .custom {
                 ColorPicker("", selection: Binding(get: { ComposerColorRow.color(value ?? "") ?? .accentColor },
                                                    set: { value = ComposerColorRow.hex($0); hex = value ?? "" }), supportsOpacity: false)
-                    .labelsHidden()
-                TextField("#RRGGBB", text: $hex).textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced))
+                    .labelsHidden().heraldHelp(.designerColorWell)
+                TextField("#RRGGBB", text: $hex).textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced)).heraldHelp(.designerColorHex)
                     .frame(width: 84)
                     .onChange(of: hex) { h in
                         let t = h.trimmingCharacters(in: .whitespaces)
@@ -255,7 +255,7 @@ struct AlignmentGrid: View {
                                 .frame(width: 22, height: 18)
                                 .overlay(Circle().fill(selection == a ? Color.white : Color.secondary.opacity(0.55)).frame(width: 5, height: 5))
                         }
-                        .buttonStyle(.plain).help(a.rawValue)
+                        .buttonStyle(.plain).heraldHelp(.designerAlignPoint)
                     }
                 }
             }
@@ -337,13 +337,13 @@ struct CellInspector: View {
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if sel.area > 1 {
                     Button { model.mergeSelection() } label: { Label("Merge slots", systemImage: "rectangle.compress.vertical") }
-                        .disabled(!model.canMerge)
+                        .disabled(!model.canMerge).heraldHelp(.designerMergeSlots)
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                         ForEach(DesignerPalette.components) { c in
                             Button { model.addComponent(type: c.type) } label: {
                                 Label(c.title, systemImage: c.symbol).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                            }.controlSize(.small)
+                            }.controlSize(.small).heraldHelp(.designerAddComponent)
                         }
                     }
                 }
@@ -375,7 +375,7 @@ private struct CellEditor: View {
                 FieldRow("Type") {
                     Picker("", selection: Binding(get: { cell.component.typeName }, set: { model.setComponentType(cell: cell.id, type: $0) })) {
                         ForEach(DesignerPalette.components) { Text($0.title).tag($0.type) }
-                    }.labelsHidden().fixedSize()
+                    }.labelsHidden().fixedSize().heraldHelp(.designerComponentType)
                 }
                 componentEditor
             }
@@ -391,14 +391,14 @@ private struct CellEditor: View {
         return InspectorSection(title: "Position and span", hint: "Where the cell sits, and how much of the grid it covers") {
             Text("Position").font(.caption.weight(.semibold))
             HStack {
-                Stepper("Row \(cell.row + 1)", value: Binding(get: { cell.row + 1 }, set: { model.setPosition(cell: id, row: $0 - 1, col: cell.col) }), in: 1...max(g.rows, 1))
-                Stepper("Column \(cell.col + 1)", value: Binding(get: { cell.col + 1 }, set: { model.setPosition(cell: id, row: cell.row, col: $0 - 1) }), in: 1...max(g.cols, 1))
+                Stepper("Row \(cell.row + 1)", value: Binding(get: { cell.row + 1 }, set: { model.setPosition(cell: id, row: $0 - 1, col: cell.col) }), in: 1...max(g.rows, 1)).heraldHelp(.designerCellRow)
+                Stepper("Column \(cell.col + 1)", value: Binding(get: { cell.col + 1 }, set: { model.setPosition(cell: id, row: cell.row, col: $0 - 1) }), in: 1...max(g.cols, 1)).heraldHelp(.designerCellColumn)
             }
             Text("Span").font(.caption.weight(.semibold))
             HStack {
-                Stepper("Rows \(cell.rowSpan)", value: Binding(get: { cell.rowSpan }, set: { model.setSpan(cell: id, rowSpan: $0, colSpan: cell.colSpan) }), in: 1...max(room.rows, 1))
+                Stepper("Rows \(cell.rowSpan)", value: Binding(get: { cell.rowSpan }, set: { model.setSpan(cell: id, rowSpan: $0, colSpan: cell.colSpan) }), in: 1...max(room.rows, 1)).heraldHelp(.designerRowSpan)
                     .disabled(room.rows <= 1)
-                Stepper("Columns \(cell.colSpan)", value: Binding(get: { cell.colSpan }, set: { model.setSpan(cell: id, rowSpan: cell.rowSpan, colSpan: $0) }), in: 1...max(room.cols, 1))
+                Stepper("Columns \(cell.colSpan)", value: Binding(get: { cell.colSpan }, set: { model.setSpan(cell: id, rowSpan: cell.rowSpan, colSpan: $0) }), in: 1...max(room.cols, 1)).heraldHelp(.designerColSpan)
                     .disabled(room.cols <= 1)
             }
             .opacity(canGrow ? 1 : 0.45)
@@ -409,12 +409,12 @@ private struct CellEditor: View {
                 AlignmentGrid(selection: Binding(get: { cell.align }, set: { a in model.updateCell(id) { $0.align = a } }))
             }
             FieldRow("Padding") {
-                NumberField(value: Binding(get: { cell.padding }, set: { v in model.updateCell(id) { $0.padding = v } }), range: 0...64)
+                NumberField(value: Binding(get: { cell.padding }, set: { v in model.updateCell(id) { $0.padding = v } }), range: 0...64).heraldHelp(.designerCellPadding)
             }
             HStack {
-                Button { model.splitSelection() } label: { Label("Split", systemImage: "rectangle.expand.vertical") }.disabled(!model.canSplit)
-                Button { model.duplicateSelection() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
-                Button(role: .destructive) { model.deleteSelection() } label: { Label("Delete", systemImage: "trash") }
+                Button { model.splitSelection() } label: { Label("Split", systemImage: "rectangle.expand.vertical") }.disabled(!model.canSplit).heraldHelp(.designerSplitCell)
+                Button { model.duplicateSelection() } label: { Label("Duplicate", systemImage: "plus.square.on.square") }.heraldHelp(.designerDuplicateCell)
+                Button(role: .destructive) { model.deleteSelection() } label: { Label("Delete", systemImage: "trash") }.heraldHelp(.designerDeleteCell)
             }.controlSize(.small)
         }
     }
@@ -457,7 +457,7 @@ private struct EmptyBehaviorSection: View {
                 Text("Template (\(inherited))").tag(Optional<HeraldEmptyBehavior>.none)
                 Text("Collapse").tag(Optional(HeraldEmptyBehavior.collapse))
                 Text("Keep space").tag(Optional(HeraldEmptyBehavior.keep))
-            }
+            }.heraldHelp(.designerEmptyBehavior)
             .labelsHidden().pickerStyle(.radioGroup)
             Text(current == .collapse
                  ? "Disappears, and its row or column closes up if nothing else is in it."
@@ -467,7 +467,7 @@ private struct EmptyBehaviorSection: View {
                 Toggle(isOn: Binding(get: { absent }, set: { on in
                     if on { model.absentTokens.formUnion(tokens) } else { model.absentTokens.subtract(tokens) }
                 })) { Text("Preview without \(tokens.map { "{\($0)}" }.joined(separator: ", "))").font(.caption) }
-                    .toggleStyle(.checkbox)
+                    .toggleStyle(.checkbox).heraldHelp(.designerPreviewWithout)
             }
         }
     }
@@ -484,19 +484,19 @@ private struct TextComponentEditor: View {
         FieldRow("Style") {
             Picker("", selection: b.binding(\.style, .body)) {
                 ForEach(HeraldTextStyle.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-            }.labelsHidden().fixedSize()
+            }.labelsHidden().fixedSize().heraldHelp(.designerTextStyle)
         }
-        FieldRow("Lines") { OptionalIntField(value: b.binding(\.maxLines, nil), placeholder: "style") }
-        FieldRow("Size") { OptionalNumberField(value: b.binding(\.fontSize, nil), placeholder: "style") }
+        FieldRow("Lines") { OptionalIntField(value: b.binding(\.maxLines, nil), placeholder: "style").heraldHelp(.designerMaxLines) }
+        FieldRow("Size") { OptionalNumberField(value: b.binding(\.fontSize, nil), placeholder: "style").heraldHelp(.designerFontSize) }
         FieldRow("Weight") {
-            OptionalPicker(selection: b.binding(\.weight, nil), options: HeraldFontWeight.allCases.map { ($0, $0.rawValue.capitalized) }, noneLabel: "Style")
+            OptionalPicker(selection: b.binding(\.weight, nil), options: HeraldFontWeight.allCases.map { ($0, $0.rawValue.capitalized) }, noneLabel: "Style").heraldHelp(.designerFontWeight)
         }
         FieldRow("Align") {
-            OptionalPicker(selection: b.binding(\.alignment, nil), options: HeraldTextAlignment.allCases.map { ($0, $0.rawValue.capitalized) }, noneLabel: "Cell")
+            OptionalPicker(selection: b.binding(\.alignment, nil), options: HeraldTextAlignment.allCases.map { ($0, $0.rawValue.capitalized) }, noneLabel: "Cell").heraldHelp(.designerTextAlignment)
         }
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Style") }
         FieldRow("Links") {
-            OptionalPicker(selection: b.binding(\.markdown, nil), options: [(true, "Markdown on"), (false, "Plain")], noneLabel: "Style")
+            OptionalPicker(selection: b.binding(\.markdown, nil), options: [(true, "Markdown on"), (false, "Plain")], noneLabel: "Style").heraldHelp(.designerMarkdown)
         }
     }
 }
@@ -510,11 +510,11 @@ private struct ImageComponentEditor: View {
         FieldRow("Fit") {
             Picker("", selection: b.binding(\.fit, .cover)) {
                 Text("Fit").tag(HeraldImageFit.fit); Text("Fill").tag(HeraldImageFit.fill); Text("Cover").tag(HeraldImageFit.cover)
-            }.labelsHidden().pickerStyle(.segmented)
+            }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerImageFit)
         }
-        FieldRow("Corners") { NumberField(value: b.binding(\.cornerRadius, 0), range: 0...200) }
-        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: "w / h") }
-        FieldRow("Height") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "auto") }
+        FieldRow("Corners") { NumberField(value: b.binding(\.cornerRadius, 0), range: 0...200).heraldHelp(.designerCornerRadius) }
+        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: "w / h").heraldHelp(.designerAspectRatio) }
+        FieldRow("Height") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "auto").heraldHelp(.designerHeight) }
     }
 }
 
@@ -523,13 +523,13 @@ private struct IssuerIconEditor: View {
     let id: String
     var body: some View {
         let b = PayloadBinder<HeraldIssuerIconComponent>.of(model, id)
-        FieldRow("Size") { NumberField(value: b.binding(\.size, 22), range: 8...128) }
+        FieldRow("Size") { NumberField(value: b.binding(\.size, 22), range: 8...128).heraldHelp(.designerIconSize) }
         FieldRow("Shape") {
             Picker("", selection: b.binding(\.shape, .rounded)) {
                 Text("Rounded").tag(HeraldIconShape.rounded); Text("Circle").tag(HeraldIconShape.circle)
-            }.labelsHidden().pickerStyle(.segmented)
+            }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerIconShape)
         }
-        FieldRow("Corners") { OptionalNumberField(value: b.binding(\.cornerRadius, nil), placeholder: "auto") }
+        FieldRow("Corners") { OptionalNumberField(value: b.binding(\.cornerRadius, nil), placeholder: "auto").heraldHelp(.designerIconCorners) }
         Text("The issuing app\u{2019}s icon.").font(.caption2).foregroundStyle(.secondary)
         Divider()
         SymbolPanel(model: model, symbol: b.binding(\.symbol, nil), showsPlacement: false)
@@ -549,14 +549,14 @@ private struct TimestampEditor: View {
             .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         FieldRow("Format") {
             Picker("", selection: b.binding(\.relative, false)) { Text("Clock time").tag(false); Text("3 min ago").tag(true) }
-                .labelsHidden().pickerStyle(.segmented)
+                .labelsHidden().pickerStyle(.segmented).heraldHelp(.designerTimeFormat)
         }
         FieldRow("Style") {
             Picker("", selection: b.binding(\.style, .caption)) {
                 ForEach(HeraldTextStyle.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-            }.labelsHidden().fixedSize()
+            }.labelsHidden().fixedSize().heraldHelp(.designerTimeStyle)
         }
-        FieldRow("Size") { OptionalNumberField(value: b.binding(\.fontSize, nil), placeholder: "style") }
+        FieldRow("Size") { OptionalNumberField(value: b.binding(\.fontSize, nil), placeholder: "style").heraldHelp(.designerFontSize) }
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Style") }
     }
 }
@@ -569,7 +569,7 @@ private struct ButtonEditor: View {
         ActionSlotEditor(model: model, id: id, allowNone: false)
         FieldRow("Style") {
             OptionalPicker(selection: b.binding(\.style, nil),
-                           options: [("default", "Default"), ("destructive", "Destructive"), ("cancel", "Quiet")], noneLabel: "Action\u{2019}s own")
+                           options: [("default", "Default"), ("destructive", "Destructive"), ("cancel", "Quiet")], noneLabel: "Action\u{2019}s own").heraldHelp(.designerButtonStyle)
         }
         Divider()
         SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
@@ -584,16 +584,16 @@ private struct ActionsRowEditor: View {
         FieldRow("Shows") {
             Picker("", selection: b.binding(\.source, .merged)) {
                 Text("Both").tag(HeraldActionSource.merged); Text("Issuer").tag(HeraldActionSource.issuer); Text("Mine").tag(HeraldActionSource.template)
-            }.labelsHidden().pickerStyle(.segmented)
+            }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerActionsSource)
         }
         FieldRow("Layout") {
             Picker("", selection: b.binding(\.layout, .wrap)) {
                 Text("Wrap").tag(HeraldActionsLayout.wrap); Text("Row").tag(HeraldActionsLayout.row); Text("Stack").tag(HeraldActionsLayout.stack)
-            }.labelsHidden().pickerStyle(.segmented)
+            }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerActionsLayout)
         }
-        FieldRow("Max") { OptionalIntField(value: b.binding(\.maxVisible, nil), placeholder: "all") }
+        FieldRow("Max") { OptionalIntField(value: b.binding(\.maxVisible, nil), placeholder: "all").heraldHelp(.designerMaxButtons) }
         Button { model.tab = .actions } label: { Label("Edit the buttons\u{2026}", systemImage: "slider.horizontal.3") }
-            .buttonStyle(.borderless).controlSize(.small)
+            .buttonStyle(.borderless).controlSize(.small).heraldHelp(.designerEditButtons)
         Divider()
         SymbolPanel(model: model, symbol: b.binding(\.symbol, nil))
     }
@@ -612,11 +612,11 @@ private struct IconButtonEditor: View {
                 b.binding(\.symbol, "").wrappedValue = new?.name ?? ""
                 b.binding(\.symbolStyle, nil).wrappedValue = (new?.styled ?? false) ? new : nil
             }), showsPlacement: false)
-        FieldRow("Size") { OptionalNumberField(value: b.binding(\.size, nil), placeholder: "18") }
+        FieldRow("Size") { OptionalNumberField(value: b.binding(\.size, nil), placeholder: "18").heraldHelp(.designerIconButtonSize) }
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil)) }
         FieldRow("Tooltip") {
             TextField("", text: Binding(get: { b.binding(\.tooltip, nil).wrappedValue ?? "" }, set: { b.binding(\.tooltip, nil).wrappedValue = $0.isEmpty ? nil : $0 }))
-                .textFieldStyle(.roundedBorder)
+                .textFieldStyle(.roundedBorder).heraldHelp(.designerIconButtonTooltip)
         }
         ActionSlotEditor(model: model, id: id, allowNone: false)
     }
@@ -655,7 +655,7 @@ private struct ProgressEditor: View {
         FieldRow("Value") { TokenTextField(model: model, title: "{percent}", text: b.binding(\.binding, "")) }
         Text("A fraction from 0 to 1, or a percentage above 1.").font(.caption2).foregroundStyle(.secondary)
         FieldRow("Color") { ColorFieldRow(value: b.binding(\.color, nil), autoLabel: "Accent") }
-        FieldRow("Thickness") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "4") }
+        FieldRow("Thickness") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "4").heraldHelp(.designerThickness) }
     }
 }
 
@@ -686,19 +686,19 @@ private struct RiveEditor: View {
             })) {
                 Text("A file\u{2026}").tag(Optional<String>.none)
                 ForEach(assets, id: \.id) { Text($0.id).tag(Optional($0.id)) }
-            }.labelsHidden().fixedSize()
+            }.labelsHidden().fixedSize().heraldHelp(.designerRiveAsset)
         }
         if b.binding(\.asset, nil).wrappedValue == nil {
             FieldRow("File") {
                 TextField("animation.riv or /path/to/animation.riv", text: Binding(get: { b.binding(\.path, nil).wrappedValue ?? "" },
                                                                    set: { b.binding(\.path, nil).wrappedValue = $0.isEmpty ? nil : $0 }))
-                    .textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced))
+                    .textFieldStyle(.roundedBorder).font(.system(size: 11, design: .monospaced)).heraldHelp(.designerRivePath)
                 let stored = model.assets.filter { !$0.declared }
                 if !stored.isEmpty {
                     Menu {
                         ForEach(stored) { a in Button(a.file) { b.binding(\.path, nil).wrappedValue = a.file } }
                     } label: { Image(systemName: "folder") }.menuStyle(.borderlessButton).fixedSize()
-                        .help("Animation files in this issuer's assets folder")
+                        .heraldHelp(.designerRiveStored)
                 }
             }
         } else if assets.isEmpty {
@@ -711,10 +711,10 @@ private struct RiveEditor: View {
                     Text("Default (\(info.artboards.first?.name ?? ""))").tag(Optional<String>.none)
                     ForEach(info.artboards, id: \.name) { Text($0.name).tag(Optional($0.name)) }
                     if let cur = comp.artboard, !info.artboards.contains(where: { $0.name == cur }) { Text("\(cur) (not in the file)").tag(Optional(cur)) }
-                }.labelsHidden().fixedSize()
+                }.labelsHidden().fixedSize().heraldHelp(.designerRiveArtboard)
             } else {
                 TextField(board?.name ?? "default", text: Binding(get: { b.binding(\.artboard, nil).wrappedValue ?? "" },
-                                                                    set: { b.binding(\.artboard, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
+                                                                    set: { b.binding(\.artboard, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder).heraldHelp(.designerRiveArtboardName)
             }
         }
         FieldRow("State machine") {
@@ -723,10 +723,10 @@ private struct RiveEditor: View {
                     Text("Default (\(board.machines.first { $0.name == board.defaultMachine }?.name ?? board.machines.first?.name ?? ""))").tag(Optional<String>.none)
                     ForEach(board.machines, id: \.name) { Text($0.name).tag(Optional($0.name)) }
                     if let cur = comp.stateMachine, !cur.isEmpty, !board.machines.contains(where: { $0.name == cur }) { Text("\(cur) (not in the file)").tag(Optional(cur)) }
-                }.labelsHidden().fixedSize()
+                }.labelsHidden().fixedSize().heraldHelp(.designerRiveMachine)
             } else {
                 TextField("Main", text: Binding(get: { b.binding(\.stateMachine, nil).wrappedValue ?? "" },
-                                                set: { b.binding(\.stateMachine, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder)
+                                                set: { b.binding(\.stateMachine, nil).wrappedValue = $0.isEmpty ? nil : $0 })).textFieldStyle(.roundedBorder).heraldHelp(.designerRiveMachineName)
             }
         }
         if let board, board.machines.isEmpty, let first = board.animations.first {
@@ -734,10 +734,10 @@ private struct RiveEditor: View {
         }
         RiveInputsEditor(model: model, id: id, suggestions: Self.suggestions(machine: machine, declared: asset?.inputs ?? []))
         FieldRow("Loop") {
-            OptionalPicker(selection: b.binding(\.loop, nil), options: [(true, "Loop"), (false, "Once")], noneLabel: "Animation\u{2019}s own")
+            OptionalPicker(selection: b.binding(\.loop, nil), options: [(true, "Loop"), (false, "Once")], noneLabel: "Animation\u{2019}s own").heraldHelp(.designerRiveLoop)
         }
-        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: board?.aspectRatio.map { String(format: "%.2f", $0) } ?? "w / h") }
-        FieldRow("Height") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "auto") }
+        FieldRow("Ratio") { OptionalNumberField(value: b.binding(\.aspectRatio, nil), placeholder: board?.aspectRatio.map { String(format: "%.2f", $0) } ?? "w / h").heraldHelp(.designerRiveRatio) }
+        FieldRow("Height") { OptionalNumberField(value: b.binding(\.height, nil), placeholder: "auto").heraldHelp(.designerHeight) }
         ActionSlotEditor(model: model, id: id, allowNone: true)
     }
 
@@ -787,7 +787,7 @@ private struct RiveFileSummary: View {
                 let inputs = info.artboards.reduce(0) { $0 + $1.machines.reduce(0) { $0 + $1.inputs.count } }
                 Text("In the file: \(info.artboards.count) artboard\(info.artboards.count == 1 ? "" : "s"), \(machines) state machine\(machines == 1 ? "" : "s"), \(inputs) input\(inputs == 1 ? "" : "s")")
                     .font(.caption).foregroundStyle(.secondary)
-            }
+            }.heraldHelp(.designerRiveDetails)
             .font(.caption)
         } else if found {
             Text("The Rive runtime could not read this file.").font(.caption2).foregroundStyle(.orange)
@@ -822,26 +822,26 @@ private struct RiveInputsEditor: View {
             ForEach($rows) { $row in
                 HStack(spacing: 4) {
                     TextField("input", text: $row.name).font(.system(size: 11, design: .monospaced)).frame(width: 74)
-                        .help(suggestions.first { $0.name == row.name }?.kind.map { "\(row.name): a \($0) input" } ?? "The name of a state machine input")
-                    TextField("{count}", text: $row.value).font(.system(size: 11, design: .monospaced))
+                        .heraldHelp(.designerRiveInputName)
+                    TextField("{count}", text: $row.value).font(.system(size: 11, design: .monospaced)).heraldHelp(.designerRiveInputValue)
                     Menu {
                         ForEach(HeraldRiveComponent.pointerKeywords, id: \.self) { k in Button(k) { row.value = k } }
                         Divider()
                         ForEach(model.tokenSuggestions.prefix(24)) { t in Button(t.token) { row.value = t.token } }
-                    } label: { Image(systemName: "curlybraces") }.menuStyle(.borderlessButton).fixedSize()
-                    Button { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                    } label: { Image(systemName: "curlybraces") }.menuStyle(.borderlessButton).fixedSize().heraldHelp(.designerRiveInputPick)
+                    Button { rows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).heraldHelp(.designerRemoveRiveInput)
                 }
                 .textFieldStyle(.roundedBorder)
             }
             HStack {
-                Button { rows.append(Row(name: "", value: "")) } label: { Label("Add input", systemImage: "plus") }
+                Button { rows.append(Row(name: "", value: "")) } label: { Label("Add input", systemImage: "plus") }.heraldHelp(.designerAddRiveInput)
                 if !suggestions.isEmpty {
                     Menu("From file") {
                         ForEach(suggestions.filter { s in !rows.contains { $0.name == s.name } }, id: \.name) { s in
                             Button(s.label) { rows.append(Row(name: s.name, value: HeraldRiveComponent.pointerKeywords.contains(s.name) ? s.name : "{\(s.name)}")) }
                         }
                     }.menuStyle(.borderlessButton).fixedSize()
-                    .help("Inputs of the state machine, as the Rive file declares them")
+                    .heraldHelp(.designerRiveInputsFromFile)
                 }
             }
             .buttonStyle(.borderless).controlSize(.small)
@@ -875,7 +875,7 @@ private struct ActionSlotEditor: View {
                     if allowNone { Text("None").tag(Mode.none) }
                     Text("Listed").tag(Mode.ref)
                     Text("Own").tag(Mode.own)
-                }.labelsHidden().pickerStyle(.segmented)
+                }.labelsHidden().pickerStyle(.segmented).heraldHelp(.designerSlotMode)
             }
             switch mode {
             case .ref:
@@ -885,7 +885,7 @@ private struct ActionSlotEditor: View {
                     Picker("", selection: Binding(get: { slot.ref ?? "" }, set: { model.setActionSlot(cell: id, inline: nil, ref: $0.isEmpty ? nil : $0) })) {
                         if let r = slot.ref, !rows.contains(where: { $0.id == r }) { Text("\(r) (missing)").tag(r) }
                         ForEach(rows) { Text($0.hidden ? "\($0.action.label) (hidden)" : $0.action.label).tag($0.id) }
-                    }.labelsHidden().fixedSize()
+                    }.labelsHidden().fixedSize().heraldHelp(.designerSlotAction)
                 }
                 if let r = slot.ref, !model.previewActions.contains(where: { $0.id == r }) {
                     Text("This action is not in the current preview, so the button is empty and follows the empty behaviour below.")
@@ -900,7 +900,7 @@ private struct ActionSlotEditor: View {
                             Text(a.designerSummary).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                         }
                         Spacer(minLength: 0)
-                        Button("Edit\u{2026}") { model.editInlineAction(cell: id) }.controlSize(.small)
+                        Button("Edit\u{2026}") { model.editInlineAction(cell: id) }.controlSize(.small).heraldHelp(.designerEditSlotAction)
                     }
                     .padding(8).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.secondary.opacity(0.10)))
                 }
@@ -930,7 +930,7 @@ struct TemplateInspector: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             InspectorSection(title: "Template") {
-                FieldRow("Name") { TextField("name", text: Binding(get: { model.draft.name }, set: { v in model.edit { $0.name = v } })).textFieldStyle(.roundedBorder) }
+                FieldRow("Name") { TextField("name", text: Binding(get: { model.draft.name }, set: { v in model.edit { $0.name = v } })).textFieldStyle(.roundedBorder).heraldHelp(.designerTemplateName) }
                 FieldRow("Accent") {
                     ColorFieldRow(value: Binding(get: { model.draft.accentColor }, set: { v in model.edit { $0.accentColor = v } }),
                                   keywords: false, autoLabel: "System")
@@ -942,7 +942,7 @@ struct TemplateInspector: View {
                 if model.diskChanged {
                     HStack {
                         Label("Changed on disk while you were editing.", systemImage: "exclamationmark.triangle").font(.caption2).foregroundStyle(.orange)
-                        Button("Reload") { model.reloadFromDisk() }.controlSize(.small)
+                        Button("Reload") { model.reloadFromDisk() }.controlSize(.small).heraldHelp(.designerReloadTemplate)
                     }
                 }
             }
@@ -950,7 +950,7 @@ struct TemplateInspector: View {
             InspectorSection(title: "Empty fields", hint: "What happens when a notification has no value for something a component shows.") {
                 Picker("", selection: Binding(get: { model.draft.collapseEmpty }, set: { v in model.perform { $0.collapseEmpty = v } })) {
                     Text("Collapse").tag(true); Text("Leave in place").tag(false)
-                }
+                }.heraldHelp(.designerCollapseEmpty)
                 .labelsHidden().pickerStyle(.segmented)
                 Text(model.draft.collapseEmpty
                      ? "An empty field disappears and its row or column closes up, so the banner shrinks to what it has."
@@ -963,7 +963,7 @@ struct TemplateInspector: View {
             gridSection
             InspectorSection(title: "Text") {
                 FieldRow("Body lines") {
-                    Stepper("\(model.draft.maxBodyLines)", value: Binding(get: { model.draft.maxBodyLines }, set: { v in model.edit { $0.maxBodyLines = v } }), in: 1...30)
+                    Stepper("\(model.draft.maxBodyLines)", value: Binding(get: { model.draft.maxBodyLines }, set: { v in model.edit { $0.maxBodyLines = v } }), in: 1...30).heraldHelp(.designerBodyLines)
                 }
                 Text("Line limit for body text that sets none of its own.").font(.caption2).foregroundStyle(.secondary)
             }
@@ -976,21 +976,21 @@ struct TemplateInspector: View {
     private var gridSection: some View {
         let g = model.grid
         return InspectorSection(title: "Grid") {
-            FieldRow("Width") { NumberField(value: gridValue(\.width), range: HeraldTemplate.widthRange) }
-            FieldRow("Gap") { NumberField(value: gridValue(\.gap), range: 0...64) }
-            FieldRow("Padding") { NumberField(value: gridValue(\.padding), range: 0...64) }
+            FieldRow("Width") { NumberField(value: gridValue(\.width), range: HeraldTemplate.widthRange).heraldHelp(.designerGridWidth) }
+            FieldRow("Gap") { NumberField(value: gridValue(\.gap), range: 0...64).heraldHelp(.designerGridGap) }
+            FieldRow("Padding") { NumberField(value: gridValue(\.padding), range: 0...64).heraldHelp(.designerGridPadding) }
             Text("Columns").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
             ForEach(0..<g.cols, id: \.self) { i in
                 TrackRow(title: "Column \(i + 1)", size: sizeBinding(columns: true, i), canRemove: g.cols > 1) { model.removeColumn(at: i) }
             }
             Button { model.insertColumn(at: g.cols) } label: { Label("Add column", systemImage: "plus") }
-                .buttonStyle(.borderless).controlSize(.small).disabled(g.cols >= HeraldTemplate.maxGridTracks)
+                .buttonStyle(.borderless).controlSize(.small).disabled(g.cols >= HeraldTemplate.maxGridTracks).heraldHelp(.designerAddColumn)
             Text("Rows").font(.caption).foregroundStyle(.secondary).padding(.top, 4)
             ForEach(0..<g.rows, id: \.self) { i in
                 TrackRow(title: "Row \(i + 1)", size: sizeBinding(columns: false, i), canRemove: g.rows > 1) { model.removeRow(at: i) }
             }
             Button { model.insertRow(at: g.rows) } label: { Label("Add row", systemImage: "plus") }
-                .buttonStyle(.borderless).controlSize(.small).disabled(g.rows >= HeraldTemplate.maxGridTracks)
+                .buttonStyle(.borderless).controlSize(.small).disabled(g.rows >= HeraldTemplate.maxGridTracks).heraldHelp(.designerAddRow)
             Text("Auto is as big as its content, Fill shares what is left, a number is exact. Rows grow to fit their content.")
                 .font(.caption2).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
         }
@@ -1037,14 +1037,14 @@ private struct TrackRow: View {
                 }
             })) {
                 Text("Auto").tag(Kind.auto); Text("Fill").tag(Kind.fill); Text("Points").tag(Kind.points)
-            }
+            }.heraldHelp(.designerTrackSize)
             .labelsHidden().fixedSize()
             if case .points(let p) = size {
                 NumberField(value: Binding(get: { p }, set: { size = .points($0) }), range: 0...4000)
             }
             Spacer(minLength: 0)
             Button(role: .destructive, action: remove) { Image(systemName: "minus.circle") }
-                .buttonStyle(.borderless).disabled(!canRemove).help("Remove this track")
+                .buttonStyle(.borderless).disabled(!canRemove).heraldHelp(.designerRemoveTrack)
         }
     }
 }
