@@ -39,7 +39,12 @@ struct GeneralSettingsView: View {
             Section {
                 Toggle("Launch at login", isOn: Binding(get: { settings.launchAtLogin }, set: { settings.launchAtLogin = $0 }))
                 Toggle("Mute all sounds", isOn: $settings.muted)
+                Picker("Tooltips", selection: $settings.tooltipLevel) {
+                    ForEach(TooltipLevel.allCases) { Text($0.title).tag($0) }
+                }
+                .heraldHelp(.tooltipLevel)
             } header: { Text("General") }
+            // Editor-specific preferences (Designer, Quick send) live in sections of this window, not in a window of their own.
             HistoryCapSettingsView(history: controller.history)
         }
         .formStyle(.grouped)

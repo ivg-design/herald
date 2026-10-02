@@ -55,7 +55,13 @@ final class AppSettings: ObservableObject {
         return portOverride > 0 ? portOverride : HeraldPaths.defaultPort
     }
 
+    /// How much a tooltip says (issue #53): the control's name, or the name and what it does.
+    @Published var tooltipLevel: TooltipLevel {
+        didSet { d.set(tooltipLevel.rawValue, forKey: "tooltipLevel") }
+    }
+
     private init() {
+        tooltipLevel = UserDefaults.standard.string(forKey: "tooltipLevel").flatMap(TooltipLevel.init(rawValue:)) ?? .defaultLevel
         portOverride = UserDefaults.standard.integer(forKey: "portOverride")
         muted = UserDefaults.standard.bool(forKey: "muted")
         quiet = Self.quietDefaults.data(forKey: "quietHours")
