@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.2 (Build 12) - 2026-10-02
+
+### Added
+
+- **OAuth device flow on the relay** (RFC 8628) for agents without a browser: `POST /device_authorization` returns a
+  short user code; Herald shows "Approve <client> to send you notifications? Code BDFG-HJKM" with Approve / Deny
+  (also under Settings → Cloud → Connector approvals); the agent polls `/token` and gets the same revocable key as the
+  browser flow. `/activate` is the page for humans with a browser; `GET /` is a small info page. Documented in
+  docs/CLOUD.md, docs/MCP.md, the agent quickstart and `relay_instructions` (client `device`).
+- **Presentation fields through the relay**: `persistent`, `timeoutSeconds`, `sound`, `speak`, `voice`, `speed`,
+  `presentation`, `priority`, `group`, `icon`, `subtitle`, `imageURL`, `tags` are accepted and rebuilt from a whitelist;
+  executable keys still return a 400 listing every stripped key. A relay notification is persistent until dismissed
+  by default; `expectReply` now only adds the Reply and Record buttons instead of turning the notification into a
+  "question".
+
+### Fixed
+
+- Secrets (relay device token, Cloudflare token, pairing secret) moved to a `SecretVault` backed by the
+  data-protection keychain with a 0600 file fallback under the support folder, so a new build never triggers the
+  login-keychain password dialog; the legacy item is migrated once and a denied or cancelled read counts as "not
+  found" without asking again.
+
+1143 tests · 136 relay tests.
+
 ## 1.6.1 (Build 11) - 2026-10-02
 
 ### Added
