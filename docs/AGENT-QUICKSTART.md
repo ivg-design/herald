@@ -34,6 +34,10 @@ from herald import Herald
 Herald().notify(app="bidbot", title="Bid accepted", body="…", url="https://…")
 ```
 
+## 4. Cloud agents (not on this Mac)
+
+An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at `https://herald-relay.ivg-design.workers.dev/mcp` with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications, read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
+
 ## Conventions
 
 - Always use the same `app` id (e.g. `bidbot`) so your messages get their own history, icon, sound and templates.

@@ -27,8 +27,72 @@ Source: `relay/`. Herald's side: `Sources/Herald/Relay/`. Settings > Cloud.
 4. The agent's notifications arrive as the app **`cloud.<key name>`**: its own manifest, template, sound and icon (the real Claude or
    Codex icon for those keys), designable in the Designer like any issuer (Settings > Cloud > Design...).
 
-Scriptable: `herald-mcp` has `relay_status`, `relay_usage`, `create_agent_key(name, client?)`, `revoke_agent_key(id)`; the loopback API
+Scriptable: `herald-mcp` has `relay_status`, `relay_usage`, `list_connectors`, `create_agent_key(name, client?)`, `revoke_agent_key(id)`; the loopback API
 has `/v1/relay/*` ([reference/api.md](reference/api.md#cloud-relay)).
+
+## Connect ChatGPT (OAuth)
+
+ChatGPT's connector flow signs in with OAuth and has no field for a custom API key, so the static `hrk_` key of the section above does not
+work there. The relay is therefore also its own OAuth 2.1 authorization server, as the MCP authorization spec (2025-06-18) describes.
+**Claude, Codex and any client that can send a header can use either way**: a static key (above), or OAuth (this section; Claude.ai
+custom connectors support it too). Both land on the same `/mcp` and `/v1/notify` with the same notify-only scope and limits.
+
+**Before you start**: Herald is paired and Online (Settings > Cloud), and Herald is running on the Mac you want to notify.
+
+1. In ChatGPT open **Settings > Connectors** (the exact labels vary by plan and version; custom MCP connectors may need
+   **Advanced > Developer mode**) and choose **Create** / **Add a custom connector**.
+2. Name it `Herald`. **MCP server URL**: `https://herald-relay.ivg-design.workers.dev/mcp`. **Authentication: OAuth**. Leave any client id
+   and secret fields empty: ChatGPT registers itself with the relay (dynamic client registration). Create / Connect.
+3. ChatGPT opens a Herald page in your browser: **"ChatGPT wants to connect to Herald"**, naming the scope (send notifications to your Mac,
+   read receipts and your replies) and the address it returns to.
+4. On the Mac a banner appears: **"Let ChatGPT send you notifications? Approve / Deny"**. It is the same inline strip Herald uses for other
+   questions: it never takes focus from what you are typing. Press **Approve**. The browser page continues by itself and returns to ChatGPT.
+   - Missed the banner, or Herald hides banners right now? Open **Settings > Cloud > Connector approvals**: the request is there with
+     **Approve / Deny** and a **6-digit code**. Type the code on the browser page instead (five wrong tries deny the request).
+   - **Deny** (banner, Settings or the page) sends ChatGPT back with `access_denied`; nothing is created.
+5. Back in ChatGPT the connector is connected and lists four tools. Ask it to "send me a Herald notification saying hello". The banner
+   arrives as the app `cloud.chatgpt`.
+
+The approval created an agent key of kind **oauth** named after the connector (`chatgpt`). It shows in **Settings > Cloud > Agent keys**
+and under **Connector approvals**, and `list_connectors` (local MCP) / `GET /v1/relay/connectors` list it.
+
+**Revoke**: Settings > Cloud > Connector approvals (or Agent keys) > **Revoke**. The key's access and refresh tokens stop working at once
+(the next ChatGPT call gets 401 and has to be authorized again); `revoke_agent_key` does the same from the local MCP. A connector can also
+revoke itself (`POST /revoke`, RFC 7009).
+
+### What a connector can and cannot do
+
+- **Can**: send notifications (text only), read receipts for what it sent, wait for your reply, ask whether the Mac is online. Exactly
+  the four tools above, within the same limits as a static key (60 notifications per 10 minutes, 2,000 a day, 32 KB).
+- **Cannot**: run commands, scripts or Shortcuts, set callbacks, add buttons, show images or play audio, read your history, see other
+  keys' notifications, change settings or quiet hours, create or revoke keys, approve anything for itself. `/v1/device/*` answers an OAuth
+  token with 403. Mute and quiet hours are still enforced on the Mac.
+- **Approval is yours, on the Mac**: a request cannot be approved from the web page alone. It needs the banner (or Settings) on the paired
+  Mac, or the 6-digit code that only Herald shows. An approval request is shown only for clients that registered with this relay, with
+  the name they chose and the host they return to, so a look-alike name still shows its real address; at most 3 requests wait at once and
+  12 an hour.
+- Tokens: opaque, stored only as SHA-256 hashes in the mailbox. Access token 1 hour, refresh token 30 days and **rotating** (each refresh
+  returns a new pair; using an old refresh token again burns the whole family). Authorization codes live 5 minutes after approval, work
+  once, require PKCE (S256), and a code used twice revokes what it produced. Tokens are bound to the `/mcp` resource (RFC 8707) and to
+  their client. Re-authorizing the same connector replaces its earlier key.
+- Setting up your own relay changes nothing: the URLs above come from the host the connector was added with.
+
+### Endpoints (all on the relay's origin)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /.well-known/oauth-protected-resource` (also `.../mcp`) | RFC 9728: `resource` = the `/mcp` URL, `authorization_servers` = the relay, `scopes_supported` = `["notify"]`. |
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata (also served as `openid-configuration`): endpoints, `S256` only, grants `authorization_code` and `refresh_token`. |
+| `POST /mcp` without credentials | `401` with `WWW-Authenticate: Bearer resource_metadata="<origin>/.well-known/oauth-protected-resource"`. |
+| `POST /register` | RFC 7591. `redirect_uris` (https, loopback http or a private-use scheme; no fragments), `client_name`. Public by default (`token_endpoint_auth_method: none`); `client_secret_post` / `client_secret_basic` return a secret. 30 registrations an hour. |
+| `GET /authorize` | `response_type=code`, `client_id`, exact `redirect_uri`, `state`, `code_challenge` + `code_challenge_method=S256` (required), optional `resource` (must be the `/mcp` URL) and `scope` (`notify`). Serves the consent page. Unknown client or redirect: an error page, never a redirect. |
+| `GET /authorize/status?rid=` | Polled by the consent page; returns the redirect once decided. |
+| `POST /authorize/code`, `POST /authorize/deny` | The page's 6-digit-code form and Deny button. |
+| `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`) and `refresh_token`. Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
+| `POST /revoke` | RFC 7009. |
+| `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
+
+With several Macs paired to one relay the consent page first asks which Mac the connector should notify.
 
 ## What the agent can do
 
@@ -93,6 +157,8 @@ up until answered and marks it as a question.
   (anything else is a 400); stored as SHA-256 hashes in the mailbox; compared in constant time; revocable instantly; a key routes to its own
   device only (the device id is inside the key, signed with a relay secret, and the mailbox re-checks the hash). A key sees only
   notifications sent with that key.
+- **OAuth connectors** (below) get the same notify-only access through short-lived tokens bound to their own `oauth` key; revoking the key
+  revokes them. A connector is approved on the Mac, never by the web page alone.
 - **No admin surface for agent keys.** `/v1/device/*` (keys, receipts, usage, unpair, the stream) rejects agent keys with 403 and the
   device token is rejected on agent endpoints. There is no endpoint to change permissions, settings, quiet hours or anything on the Mac.
 - **Text only, twice.** The relay accepts a whitelist of fields; Herald rebuilds the notification from a whitelist again (`RelayPolicy`), so
@@ -153,8 +219,9 @@ wrangler dev                   # local: needs relay/.dev.vars with RELAY_SECRET=
 
 Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST /v1/device/receipt`, `POST /v1/device/reply`,
 `PUT /v1/device/reply/{id}/audio`, `POST /v1/device/status`, `GET /v1/device/info`, `GET /v1/device/usage`, `GET|POST /v1/device/keys`,
-`DELETE /v1/device/keys/{id}`, `DELETE /v1/device`. Public: `POST /v1/pair/start`, `POST /v1/pair`, `GET /healthz`,
-`GET /v1/audio/...` (signed).
+`DELETE /v1/device/keys/{id}`, `GET /v1/device/consents`, `POST /v1/device/consent`, `DELETE /v1/device`. Public: `POST /v1/pair/start`,
+`POST /v1/pair`, `GET /healthz`, `GET /v1/audio/...` (signed), and the OAuth routes (`/.well-known/*`, `/register`, `/authorize`, `/token`,
+`/revoke`).
 
 ## Troubleshooting
 
@@ -162,6 +229,9 @@ Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST
 |---|---|
 | Settings shows "Offline" and keeps retrying | No network; Herald retries 1 s, 2 s, 4 s ... up to 5 minutes and at once on wake or when the network returns. |
 | "the relay rejected this Mac's token" | The pairing was removed (Unpair) or the relay was reset. Pair again. |
-| The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. |
+| The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked, or its refresh token was used twice; connect it again. |
+| ChatGPT's page says "Pair Herald first" | The relay has no paired Mac. Pair in Settings > Cloud, then connect again. |
+| The consent page waits and no banner shows | Herald is not running or not Online; or quiet hours / mute hid the banner. Use the 6-digit code from Settings > Cloud > Connector approvals. |
+| "approvals are already waiting" | Three requests are open; answer or deny them in Settings > Cloud (they expire after 10 minutes). |
 | `receipt.suppressed` with `muted` / `quiet-hours` | Working as designed; the user's settings win. |
 | `Relay offline - limit reached` | A free-plan limit (see above); it clears at midnight UTC. |

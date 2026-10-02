@@ -414,9 +414,16 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `GET /v1/relay/keys` | The agent keys: `id`, `name`, `client`, `scope` (always `notify`), `createdAt`, `lastUsedAt`, `revokedAt`. Never a secret. |
 | `POST /v1/relay/keys` | `{name, client?}` (`client`: `claude`, `codex`, `other`) mints a notify-only key. The reply has `key` (shown once), `mcpURL` and `connectorConfig`, the block to paste into the agent. 409 when the name is taken. |
 | `DELETE /v1/relay/keys/{id}` | Revokes the key at once. |
+| `GET /v1/relay/connectors` | Connectors that signed in with OAuth: `connectors` (the `oauth` keys: `id`, `name`, `displayName`, `kind`, `createdAt`, `lastUsedAt`) and `pending` (requests waiting for approval: `id`, `clientName`, `redirectHost`, `expiresAt`). The 6-digit approval code is never returned; approving happens on the Mac. Revoke with `DELETE /v1/relay/keys/{id}`. |
 | `GET /v1/relay/usage` | Today's relay traffic against the free plan: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
 
+Keys carry `kind` (`static`, or `oauth` for a connector approved through the relay's OAuth flow, with `displayName`).
+
 Errors: 409 when not paired, 429 when the relay reports a limit, 502 when the relay cannot be reached.
+
+The relay's own OAuth 2.1 endpoints (discovery, `/register`, `/authorize`, `/token`, `/revoke`) are documented in
+[../CLOUD.md](../CLOUD.md#connect-chatgpt-oauth); a connector's access token works wherever an `hrk_` key does on `/mcp`, `/v1/notify`,
+`/v1/status`, `/v1/receipts/*` and `/v1/replies/*`, and nowhere else.
 
 A notification from the cloud arrives as an ordinary notification of the app `cloud.<key name>` with `id` = the relay's delivery id, so it
 appears in `/v1/history` and `/v1/apps` like any other. A `reply` action may carry `voice: true` (the Record button): the banner shows the
