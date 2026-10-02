@@ -142,18 +142,23 @@ var DANGEROUS = /* @__PURE__ */ new Set([
   "url",
   "audio",
   "image",
-  "icon",
   "template",
   "layout",
   "app",
   "appId",
-  "sound",
   "path",
   "exec",
   "run",
   "open",
-  "openApp"
+  "openApp",
+  "snooze",
+  "metadata",
+  "accentColor",
+  "templateName"
 ]);
+var MAX_ICON_BYTES = 256 * 1024;
+var ICON_BODY_ALLOWANCE = Math.ceil(MAX_ICON_BYTES * 4 / 3) + 64;
+var SOUND = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 var ALLOWED = /* @__PURE__ */ new Set([
   "notificationId",
   "title",
@@ -170,7 +175,16 @@ var ALLOWED = /* @__PURE__ */ new Set([
   "priority",
   "speak",
   "expectReply",
-  "allowVoiceReply"
+  "allowVoiceReply",
+  "persistent",
+  "timeoutSeconds",
+  "sound",
+  "voice",
+  "speed",
+  "presentation",
+  "icon",
+  "imageURL",
+  "tags"
 ]);
 var bad = /* @__PURE__ */ __name((message, fields) => ({ ok: false, error: "invalid_request", message, fields }), "bad");
 function str(v, name, max) {
@@ -192,7 +206,7 @@ function validateNotification(input) {
       ok: false,
       error: "forbidden_fields",
       fields: rejected,
-      message: `rejected fields: ${rejected.join(", ")}. Cloud notifications carry text only` + (named.length ? ` (${named.join(", ")} would run or open something on the Mac and is never accepted)` : "") + `. Accepted fields: ${[...ALLOWED].join(", ")}.`
+      message: `rejected fields: ${rejected.join(", ")}. Cloud notifications carry text and presentation only` + (named.length ? ` (${named.join(", ")} would run or open something on the Mac and is never accepted)` : "") + `. Accepted fields: ${[...ALLOWED].join(", ")}.`
     };
   }
   let notificationId;
@@ -238,7 +252,7 @@ function validateNotification(input) {
     out.link = u.toString();
   }
   if (o.priority !== void 0 && o.priority !== null) {
-    if (o.priority !== "normal" && o.priority !== "urgent") return bad('priority must be "normal" or "urgent"', ["priority"]);
+    if (o.priority !== "low" && o.priority !== "normal" && o.priority !== "high" && o.priority !== "urgent") return bad('priority must be "low", "normal", "high" or "urgent"', ["priority"]);
     out.priority = o.priority;
   }
   if (o.expectReply !== void 0 && o.expectReply !== null) {
@@ -249,9 +263,67 @@ function validateNotification(input) {
     if (typeof o.allowVoiceReply !== "boolean") return bad("allowVoiceReply must be true or false", ["allowVoiceReply"]);
     out.allowVoiceReply = o.allowVoiceReply;
   }
+  if (o.persistent !== void 0 && o.persistent !== null) {
+    if (typeof o.persistent !== "boolean") return bad("persistent must be true or false", ["persistent"]);
+    out.persistent = o.persistent;
+  }
+  if (o.timeoutSeconds !== void 0 && o.timeoutSeconds !== null) {
+    if (typeof o.timeoutSeconds !== "number" || !Number.isFinite(o.timeoutSeconds) || o.timeoutSeconds < 1 || o.timeoutSeconds > 3600) return bad("timeoutSeconds must be a number from 1 to 3600 (use persistent: true to stay until dismissed)", ["timeoutSeconds"]);
+    out.timeoutSeconds = o.timeoutSeconds;
+  }
+  if (o.sound !== void 0 && o.sound !== null) {
+    if (typeof o.sound !== "string" || !SOUND.test(o.sound)) return bad('sound must be a system sound name such as "Glass", "default" or "none" (no paths)', ["sound"]);
+    out.sound = o.sound;
+  }
+  if (o.presentation !== void 0 && o.presentation !== null) {
+    if (o.presentation !== "banner" && o.presentation !== "voice" && o.presentation !== "both") return bad('presentation must be "banner", "voice" or "both"', ["presentation"]);
+    out.presentation = o.presentation;
+  }
+  if (o.icon !== void 0 && o.icon !== null) {
+    if (typeof o.icon !== "string") return bad("icon must be an https URL or a data: image", ["icon"]);
+    const m = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)$/.exec(o.icon);
+    if (m) {
+      const bytes = Math.floor(m[2].length * 3 / 4) - (m[2].endsWith("==") ? 2 : m[2].endsWith("=") ? 1 : 0);
+      if (bytes > MAX_ICON_BYTES) return bad(`icon is larger than ${MAX_ICON_BYTES / 1024} KB`, ["icon"]);
+      out.icon = o.icon;
+    } else {
+      let u;
+      try {
+        u = new URL(o.icon);
+      } catch {
+        return bad("icon must be an https URL or a data:image/png|jpeg|gif|webp;base64 image", ["icon"]);
+      }
+      if (u.protocol !== "https:" || o.icon.length > 2048) return bad("icon must be an https URL (up to 2048 characters) or a data: image", ["icon"]);
+      out.icon = u.toString();
+    }
+  }
+  const imageURL = str(o.imageURL, "imageURL", 2048);
+  if (isBad(imageURL)) return imageURL;
+  if (imageURL !== void 0) {
+    let u;
+    try {
+      u = new URL(imageURL);
+    } catch {
+      return bad("imageURL must be an absolute https URL", ["imageURL"]);
+    }
+    if (u.protocol !== "https:") return bad("imageURL must be an https URL", ["imageURL"]);
+    out.imageURL = u.toString();
+  }
+  if (o.tags !== void 0 && o.tags !== null) {
+    if (!Array.isArray(o.tags) || o.tags.length > 10 || !o.tags.every((t) => typeof t === "string" && /^[^\s,][^,]{0,31}$/.test(t.trim()))) {
+      return bad("tags must be up to 10 short strings (at most 32 characters, no commas)", ["tags"]);
+    }
+    const tags = [...new Set(o.tags.map((t) => t.trim()))];
+    if (tags.length) out.tags = tags;
+  }
+  let speak;
   if (o.speak !== void 0 && o.speak !== null && o.speak !== false) {
-    if (o.speak === true) out.speak = true;
-    else if (typeof o.speak === "object" && !Array.isArray(o.speak)) {
+    if (o.speak === true) speak = true;
+    else if (typeof o.speak === "string") {
+      const text = str(o.speak, "speak", 2e3);
+      if (isBad(text)) return text;
+      speak = text ? { text } : true;
+    } else if (typeof o.speak === "object" && !Array.isArray(o.speak)) {
       const s = o.speak;
       const extra = Object.keys(s).filter((k) => !["text", "voice", "speed", "lang"].includes(k));
       if (extra.length) return { ok: false, error: "forbidden_fields", fields: extra.map((k) => "speak." + k), message: `rejected fields: ${extra.map((k) => "speak." + k).join(", ")}. speak accepts text, voice, speed, lang.` };
@@ -271,8 +343,26 @@ function validateNotification(input) {
         if (typeof s.lang !== "string" || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(s.lang)) return bad("speak.lang must be a language code such as en-us", ["speak.lang"]);
         sp.lang = s.lang;
       }
-      out.speak = sp;
-    } else return bad("speak must be true or an object {text, voice, speed, lang}", ["speak"]);
+      speak = sp;
+    } else return bad("speak must be true, the text to say, or an object {text, voice, speed, lang}", ["speak"]);
+  }
+  let voice, speed;
+  if (o.voice !== void 0 && o.voice !== null) {
+    if (typeof o.voice !== "string" || !/^[A-Za-z0-9_]{1,40}$/.test(o.voice)) return bad("voice must be a voice name such as af_heart", ["voice"]);
+    voice = o.voice;
+  }
+  if (o.speed !== void 0 && o.speed !== null) {
+    if (typeof o.speed !== "number" || !(o.speed >= 0.5 && o.speed <= 2)) return bad("speed must be between 0.5 and 2", ["speed"]);
+    speed = o.speed;
+  }
+  if (speak === void 0 && (voice !== void 0 || speed !== void 0 || (out.presentation === "voice" || out.presentation === "both") && o.speak !== false)) speak = true;
+  if (speak !== void 0) {
+    if (voice !== void 0 || speed !== void 0) {
+      const base = speak === true ? {} : speak;
+      speak = { ...base, ...voice !== void 0 && base.voice === void 0 ? { voice } : {}, ...speed !== void 0 && base.speed === void 0 ? { speed } : {} };
+      if (Object.keys(speak).length === 0) speak = true;
+    }
+    out.speak = speak;
   }
   return { ok: true, notificationId, value: out };
 }
@@ -288,6 +378,10 @@ var AUDIO_URL_TTL_S = 3600;
 var READ_LIMIT = 600;
 var OAUTH_REQUEST_TTL_MS = 10 * 6e4;
 var OAUTH_CODE_TTL_MS = 5 * 6e4;
+var DEVICE_TTL_S = 600;
+var DEVICE_INTERVAL_S = 5;
+var USER_CODE_ALPHABET = "BCDFGHJKMNPQRTWXZ";
+var DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 var OAUTH_ACCESS_TTL_S = 3600;
 var OAUTH_REFRESH_TTL_S = 30 * 86400;
 var OAUTH_MAX_PENDING = 3;
@@ -332,6 +426,12 @@ var Mailbox = class extends DurableObject {
     for (const col of ["kind TEXT", "client_name TEXT", "oauth_client TEXT"]) {
       try {
         this.ctx.storage.sql.exec(`ALTER TABLE keys ADD COLUMN ${col}`);
+      } catch {
+      }
+    }
+    for (const col of ["flow TEXT", "device_hash TEXT", "device_user_code TEXT", "last_poll INTEGER", "poll_interval INTEGER"]) {
+      try {
+        this.ctx.storage.sql.exec(`ALTER TABLE oauth_requests ADD COLUMN ${col}`);
       } catch {
       }
     }
@@ -671,15 +771,23 @@ var Mailbox = class extends DurableObject {
     );
   }
   async notify(req, key) {
+    const hard = this.lim.bodyBytes + ICON_BODY_ALLOWANCE;
+    const tooLarge = /* @__PURE__ */ __name(() => err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes (a data: icon may add up to 256 KB)`), "tooLarge");
     const declared = Number(req.headers.get("content-length") ?? 0);
-    if (declared > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
+    if (declared > hard) return tooLarge();
     const text = await req.text();
-    if (new TextEncoder().encode(text).length > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
+    const size = new TextEncoder().encode(text).length;
+    if (size > hard) return tooLarge();
     let input;
     try {
       input = JSON.parse(text);
     } catch {
       return err(400, "invalid_request", "body must be JSON");
+    }
+    if (size > this.lim.bodyBytes) {
+      const icon = input?.icon;
+      const rest = typeof icon === "string" ? size - new TextEncoder().encode(icon).length : size;
+      if (rest > this.lim.bodyBytes) return tooLarge();
     }
     const v = validateNotification(input);
     if (!v.ok) return err(400, v.error, v.message, v.fields ? { fields: v.fields } : {});
@@ -820,8 +928,12 @@ var Mailbox = class extends DurableObject {
       code: r.user_code,
       status: r.status === "pending" && r.expires_at <= Date.now() ? "expired" : r.status,
       createdAt: iso(r.created_at),
-      expiresAt: iso(r.expires_at)
+      expiresAt: iso(r.expires_at),
+      ...r.flow === "device" && r.device_user_code ? { flow: "device", userCode: this.dashed(r.device_user_code) } : { flow: "code" }
     };
+  }
+  dashed(c) {
+    return c.slice(0, 4) + "-" + c.slice(4);
   }
   sendConsent(r) {
     const ws = this.sockets()[0];
@@ -862,6 +974,10 @@ var Mailbox = class extends DurableObject {
         return this.oauthDecide(b.id ?? "", "deny", now);
       case "token":
         return this.oauthTokenEndpoint(b, now);
+      case "device_begin":
+        return this.deviceBegin(b, now);
+      case "device_lookup":
+        return this.deviceLookup(b.user_code ?? "", now);
       case "revoke":
         return this.oauthRevoke(b);
     }
@@ -893,6 +1009,80 @@ var Mailbox = class extends DurableObject {
     this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
     return json(201, { id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online() });
   }
+  // ---------- device authorization grant (RFC 8628)
+  newUserCode() {
+    for (; ; ) {
+      const b = crypto.getRandomValues(new Uint8Array(8));
+      const c = [...b].map((x) => USER_CODE_ALPHABET[x % USER_CODE_ALPHABET.length]).join("");
+      if (this.sql("SELECT COUNT(*) AS n FROM oauth_requests WHERE device_user_code = ? AND status = 'pending' AND expires_at > ?", c, Date.now())[0].n === 0) return c;
+    }
+  }
+  async deviceBegin(b, now) {
+    if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
+    if (this.sql("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 36e5)[0].n >= OAUTH_BEGINS_PER_HOUR) {
+      return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
+    }
+    const deviceId = this.getMeta("device_id");
+    if (!deviceId) return err(404, "not_paired", "this relay has no paired Herald");
+    const id = deviceId + randomHex(12);
+    const approval = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6).padStart(6, "0");
+    const userCode = this.newUserCode();
+    const deviceCode = oauthToken("hrv", deviceId, randomHex(32));
+    const expires = now + DEVICE_TTL_S * 1e3;
+    this.sql(
+      "INSERT INTO oauth_requests (id, client_id, client_name, redirect_uri, challenge, state, scope, resource, user_code, status, created_at, expires_at, flow, device_hash, device_user_code, last_poll, poll_interval) VALUES (?, ?, ?, '', '', NULL, ?, ?, ?, 'pending', ?, ?, 'device', ?, ?, ?, ?)",
+      id,
+      b.clientId ?? "",
+      (b.clientName ?? "").slice(0, 60),
+      b.scope ?? "notify",
+      b.resource ?? "",
+      approval,
+      now,
+      expires,
+      await sha256Hex(deviceCode),
+      userCode,
+      now,
+      DEVICE_INTERVAL_S
+    );
+    this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    return json(201, { id, deviceCode, userCode: this.dashed(userCode), expiresIn: DEVICE_TTL_S, interval: DEVICE_INTERVAL_S, online: this.online() });
+  }
+  /** /activate: the request a typed user code belongs to (the page then asks for the approval code Herald shows). */
+  deviceLookup(userCode, now) {
+    const code = userCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const r = code.length === 8 ? this.sql("SELECT * FROM oauth_requests WHERE flow = 'device' AND device_user_code = ? AND status = 'pending' AND expires_at > ?", code, now)[0] : void 0;
+    if (!r) return json(404, { status: "unknown" });
+    return json(200, { id: r.id, clientName: r.client_name, userCode: this.dashed(code) });
+  }
+  async deviceTokenGrant(b, now) {
+    const dc = b.device_code ?? "";
+    if (!parseOAuthSecret(dc, "hrv")) return this.oerr("invalid_grant", "malformed device_code");
+    const r = this.sql("SELECT * FROM oauth_requests WHERE device_hash = ?", await sha256Hex(dc))[0];
+    if (!r) return this.oerr("expired_token", "unknown or expired device_code; start again with /device_authorization");
+    if (r.client_id !== (b.client_id ?? "")) return this.oerr("invalid_grant", "device_code was issued to another client");
+    if (r.redeemed_at) {
+      if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id);
+      return this.oerr("invalid_grant", "device_code already used");
+    }
+    if (r.status === "denied") return this.oerr("access_denied", "the user denied the request");
+    if (r.status === "pending") {
+      if (r.expires_at <= now) return this.oerr("expired_token", "the user code expired; start again");
+      const interval = r.poll_interval ?? DEVICE_INTERVAL_S;
+      const last = r.last_poll ?? r.created_at;
+      this.sql("UPDATE oauth_requests SET last_poll = ? WHERE id = ?", now, r.id);
+      if (now - last < interval * 1e3) {
+        this.sql("UPDATE oauth_requests SET poll_interval = ? WHERE id = ?", interval + 5, r.id);
+        return this.oerr("slow_down", `poll no faster than every ${interval} seconds; the interval is now ${interval + 5}`);
+      }
+      return this.oerr("authorization_pending", "waiting for the user to approve in Herald");
+    }
+    if (r.status !== "approved" || r.expires_at <= now) return this.oerr("expired_token", "the approval expired; start again");
+    if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
+    this.sql("UPDATE oauth_requests SET redeemed_at = ? WHERE id = ?", now, r.id);
+    const key = this.sql("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
+    if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+    return this.issueTokens(key.id, r.client_id, r.resource, randomHex(8), now);
+  }
   redirectFor(r) {
     const u = new URL(r.redirect_uri);
     if (r.status === "approved" && r.code) u.searchParams.set("code", r.code);
@@ -904,6 +1094,7 @@ var Mailbox = class extends DurableObject {
     const r = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     if (!r) return json(404, { status: "unknown" });
     if (r.status === "pending") return json(200, { status: r.expires_at <= now ? "expired" : "pending" });
+    if (r.flow === "device") return json(200, { status: r.status === "pending" && r.expires_at <= now ? "expired" : r.status });
     if (r.status === "approved" && (!r.code || r.expires_at <= now)) return json(200, { status: "expired" });
     return json(200, { status: r.status, redirect: this.redirectFor(r) });
   }
@@ -926,20 +1117,20 @@ var Mailbox = class extends DurableObject {
     } else {
       const keyId = await this.createOAuthKey(r.client_id, r.client_name, now);
       if (!keyId) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys; revoke one first`);
-      const code = oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
+      const code = r.flow === "device" ? null : oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
       this.sql(
         "UPDATE oauth_requests SET status = 'approved', decided_at = ?, key_id = ?, code = ?, code_hash = ?, expires_at = ? WHERE id = ?",
         now,
         keyId,
         code,
-        await sha256Hex(code),
+        code ? await sha256Hex(code) : null,
         now + OAUTH_CODE_TTL_MS,
         id
       );
     }
     const done = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     this.sendResolved(done);
-    return json(200, { status: done.status, redirect: this.redirectFor(done) });
+    return json(200, { status: done.status, ...done.flow === "device" ? {} : { redirect: this.redirectFor(done) } });
   }
   /** One key per connector, kind "oauth". Re-authorizing the same client replaces its earlier key. */
   async createOAuthKey(clientId, clientName, now) {
@@ -1007,6 +1198,7 @@ var Mailbox = class extends DurableObject {
   }
   async oauthTokenEndpoint(b, now) {
     const clientId = b.client_id ?? "";
+    if (b.grant_type === DEVICE_GRANT) return this.deviceTokenGrant(b, now);
     if (b.grant_type === "authorization_code") {
       const code = b.code ?? "";
       if (!parseOAuthSecret(code, "hrc")) return this.oerr("invalid_grant", "malformed authorization code");
@@ -1045,7 +1237,7 @@ var Mailbox = class extends DurableObject {
       this.sql("UPDATE oauth_tokens SET used_at = ? WHERE hash = ?", now, t.hash);
       return this.issueTokens(key.id, clientId, t.resource, t.family, now);
     }
-    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code, refresh_token or urn:ietf:params:oauth:grant-type:device_code");
   }
   /** RFC 7009: an unknown token is not an error. A refresh token takes its whole family with it. */
   async oauthRevoke(b) {
@@ -1244,32 +1436,42 @@ var SUPPORTED = /* @__PURE__ */ new Set(["2025-06-18", "2025-03-26", "2024-11-05
 var NOTIFY_PROPS = {
   title: { type: "string", maxLength: 200, description: "Headline of the notification." },
   body: { type: "string", maxLength: 8e3, description: "Message text." },
-  subtitle: { type: "string", maxLength: 200 },
-  status: { type: "string", description: "A short word shown as a badge: done, error, warning, question, info..." },
+  subtitle: { type: "string", maxLength: 200, description: "A second line under the title." },
+  status: { type: "string", description: "A short word shown as a badge: done, error, warning, question, info... Only a label; it changes nothing else." },
   project: { type: "string", maxLength: 100 },
   session: { type: "string", maxLength: 100 },
   task: { type: "string", maxLength: 100 },
   tool: { type: "string", maxLength: 100 },
   duration: { type: "string", description: 'For example "2m 14s".' },
-  link: { type: "string", description: "An https URL the user can open from the banner." },
-  group: { type: "string", description: "Notifications with the same group stack together." },
-  priority: { type: "string", enum: ["normal", "urgent"], description: "urgent may break quiet hours only if the user allowed it." },
+  link: { type: "string", description: "An https URL the user can open from the banner (the Open link button)." },
+  group: { type: "string", maxLength: 100, description: "Notifications with the same group stack together into one banner." },
+  priority: { type: "string", enum: ["low", "normal", "high", "urgent"], description: "urgent may break quiet hours only if the user allowed it." },
+  persistent: { type: "boolean", description: "Default true: the banner stays until the user dismisses it. false lets Herald's own default timeout dismiss it." },
+  timeoutSeconds: { type: "number", minimum: 1, maximum: 3600, description: "Dismiss the banner by itself after this many seconds (hovering pauses it). Leave out to keep it until dismissed." },
+  sound: { type: "string", maxLength: 40, description: `A system sound name such as Glass or Tink, "default" (the sender's own sound) or "none" for silence. File paths are not accepted.` },
+  presentation: { type: "string", enum: ["banner", "voice", "both"], description: "banner (default): a banner, plus speech if speak is set. voice: speech only, no banner (implies speak: true). both: banner and speech (implies speak: true)." },
   speak: {
-    description: "true speaks title then body on the Mac; or an object to choose the text and voice.",
+    description: "true speaks title then body on the Mac; a string speaks that text instead; or an object {text, voice, speed, lang}. Spoken in addition to the banner unless presentation is voice. Silenced (banner still shown) in quiet hours that silence speech.",
     oneOf: [
       { type: "boolean" },
+      { type: "string", maxLength: 2e3 },
       { type: "object", additionalProperties: false, properties: { text: { type: "string", maxLength: 2e3 }, voice: { type: "string" }, speed: { type: "number", minimum: 0.5, maximum: 2 }, lang: { type: "string" } } }
     ]
   },
+  voice: { type: "string", description: "Voice name for speech, for example af_heart. Setting it turns speak on." },
+  speed: { type: "number", minimum: 0.5, maximum: 2, description: "Speech speed, 0.5 to 2. Setting it turns speak on." },
+  icon: { type: "string", description: "Sender icon: an https image URL or a data:image/png|jpeg|gif|webp;base64 image up to 256 KB. Replaces the icon shown for this key's notifications (the user's own custom icon wins)." },
+  imageURL: { type: "string", description: "An https URL of a preview image to show on the banner." },
+  tags: { type: "array", maxItems: 10, items: { type: "string", maxLength: 32 }, description: "Short labels stored with the notification for the user's templates and search." },
   notificationId: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$", description: "Your own id. Sending the same id again within 24 hours never shows a second banner (idempotent)." },
-  expectReply: { type: "boolean", description: "The notification asks a question and stays on screen until answered. Every banner has Reply (text) and Record (voice) buttons; read the answer with wait_for_reply." },
+  expectReply: { type: "boolean", description: "Only adds the Reply (text) and Record (voice) buttons; the title, look and persistence are unchanged. Read the answer with wait_for_reply." },
   allowVoiceReply: { type: "boolean", description: "Default true. Set false to hide the Record button on this notification." }
 };
 var TOOLS = [
   {
     name: "send_notification",
     title: "Send a notification to the user's Mac",
-    description: "Queue a notification for the user's Mac. Text only: no buttons, commands, callbacks or scripts are accepted. Quiet hours and mute are enforced on the Mac, so check get_receipt: `received` means the relay has it, `displayed` that a banner was shown, `spoken` that speech finished, `suppressed` (with `reason`) that the user's settings held it back. Limits: 60 per 10 minutes per key, 32 KB per request.",
+    description: 'Queue a notification for the user\'s Mac. Text and presentation only (persistent, timeoutSeconds, sound, speak, voice, speed, presentation, priority, group, icon, imageURL, tags): no buttons, commands, callbacks or scripts are accepted, and a request with such fields is refused with 400 naming them. By default the banner stays until the user dismisses it. A spoken banner that stays: {"title":"Build done","body":"All tests passed","speak":true,"persistent":true}. Quiet hours and mute are enforced on the Mac, so check get_receipt: `received` means the relay has it, `displayed` that a banner was shown, `spoken` that speech finished, `suppressed` (with `reason`) that the user\'s settings held it back. Limits: 60 per 10 minutes per key, 32 KB per request.',
     inputSchema: { type: "object", additionalProperties: false, required: ["title"], properties: NOTIFY_PROPS },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },
@@ -1323,7 +1525,7 @@ async function handleMcp(req, forward) {
         protocolVersion: SUPPORTED.has(asked) ? asked : PROTOCOL,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "herald-relay", title: "Herald cloud relay", version: "1.0.0" },
-        instructions: "Send notifications to the user's Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text only. Nothing else is exposed."
+        instructions: 'Send notifications to the user\'s Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text and presentation fields only (persistent, timeoutSeconds, sound, speak, presentation...). Nothing else is exposed. No browser to sign in with? Use the OAuth device flow instead of a key: POST /register (client_name, grant_types ["urn:ietf:params:oauth:grant-type:device_code"]), POST /device_authorization (client_id), tell the user the user_code, poll POST /token (grant_type urn:ietf:params:oauth:grant-type:device_code) every `interval` seconds.'
       }));
     }
     case "ping":
@@ -1420,11 +1622,12 @@ function serverMetadata(origin) {
     authorization_endpoint: origin + "/authorize",
     token_endpoint: origin + "/token",
     registration_endpoint: origin + "/register",
+    device_authorization_endpoint: origin + "/device_authorization",
     revocation_endpoint: origin + "/revoke",
     scopes_supported: [SCOPE],
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
+    grant_types_supported: ["authorization_code", "refresh_token", DEVICE_GRANT],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
@@ -1454,7 +1657,9 @@ async function register(env, req) {
   } catch {
     return oerr(400, "invalid_client_metadata", "body must be JSON");
   }
-  if (!Array.isArray(b.redirect_uris) || b.redirect_uris.length < 1 || b.redirect_uris.length > 10 || !b.redirect_uris.every(redirectUriValid)) {
+  const deviceOnly = Array.isArray(b.grant_types) && b.grant_types.length > 0 && b.grant_types.every((g) => g === DEVICE_GRANT || g === "refresh_token") && b.grant_types.includes(DEVICE_GRANT);
+  if (deviceOnly && b.redirect_uris === void 0) b.redirect_uris = [];
+  if (!Array.isArray(b.redirect_uris) || b.redirect_uris.length < 1 && !deviceOnly || b.redirect_uris.length > 10 || !b.redirect_uris.every(redirectUriValid)) {
     return oerr(400, "invalid_redirect_uri", "redirect_uris must be 1-10 https (or loopback http) URLs without a fragment");
   }
   const method = b.token_endpoint_auth_method ?? "none";
@@ -1462,8 +1667,8 @@ async function register(env, req) {
     return oerr(400, "invalid_client_metadata", "token_endpoint_auth_method must be none, client_secret_post or client_secret_basic");
   }
   const grants = b.grant_types ?? ["authorization_code"];
-  if (!Array.isArray(grants) || !grants.every((g) => g === "authorization_code" || g === "refresh_token")) {
-    return oerr(400, "invalid_client_metadata", "grant_types may only be authorization_code and refresh_token");
+  if (!Array.isArray(grants) || !grants.every((g) => g === "authorization_code" || g === "refresh_token" || g === DEVICE_GRANT)) {
+    return oerr(400, "invalid_client_metadata", "grant_types may only be authorization_code, refresh_token and urn:ietf:params:oauth:grant-type:device_code");
   }
   if (b.response_types !== void 0 && !(Array.isArray(b.response_types) && b.response_types.every((t) => t === "code"))) {
     return oerr(400, "invalid_client_metadata", "response_types may only be code");
@@ -1479,7 +1684,7 @@ async function register(env, req) {
     client_name: name,
     redirect_uris: b.redirect_uris,
     token_endpoint_auth_method: method,
-    grant_types: ["authorization_code", "refresh_token"],
+    grant_types: ["authorization_code", "refresh_token", DEVICE_GRANT],
     response_types: ["code"],
     scope: SCOPE,
     ...secret ? { client_secret: secret, client_secret_expires_at: 0 } : {}
@@ -1654,9 +1859,10 @@ async function token(env, req) {
   const c = await clientAuth(env, req, form);
   if (c instanceof Response) return c;
   const grant = form.get("grant_type");
-  const raw = grant === "authorization_code" ? form.get("code") : grant === "refresh_token" ? form.get("refresh_token") : null;
-  const parsed = raw ? parseOAuthSecret(raw, grant === "refresh_token" ? "hrr" : "hrc") : null;
-  if (grant !== "authorization_code" && grant !== "refresh_token") return oerr(400, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+  const raw = grant === "authorization_code" ? form.get("code") : grant === "refresh_token" ? form.get("refresh_token") : grant === DEVICE_GRANT ? form.get("device_code") : null;
+  const parsed = raw ? parseOAuthSecret(raw, grant === "refresh_token" ? "hrr" : grant === DEVICE_GRANT ? "hrv" : "hrc") : null;
+  if (grant !== "authorization_code" && grant !== "refresh_token" && grant !== DEVICE_GRANT) return oerr(400, "unsupported_grant_type", `grant_type must be authorization_code, refresh_token or ${DEVICE_GRANT}`);
+  if (grant === DEVICE_GRANT && !parsed) return oerr(400, "invalid_grant", "device_code is missing or malformed");
   if (!parsed || !await deviceIdValid(env.RELAY_SECRET, parsed.deviceId)) return oerr(400, "invalid_grant", "unknown or malformed grant");
   const body = Object.fromEntries(form.entries());
   delete body.client_secret;
@@ -1674,10 +1880,107 @@ async function revoke(env, req) {
   return cors(json(200, {}));
 }
 __name(revoke, "revoke");
+async function deviceAuthorization(env, req, url) {
+  const form = await readForm(req);
+  const c = await clientAuth(env, req, form);
+  if (c instanceof Response) return c;
+  const scope = (form.get("scope") ?? "").trim();
+  if (scope && scope.split(/\s+/).some((x) => x !== SCOPE)) return oerr(400, "invalid_scope", "the only scope is notify");
+  const devices = (await (await registry(env, "/devices", {})).json()).devices;
+  if (devices.length === 0) return oerr(400, "invalid_request", "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first");
+  const pick = form.get("device") === null ? 1 : Number(form.get("device"));
+  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return oerr(400, "invalid_request", `device must be 1 to ${devices.length}`);
+  const r = await mailbox(env, devices[pick - 1].id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
+  if (r.status === 429) return oerr(429, "slow_down", "approvals are already waiting in Herald (or too many were requested); answer them there or wait a few minutes", { "retry-after": "60" });
+  if (!r.ok) return oerr(502, "temporarily_unavailable", "could not start the approval");
+  const d = await r.json();
+  const verification = url.origin + "/activate";
+  return cors(json(200, {
+    device_code: d.deviceCode,
+    user_code: d.userCode,
+    verification_uri: verification,
+    verification_uri_complete: verification + "?user_code=" + encodeURIComponent(d.userCode),
+    expires_in: d.expiresIn,
+    interval: d.interval
+  }));
+}
+__name(deviceAuthorization, "deviceAuthorization");
+var CODE_FIELD = `<input type="text" name="user_code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="BDFG-HJKM" required`;
+var APPROVAL_FIELD = `<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required>`;
+function activatePage(prefill = "", note = "") {
+  return page(200, "Activate", `<h1>Approve an agent</h1>
+<p class="mut">An agent that cannot open a browser asked to send you notifications through Herald. It printed a code like BDFG-HJKM. Herald on your Mac shows the same code.</p>
+${note ? `<p class="bad">${esc(note)}</p>` : ""}
+<form class="card" method="post" action="/activate"><h2>The agent's code</h2>${CODE_FIELD} value="${esc(prefill)}"><div class="row"><button class="p" type="submit">Continue</button></div></form>
+<p class="mut">Easier: approve it in Herald on your Mac (a banner, or Settings, Cloud, Connector approvals).</p>`);
+}
+__name(activatePage, "activatePage");
+async function activateLookup(env, userCode) {
+  const devices = (await (await registry(env, "/devices", {})).json()).devices;
+  for (const d of devices) {
+    const r = await mailbox(env, d.id, "device_lookup", { user_code: userCode });
+    if (r.ok) {
+      const j = await r.json();
+      return { rid: j.id, clientName: j.clientName, userCode: j.userCode };
+    }
+  }
+  return null;
+}
+__name(activateLookup, "activateLookup");
+function activateConfirm(a, note = "") {
+  return page(200, "Approve", `<h1>Approve ${esc(a.clientName)}?</h1>
+<p class="mut">Code <b>${esc(a.userCode)}</b>. It will be able to send notifications to your Mac and read receipts and replies. Nothing else.</p>
+<div class="card"><h2>Prove it is you</h2><p class="mut" style="margin-top:0">Herald, Settings, Cloud, Connector approvals shows a 6-digit approval code for this request. Type it here.</p>
+${note ? `<p class="bad">${esc(note)}</p>` : ""}
+<form method="post" action="/activate/approve"><input type="hidden" name="rid" value="${esc(a.rid)}">${APPROVAL_FIELD}<div class="row"><button class="p" type="submit">Approve</button></div></form></div>
+<form method="post" action="/activate/deny"><input type="hidden" name="rid" value="${esc(a.rid)}"><button type="submit">Deny</button></form>`);
+}
+__name(activateConfirm, "activateConfirm");
+async function activateEntry(env, req) {
+  const code = (await readForm(req)).get("user_code") ?? "";
+  const a = await activateLookup(env, code);
+  return a ? activateConfirm(a) : activatePage(code, "That code is wrong or expired. Check what the agent printed.");
+}
+__name(activateEntry, "activateEntry");
+var donePage = /* @__PURE__ */ __name((title, msg) => page(200, title, `<h1>${esc(title)}</h1><div class="card">${esc(msg)}</div>`), "donePage");
+async function activateApprove(env, req) {
+  const form = await readForm(req);
+  const rid = form.get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  const r = await mailbox(env, deviceId, "code", { id: rid, code: form.get("code") ?? "" });
+  const j = await r.json().catch(() => ({}));
+  if (j.status === "wrong_code") {
+    return page(200, "Wrong code", `<h1>That code is wrong</h1><div class="card bad">${j.attemptsLeft} ${j.attemptsLeft === 1 ? "try" : "tries"} left. Check Herald, Settings, Cloud, Connector approvals.</div>
+<form method="post" action="/activate/approve"><input type="hidden" name="rid" value="${esc(rid)}">${APPROVAL_FIELD}<div class="row"><button class="p" type="submit">Approve</button></div></form>`);
+  }
+  if (j.status === "approved") return donePage("Approved", "The agent can now send you notifications. You can close this tab. Revoke it any time in Herald, Settings, Cloud.");
+  if (j.status === "denied") return donePage("Denied", "Nothing was approved.");
+  return errorPage(j.status === "expired" ? "This request expired. The agent has to start again." : "This request is no longer open.");
+}
+__name(activateApprove, "activateApprove");
+async function activateDeny(env, req) {
+  const rid = (await readForm(req)).get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  await mailbox(env, deviceId, "deny", { id: rid });
+  return donePage("Denied", "Nothing was approved.");
+}
+__name(activateDeny, "activateDeny");
+function rootPage(origin) {
+  const l = /* @__PURE__ */ __name((p, t = p) => `<li><a href="${esc(p)}">${esc(t)}</a></li>`, "l");
+  return page(200, "Herald relay", `<h1>Herald relay</h1>
+<p class="mut">This is a private relay that lets an AI agent send notifications to one person's Mac (the Herald app). Nothing here is public: an agent needs a key or an approval from the Mac's owner.</p>
+<div class="card"><h2>For an agent</h2><ul>${l("/.well-known/oauth-authorization-server", "OAuth server metadata")}${l("/.well-known/oauth-protected-resource", "Protected resource metadata")}<li>MCP endpoint: <code>${esc(mcpUrl(origin))}</code></li></ul>
+<p class="mut" style="margin:.6rem 0 0">No browser? Use the device flow: <code>POST /register</code>, <code>POST /device_authorization</code>, tell the user the code, poll <code>POST /token</code>.</p></div>
+<div class="card"><h2>For the owner</h2><ul>${l("/activate", "Approve an agent with a code")}${l("/health", "Health check")}</ul></div>
+<p class="mut"><a href="https://github.com/ivg-design/herald/blob/main/docs/CLOUD.md">Documentation</a></p>`);
+}
+__name(rootPage, "rootPage");
 async function handleOAuth(req, env, url) {
   const p = url.pathname, m = req.method;
   const wellKnown = p.startsWith("/.well-known/");
-  const ours = wellKnown || ["/register", "/authorize", "/authorize/code", "/authorize/deny", "/authorize/status", "/token", "/revoke"].includes(p);
+  const ours = wellKnown || ["/register", "/authorize", "/authorize/code", "/authorize/deny", "/authorize/status", "/token", "/revoke", "/device_authorization", "/activate", "/activate/approve", "/activate/deny"].includes(p);
   if (!ours) return null;
   if (m === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-max-age": "86400" } });
   if (wellKnown) {
@@ -1689,6 +1992,7 @@ async function handleOAuth(req, env, url) {
   if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
   if (p === "/authorize" && m === "GET") return authorize(env, req, url);
   if (p === "/authorize/status" && m === "GET") return statusEntry(env, url);
+  if (p === "/activate" && m === "GET") return activatePage(url.searchParams.get("user_code") ?? "");
   if (m !== "POST") return err(405, "method_not_allowed", "POST only");
   switch (p) {
     case "/register":
@@ -1701,6 +2005,14 @@ async function handleOAuth(req, env, url) {
       return codeEntry(env, req);
     case "/authorize/deny":
       return denyEntry(env, req);
+    case "/device_authorization":
+      return deviceAuthorization(env, req, url);
+    case "/activate":
+      return activateEntry(env, req);
+    case "/activate/approve":
+      return activateApprove(env, req);
+    case "/activate/deny":
+      return activateDeny(env, req);
   }
   return err(405, "method_not_allowed", "GET only");
 }
@@ -1842,6 +2154,7 @@ var index_default = {
   async fetch(req, env) {
     const url = new URL(req.url);
     const path = url.pathname;
+    if (path === "/" && req.method === "GET") return rootPage(url.origin);
     if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true, ...env.BUNDLE_HASH ? { bundle: env.BUNDLE_HASH } : {} });
     const oauth = await handleOAuth(req, env, url);
     if (oauth) return oauth;

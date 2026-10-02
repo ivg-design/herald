@@ -1,6 +1,6 @@
 import { deviceIdValid, parseToken } from "./ids";
 import { handleMcp } from "./mcp";
-import { challenge, handleOAuth } from "./oauth";
+import { challenge, handleOAuth, rootPage } from "./oauth";
 import { err, bearer, json, hmacHex, safeEqual } from "./util";
 
 export { Mailbox } from "./mailbox";
@@ -22,6 +22,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
+    if (path === "/" && req.method === "GET") return rootPage(url.origin);
     if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true, ...(env.BUNDLE_HASH ? { bundle: env.BUNDLE_HASH } : {}) });
 
     const oauth = await handleOAuth(req, env, url);

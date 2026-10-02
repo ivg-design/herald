@@ -77,7 +77,8 @@ describe("oauth discovery", () => {
     expect(m.registration_endpoint).toBe("https://relay.test/register");
     expect(m.revocation_endpoint).toBe("https://relay.test/revoke");
     expect(m.code_challenge_methods_supported).toEqual(["S256"]);
-    expect(m.grant_types_supported).toEqual(["authorization_code", "refresh_token"]);
+    expect(m.grant_types_supported).toEqual(["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"]);
+    expect(m.device_authorization_endpoint).toBe("https://relay.test/device_authorization");
     expect(m.scopes_supported).toEqual(["notify"]);
   });
   it("answers /mcp without credentials with 401 and WWW-Authenticate", async () => {

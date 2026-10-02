@@ -4,10 +4,12 @@
 // This file is the Worker side: discovery, registration, the consent page, and routing /token and /revoke to the right
 // mailbox. Tokens, codes and the approval state live in that mailbox.
 
+import { DEVICE_GRANT } from "./mailbox";
 import { deviceIdValid, parseOAuthSecret } from "./ids";
 import { err, json, randomHex, safeEqual, sha256Hex } from "./util";
 
 export const SCOPE = "notify";
+export { DEVICE_GRANT };
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, mcp-protocol-version", "access-control-allow-methods": "GET, POST, OPTIONS" };
 
 export const mcpUrl = (origin: string) => origin + "/mcp";
@@ -57,11 +59,12 @@ export function serverMetadata(origin: string) {
     authorization_endpoint: origin + "/authorize",
     token_endpoint: origin + "/token",
     registration_endpoint: origin + "/register",
+    device_authorization_endpoint: origin + "/device_authorization",
     revocation_endpoint: origin + "/revoke",
     scopes_supported: [SCOPE],
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
+    grant_types_supported: ["authorization_code", "refresh_token", DEVICE_GRANT],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     revocation_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
@@ -87,7 +90,10 @@ export function redirectUriValid(raw: unknown): raw is string {
 async function register(env: Env, req: Request): Promise<Response> {
   let b: Record<string, unknown>;
   try { b = (await req.json()) as Record<string, unknown>; } catch { return oerr(400, "invalid_client_metadata", "body must be JSON"); }
-  if (!Array.isArray(b.redirect_uris) || b.redirect_uris.length < 1 || b.redirect_uris.length > 10 || !b.redirect_uris.every(redirectUriValid)) {
+  // A client that only uses the device flow (an agent with no browser) has no redirect address to register.
+  const deviceOnly = Array.isArray(b.grant_types) && b.grant_types.length > 0 && b.grant_types.every((g) => g === DEVICE_GRANT || g === "refresh_token") && b.grant_types.includes(DEVICE_GRANT);
+  if (deviceOnly && b.redirect_uris === undefined) b.redirect_uris = [];
+  if (!Array.isArray(b.redirect_uris) || (b.redirect_uris.length < 1 && !deviceOnly) || b.redirect_uris.length > 10 || !b.redirect_uris.every(redirectUriValid)) {
     return oerr(400, "invalid_redirect_uri", "redirect_uris must be 1-10 https (or loopback http) URLs without a fragment");
   }
   const method = b.token_endpoint_auth_method ?? "none";
@@ -95,8 +101,8 @@ async function register(env: Env, req: Request): Promise<Response> {
     return oerr(400, "invalid_client_metadata", "token_endpoint_auth_method must be none, client_secret_post or client_secret_basic");
   }
   const grants = b.grant_types ?? ["authorization_code"];
-  if (!Array.isArray(grants) || !grants.every((g) => g === "authorization_code" || g === "refresh_token")) {
-    return oerr(400, "invalid_client_metadata", "grant_types may only be authorization_code and refresh_token");
+  if (!Array.isArray(grants) || !grants.every((g) => g === "authorization_code" || g === "refresh_token" || g === DEVICE_GRANT)) {
+    return oerr(400, "invalid_client_metadata", "grant_types may only be authorization_code, refresh_token and urn:ietf:params:oauth:grant-type:device_code");
   }
   if (b.response_types !== undefined && !(Array.isArray(b.response_types) && b.response_types.every((t) => t === "code"))) {
     return oerr(400, "invalid_client_metadata", "response_types may only be code");
@@ -108,7 +114,7 @@ async function register(env: Env, req: Request): Promise<Response> {
   if (!r.ok) return cors(new Response(r.body, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } }));
   return cors(json(201, {
     client_id: id, client_id_issued_at: Math.floor(Date.now() / 1000), client_name: name, redirect_uris: b.redirect_uris,
-    token_endpoint_auth_method: method, grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], scope: SCOPE,
+    token_endpoint_auth_method: method, grant_types: ["authorization_code", "refresh_token", DEVICE_GRANT], response_types: ["code"], scope: SCOPE,
     ...(secret ? { client_secret: secret, client_secret_expires_at: 0 } : {}),
   }));
 }
@@ -280,9 +286,10 @@ async function token(env: Env, req: Request): Promise<Response> {
   const c = await clientAuth(env, req, form);
   if (c instanceof Response) return c;
   const grant = form.get("grant_type");
-  const raw = grant === "authorization_code" ? form.get("code") : grant === "refresh_token" ? form.get("refresh_token") : null;
-  const parsed = raw ? parseOAuthSecret(raw, grant === "refresh_token" ? "hrr" : "hrc") : null;
-  if (grant !== "authorization_code" && grant !== "refresh_token") return oerr(400, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+  const raw = grant === "authorization_code" ? form.get("code") : grant === "refresh_token" ? form.get("refresh_token") : grant === DEVICE_GRANT ? form.get("device_code") : null;
+  const parsed = raw ? parseOAuthSecret(raw, grant === "refresh_token" ? "hrr" : grant === DEVICE_GRANT ? "hrv" : "hrc") : null;
+  if (grant !== "authorization_code" && grant !== "refresh_token" && grant !== DEVICE_GRANT) return oerr(400, "unsupported_grant_type", `grant_type must be authorization_code, refresh_token or ${DEVICE_GRANT}`);
+  if (grant === DEVICE_GRANT && !parsed) return oerr(400, "invalid_grant", "device_code is missing or malformed");
   if (!parsed || !(await deviceIdValid(env.RELAY_SECRET, parsed.deviceId))) return oerr(400, "invalid_grant", "unknown or malformed grant");
   const body = Object.fromEntries(form.entries());
   delete body.client_secret;
@@ -300,13 +307,110 @@ async function revoke(env: Env, req: Request): Promise<Response> {
   return cors(json(200, {}));
 }
 
+
+// ---------- device authorization grant (RFC 8628): for an agent that has no usable browser
+
+async function deviceAuthorization(env: Env, req: Request, url: URL): Promise<Response> {
+  const form = await readForm(req);
+  const c = await clientAuth(env, req, form);
+  if (c instanceof Response) return c;
+  const scope = (form.get("scope") ?? "").trim();
+  if (scope && scope.split(/\s+/).some((x) => x !== SCOPE)) return oerr(400, "invalid_scope", "the only scope is notify");
+  const devices = ((await (await registry(env, "/devices", {})).json()) as { devices: { id: string }[] }).devices;
+  if (devices.length === 0) return oerr(400, "invalid_request", "this relay is not paired with a Mac yet; pair Herald in Settings, Cloud first");
+  // Several Macs: the optional `device` (1-based) picks one; the first is the default.
+  const pick = form.get("device") === null ? 1 : Number(form.get("device"));
+  if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) return oerr(400, "invalid_request", `device must be 1 to ${devices.length}`);
+  const r = await mailbox(env, devices[pick - 1].id, "device_begin", { clientId: c.id, clientName: c.name, scope: SCOPE, resource: mcpUrl(url.origin) });
+  if (r.status === 429) return oerr(429, "slow_down", "approvals are already waiting in Herald (or too many were requested); answer them there or wait a few minutes", { "retry-after": "60" });
+  if (!r.ok) return oerr(502, "temporarily_unavailable", "could not start the approval");
+  const d = (await r.json()) as { deviceCode: string; userCode: string; expiresIn: number; interval: number; online: boolean };
+  const verification = url.origin + "/activate";
+  return cors(json(200, {
+    device_code: d.deviceCode, user_code: d.userCode, verification_uri: verification,
+    verification_uri_complete: verification + "?user_code=" + encodeURIComponent(d.userCode), expires_in: d.expiresIn, interval: d.interval,
+  }));
+}
+
+const CODE_FIELD = `<input type="text" name="user_code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="BDFG-HJKM" required`;
+const APPROVAL_FIELD = `<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required>`;
+
+function activatePage(prefill = "", note = ""): Response {
+  return page(200, "Activate", `<h1>Approve an agent</h1>
+<p class="mut">An agent that cannot open a browser asked to send you notifications through Herald. It printed a code like BDFG-HJKM. Herald on your Mac shows the same code.</p>
+${note ? `<p class="bad">${esc(note)}</p>` : ""}
+<form class="card" method="post" action="/activate"><h2>The agent's code</h2>${CODE_FIELD} value="${esc(prefill)}"><div class="row"><button class="p" type="submit">Continue</button></div></form>
+<p class="mut">Easier: approve it in Herald on your Mac (a banner, or Settings, Cloud, Connector approvals).</p>`);
+}
+
+async function activateLookup(env: Env, userCode: string): Promise<{ rid: string; clientName: string; userCode: string } | null> {
+  const devices = ((await (await registry(env, "/devices", {})).json()) as { devices: { id: string }[] }).devices;
+  for (const d of devices) {
+    const r = await mailbox(env, d.id, "device_lookup", { user_code: userCode });
+    if (r.ok) { const j = (await r.json()) as { id: string; clientName: string; userCode: string }; return { rid: j.id, clientName: j.clientName, userCode: j.userCode }; }
+  }
+  return null;
+}
+
+function activateConfirm(a: { rid: string; clientName: string; userCode: string }, note = ""): Response {
+  return page(200, "Approve", `<h1>Approve ${esc(a.clientName)}?</h1>
+<p class="mut">Code <b>${esc(a.userCode)}</b>. It will be able to send notifications to your Mac and read receipts and replies. Nothing else.</p>
+<div class="card"><h2>Prove it is you</h2><p class="mut" style="margin-top:0">Herald, Settings, Cloud, Connector approvals shows a 6-digit approval code for this request. Type it here.</p>
+${note ? `<p class="bad">${esc(note)}</p>` : ""}
+<form method="post" action="/activate/approve"><input type="hidden" name="rid" value="${esc(a.rid)}">${APPROVAL_FIELD}<div class="row"><button class="p" type="submit">Approve</button></div></form></div>
+<form method="post" action="/activate/deny"><input type="hidden" name="rid" value="${esc(a.rid)}"><button type="submit">Deny</button></form>`);
+}
+
+async function activateEntry(env: Env, req: Request): Promise<Response> {
+  const code = (await readForm(req)).get("user_code") ?? "";
+  const a = await activateLookup(env, code);
+  return a ? activateConfirm(a) : activatePage(code, "That code is wrong or expired. Check what the agent printed.");
+}
+
+const donePage = (title: string, msg: string) => page(200, title, `<h1>${esc(title)}</h1><div class="card">${esc(msg)}</div>`);
+
+async function activateApprove(env: Env, req: Request): Promise<Response> {
+  const form = await readForm(req);
+  const rid = form.get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  const r = await mailbox(env, deviceId, "code", { id: rid, code: form.get("code") ?? "" });
+  const j = (await r.json().catch(() => ({}))) as { status?: string; attemptsLeft?: number };
+  if (j.status === "wrong_code") {
+    return page(200, "Wrong code", `<h1>That code is wrong</h1><div class="card bad">${j.attemptsLeft} ${j.attemptsLeft === 1 ? "try" : "tries"} left. Check Herald, Settings, Cloud, Connector approvals.</div>
+<form method="post" action="/activate/approve"><input type="hidden" name="rid" value="${esc(rid)}">${APPROVAL_FIELD}<div class="row"><button class="p" type="submit">Approve</button></div></form>`);
+  }
+  if (j.status === "approved") return donePage("Approved", "The agent can now send you notifications. You can close this tab. Revoke it any time in Herald, Settings, Cloud.");
+  if (j.status === "denied") return donePage("Denied", "Nothing was approved.");
+  return errorPage(j.status === "expired" ? "This request expired. The agent has to start again." : "This request is no longer open.");
+}
+
+async function activateDeny(env: Env, req: Request): Promise<Response> {
+  const rid = (await readForm(req)).get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  await mailbox(env, deviceId, "deny", { id: rid });
+  return donePage("Denied", "Nothing was approved.");
+}
+
+/** The root of the relay: a small page for a person who opened the address, and a pointer for an agent. */
+export function rootPage(origin: string): Response {
+  const l = (p: string, t = p) => `<li><a href="${esc(p)}">${esc(t)}</a></li>`;
+  return page(200, "Herald relay", `<h1>Herald relay</h1>
+<p class="mut">This is a private relay that lets an AI agent send notifications to one person's Mac (the Herald app). Nothing here is public: an agent needs a key or an approval from the Mac's owner.</p>
+<div class="card"><h2>For an agent</h2><ul>${l("/.well-known/oauth-authorization-server", "OAuth server metadata")}${l("/.well-known/oauth-protected-resource", "Protected resource metadata")}<li>MCP endpoint: <code>${esc(mcpUrl(origin))}</code></li></ul>
+<p class="mut" style="margin:.6rem 0 0">No browser? Use the device flow: <code>POST /register</code>, <code>POST /device_authorization</code>, tell the user the code, poll <code>POST /token</code>.</p></div>
+<div class="card"><h2>For the owner</h2><ul>${l("/activate", "Approve an agent with a code")}${l("/health", "Health check")}</ul></div>
+<p class="mut"><a href="https://github.com/ivg-design/herald/blob/main/docs/CLOUD.md">Documentation</a></p>`);
+}
+
 // ---------- routing
 
 /** Returns a response for the OAuth routes, or null when the path is not one of them. */
 export async function handleOAuth(req: Request, env: Env, url: URL): Promise<Response | null> {
   const p = url.pathname, m = req.method;
   const wellKnown = p.startsWith("/.well-known/");
-  const ours = wellKnown || ["/register", "/authorize", "/authorize/code", "/authorize/deny", "/authorize/status", "/token", "/revoke"].includes(p);
+  const ours = wellKnown || ["/register", "/authorize", "/authorize/code", "/authorize/deny", "/authorize/status", "/token", "/revoke", "/device_authorization", "/activate", "/activate/approve", "/activate/deny"].includes(p);
   if (!ours) return null;
   if (m === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-max-age": "86400" } });
 
@@ -319,6 +423,7 @@ export async function handleOAuth(req: Request, env: Env, url: URL): Promise<Res
   if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
   if (p === "/authorize" && m === "GET") return authorize(env, req, url);
   if (p === "/authorize/status" && m === "GET") return statusEntry(env, url);
+  if (p === "/activate" && m === "GET") return activatePage(url.searchParams.get("user_code") ?? "");
   if (m !== "POST") return err(405, "method_not_allowed", "POST only");
   switch (p) {
     case "/register": return register(env, req);
@@ -326,6 +431,10 @@ export async function handleOAuth(req: Request, env: Env, url: URL): Promise<Res
     case "/revoke": return revoke(env, req);
     case "/authorize/code": return codeEntry(env, req);
     case "/authorize/deny": return denyEntry(env, req);
+    case "/device_authorization": return deviceAuthorization(env, req, url);
+    case "/activate": return activateEntry(env, req);
+    case "/activate/approve": return activateApprove(env, req);
+    case "/activate/deny": return activateDeny(env, req);
   }
   return err(405, "method_not_allowed", "GET only");
 }

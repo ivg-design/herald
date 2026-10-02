@@ -7,20 +7,28 @@ export const MAX_NOTIFICATION_ID = 128;
 /** Fields that are called out by name in the error because they are the ones an attacker would reach for. */
 export const DANGEROUS = new Set([
   "command", "commands", "cmd", "script", "scripts", "shortcut", "shortcuts", "callback", "callbacks", "webhook",
-  "buttons", "actions", "actionIds", "action", "reminder", "url", "audio", "image", "icon", "template", "layout",
-  "app", "appId", "sound", "path", "exec", "run", "open", "openApp",
+  "buttons", "actions", "actionIds", "action", "reminder", "url", "audio", "image", "template", "layout",
+  "app", "appId", "path", "exec", "run", "open", "openApp", "snooze", "metadata", "accentColor", "templateName",
 ]);
+
+/** A data: icon may be this large (decoded); the request body is allowed that much more than the normal limit. */
+export const MAX_ICON_BYTES = 256 * 1024;
+export const ICON_BODY_ALLOWANCE = Math.ceil(MAX_ICON_BYTES * 4 / 3) + 64;
+const SOUND = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
 
 const ALLOWED = new Set([
   "notificationId", "title", "subtitle", "body", "status", "project", "session", "task", "tool", "duration",
   "link", "group", "priority", "speak", "expectReply", "allowVoiceReply",
+  "persistent", "timeoutSeconds", "sound", "voice", "speed", "presentation", "icon", "imageURL", "tags",
 ]);
 
 export interface Speak { text?: string; voice?: string; speed?: number; lang?: string }
 export interface Cleaned {
   title: string; subtitle?: string; body?: string; status?: string; project?: string; session?: string; task?: string;
-  tool?: string; duration?: string; link?: string; group?: string; priority?: "normal" | "urgent";
+  tool?: string; duration?: string; link?: string; group?: string; priority?: "low" | "normal" | "high" | "urgent";
   speak?: true | Speak; expectReply: boolean; allowVoiceReply?: boolean;
+  persistent?: boolean; timeoutSeconds?: number; sound?: string; presentation?: "banner" | "voice" | "both";
+  icon?: string; imageURL?: string; tags?: string[];
 }
 
 export type Validated =
@@ -49,7 +57,7 @@ export function validateNotification(input: unknown): Validated {
       error: "forbidden_fields",
       fields: rejected,
       message:
-        `rejected fields: ${rejected.join(", ")}. Cloud notifications carry text only` +
+        `rejected fields: ${rejected.join(", ")}. Cloud notifications carry text and presentation only` +
         (named.length ? ` (${named.join(", ")} would run or open something on the Mac and is never accepted)` : "") +
         `. Accepted fields: ${[...ALLOWED].join(", ")}.`,
     };
@@ -100,7 +108,7 @@ export function validateNotification(input: unknown): Validated {
   }
 
   if (o.priority !== undefined && o.priority !== null) {
-    if (o.priority !== "normal" && o.priority !== "urgent") return bad('priority must be "normal" or "urgent"', ["priority"]);
+    if (o.priority !== "low" && o.priority !== "normal" && o.priority !== "high" && o.priority !== "urgent") return bad('priority must be "low", "normal", "high" or "urgent"', ["priority"]);
     out.priority = o.priority;
   }
 
@@ -114,9 +122,62 @@ export function validateNotification(input: unknown): Validated {
     out.allowVoiceReply = o.allowVoiceReply;
   }
 
+  if (o.persistent !== undefined && o.persistent !== null) {
+    if (typeof o.persistent !== "boolean") return bad("persistent must be true or false", ["persistent"]);
+    out.persistent = o.persistent;
+  }
+  if (o.timeoutSeconds !== undefined && o.timeoutSeconds !== null) {
+    if (typeof o.timeoutSeconds !== "number" || !Number.isFinite(o.timeoutSeconds) || o.timeoutSeconds < 1 || o.timeoutSeconds > 3600) return bad("timeoutSeconds must be a number from 1 to 3600 (use persistent: true to stay until dismissed)", ["timeoutSeconds"]);
+    out.timeoutSeconds = o.timeoutSeconds;
+  }
+  if (o.sound !== undefined && o.sound !== null) {
+    if (typeof o.sound !== "string" || !SOUND.test(o.sound)) return bad('sound must be a system sound name such as "Glass", "default" or "none" (no paths)', ["sound"]);
+    out.sound = o.sound;
+  }
+  if (o.presentation !== undefined && o.presentation !== null) {
+    if (o.presentation !== "banner" && o.presentation !== "voice" && o.presentation !== "both") return bad('presentation must be "banner", "voice" or "both"', ["presentation"]);
+    out.presentation = o.presentation;
+  }
+
+  if (o.icon !== undefined && o.icon !== null) {
+    if (typeof o.icon !== "string") return bad("icon must be an https URL or a data: image", ["icon"]);
+    const m = /^data:image\/(png|jpeg|gif|webp);base64,([A-Za-z0-9+/=]+)$/.exec(o.icon);
+    if (m) {
+      const bytes = Math.floor(m[2].length * 3 / 4) - (m[2].endsWith("==") ? 2 : m[2].endsWith("=") ? 1 : 0);
+      if (bytes > MAX_ICON_BYTES) return bad(`icon is larger than ${MAX_ICON_BYTES / 1024} KB`, ["icon"]);
+      out.icon = o.icon;
+    } else {
+      let u: URL;
+      try { u = new URL(o.icon); } catch { return bad("icon must be an https URL or a data:image/png|jpeg|gif|webp;base64 image", ["icon"]); }
+      if (u.protocol !== "https:" || o.icon.length > 2048) return bad("icon must be an https URL (up to 2048 characters) or a data: image", ["icon"]);
+      out.icon = u.toString();
+    }
+  }
+  const imageURL = str(o.imageURL, "imageURL", 2048);
+  if (isBad(imageURL)) return imageURL;
+  if (imageURL !== undefined) {
+    let u: URL;
+    try { u = new URL(imageURL); } catch { return bad("imageURL must be an absolute https URL", ["imageURL"]); }
+    if (u.protocol !== "https:") return bad("imageURL must be an https URL", ["imageURL"]);
+    out.imageURL = u.toString();
+  }
+  if (o.tags !== undefined && o.tags !== null) {
+    if (!Array.isArray(o.tags) || o.tags.length > 10 || !o.tags.every((t) => typeof t === "string" && /^[^\s,][^,]{0,31}$/.test(t.trim()))) {
+      return bad("tags must be up to 10 short strings (at most 32 characters, no commas)", ["tags"]);
+    }
+    const tags = [...new Set(o.tags.map((t: string) => t.trim()))];
+    if (tags.length) out.tags = tags;
+  }
+
+  // speak: true, a string (the text to say), or {text, voice, speed, lang}. voice and speed beside it are the same as inside.
+  let speak: Speak | true | undefined;
   if (o.speak !== undefined && o.speak !== null && o.speak !== false) {
-    if (o.speak === true) out.speak = true;
-    else if (typeof o.speak === "object" && !Array.isArray(o.speak)) {
+    if (o.speak === true) speak = true;
+    else if (typeof o.speak === "string") {
+      const text = str(o.speak, "speak", 2000);
+      if (isBad(text)) return text;
+      speak = text ? { text } : true;
+    } else if (typeof o.speak === "object" && !Array.isArray(o.speak)) {
       const s = o.speak as Record<string, unknown>;
       const extra = Object.keys(s).filter((k) => !["text", "voice", "speed", "lang"].includes(k));
       if (extra.length) return { ok: false, error: "forbidden_fields", fields: extra.map((k) => "speak." + k), message: `rejected fields: ${extra.map((k) => "speak." + k).join(", ")}. speak accepts text, voice, speed, lang.` };
@@ -136,8 +197,26 @@ export function validateNotification(input: unknown): Validated {
         if (typeof s.lang !== "string" || !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/.test(s.lang)) return bad("speak.lang must be a language code such as en-us", ["speak.lang"]);
         sp.lang = s.lang;
       }
-      out.speak = sp;
-    } else return bad("speak must be true or an object {text, voice, speed, lang}", ["speak"]);
+      speak = sp;
+    } else return bad("speak must be true, the text to say, or an object {text, voice, speed, lang}", ["speak"]);
+  }
+  let voice: string | undefined, speed: number | undefined;
+  if (o.voice !== undefined && o.voice !== null) {
+    if (typeof o.voice !== "string" || !/^[A-Za-z0-9_]{1,40}$/.test(o.voice)) return bad("voice must be a voice name such as af_heart", ["voice"]);
+    voice = o.voice;
+  }
+  if (o.speed !== undefined && o.speed !== null) {
+    if (typeof o.speed !== "number" || !(o.speed >= 0.5 && o.speed <= 2)) return bad("speed must be between 0.5 and 2", ["speed"]);
+    speed = o.speed;
+  }
+  if (speak === undefined && (voice !== undefined || speed !== undefined || ((out.presentation === "voice" || out.presentation === "both") && o.speak !== false))) speak = true;
+  if (speak !== undefined) {
+    if (voice !== undefined || speed !== undefined) {
+      const base: Speak = speak === true ? {} : speak;
+      speak = { ...base, ...(voice !== undefined && base.voice === undefined ? { voice } : {}), ...(speed !== undefined && base.speed === undefined ? { speed } : {}) };
+      if (Object.keys(speak).length === 0) speak = true;
+    }
+    out.speak = speak;
   }
   return { ok: true, notificationId, value: out };
 }

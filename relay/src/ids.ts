@@ -38,13 +38,13 @@ export function parseToken(token: string): Principal | null {
   return null;
 }
 
-/** hrr_ (refresh) or hrc_ (authorization code): `<prefix>_<deviceId>_<hex>`. */
-export function parseOAuthSecret(token: string, prefix: "hrr" | "hrc" | "hra"): { deviceId: string } | null {
+/** hrr_ (refresh), hrc_ (authorization code) or hrv_ (device code): `<prefix>_<deviceId>_<hex>`. */
+export function parseOAuthSecret(token: string, prefix: "hrr" | "hrc" | "hra" | "hrv"): { deviceId: string } | null {
   const p = token.split("_");
   if (p[0] === prefix && p.length === 3 && /^[0-9a-f]{48}$/.test(p[1]) && /^[0-9a-f]{32,64}$/.test(p[2])) return { deviceId: p[1] };
   return null;
 }
 
-export const oauthToken = (prefix: "hrr" | "hrc" | "hra", deviceId: string, secret: string) => `${prefix}_${deviceId}_${secret}`;
+export const oauthToken = (prefix: "hrr" | "hrc" | "hra" | "hrv", deviceId: string, secret: string) => `${prefix}_${deviceId}_${secret}`;
 export const deviceToken = (deviceId: string, secret: string) => `hrd_${deviceId}_${secret}`;
 export const agentKey = (deviceId: string, keyId: string, secret: string) => `hrk_${deviceId}_${keyId}_${secret}`;

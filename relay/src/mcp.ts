@@ -10,25 +10,35 @@ const SUPPORTED = new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
 const NOTIFY_PROPS = {
   title: { type: "string", maxLength: 200, description: "Headline of the notification." },
   body: { type: "string", maxLength: 8000, description: "Message text." },
-  subtitle: { type: "string", maxLength: 200 },
-  status: { type: "string", description: "A short word shown as a badge: done, error, warning, question, info..." },
+  subtitle: { type: "string", maxLength: 200, description: "A second line under the title." },
+  status: { type: "string", description: "A short word shown as a badge: done, error, warning, question, info... Only a label; it changes nothing else." },
   project: { type: "string", maxLength: 100 },
   session: { type: "string", maxLength: 100 },
   task: { type: "string", maxLength: 100 },
   tool: { type: "string", maxLength: 100 },
   duration: { type: "string", description: "For example \"2m 14s\"." },
-  link: { type: "string", description: "An https URL the user can open from the banner." },
-  group: { type: "string", description: "Notifications with the same group stack together." },
-  priority: { type: "string", enum: ["normal", "urgent"], description: "urgent may break quiet hours only if the user allowed it." },
+  link: { type: "string", description: "An https URL the user can open from the banner (the Open link button)." },
+  group: { type: "string", maxLength: 100, description: "Notifications with the same group stack together into one banner." },
+  priority: { type: "string", enum: ["low", "normal", "high", "urgent"], description: "urgent may break quiet hours only if the user allowed it." },
+  persistent: { type: "boolean", description: "Default true: the banner stays until the user dismisses it. false lets Herald's own default timeout dismiss it." },
+  timeoutSeconds: { type: "number", minimum: 1, maximum: 3600, description: "Dismiss the banner by itself after this many seconds (hovering pauses it). Leave out to keep it until dismissed." },
+  sound: { type: "string", maxLength: 40, description: "A system sound name such as Glass or Tink, \"default\" (the sender's own sound) or \"none\" for silence. File paths are not accepted." },
+  presentation: { type: "string", enum: ["banner", "voice", "both"], description: "banner (default): a banner, plus speech if speak is set. voice: speech only, no banner (implies speak: true). both: banner and speech (implies speak: true)." },
   speak: {
-    description: "true speaks title then body on the Mac; or an object to choose the text and voice.",
+    description: "true speaks title then body on the Mac; a string speaks that text instead; or an object {text, voice, speed, lang}. Spoken in addition to the banner unless presentation is voice. Silenced (banner still shown) in quiet hours that silence speech.",
     oneOf: [
       { type: "boolean" },
+      { type: "string", maxLength: 2000 },
       { type: "object", additionalProperties: false, properties: { text: { type: "string", maxLength: 2000 }, voice: { type: "string" }, speed: { type: "number", minimum: 0.5, maximum: 2 }, lang: { type: "string" } } },
     ],
   },
+  voice: { type: "string", description: "Voice name for speech, for example af_heart. Setting it turns speak on." },
+  speed: { type: "number", minimum: 0.5, maximum: 2, description: "Speech speed, 0.5 to 2. Setting it turns speak on." },
+  icon: { type: "string", description: "Sender icon: an https image URL or a data:image/png|jpeg|gif|webp;base64 image up to 256 KB. Replaces the icon shown for this key's notifications (the user's own custom icon wins)." },
+  imageURL: { type: "string", description: "An https URL of a preview image to show on the banner." },
+  tags: { type: "array", maxItems: 10, items: { type: "string", maxLength: 32 }, description: "Short labels stored with the notification for the user's templates and search." },
   notificationId: { type: "string", pattern: "^[A-Za-z0-9._:-]{1,128}$", description: "Your own id. Sending the same id again within 24 hours never shows a second banner (idempotent)." },
-  expectReply: { type: "boolean", description: "The notification asks a question and stays on screen until answered. Every banner has Reply (text) and Record (voice) buttons; read the answer with wait_for_reply." },
+  expectReply: { type: "boolean", description: "Only adds the Reply (text) and Record (voice) buttons; the title, look and persistence are unchanged. Read the answer with wait_for_reply." },
   allowVoiceReply: { type: "boolean", description: "Default true. Set false to hide the Record button on this notification." },
 } as const;
 
@@ -37,7 +47,9 @@ const TOOLS = [
     name: "send_notification",
     title: "Send a notification to the user's Mac",
     description:
-      "Queue a notification for the user's Mac. Text only: no buttons, commands, callbacks or scripts are accepted. Quiet hours and mute are enforced on the Mac, " +
+      "Queue a notification for the user's Mac. Text and presentation only (persistent, timeoutSeconds, sound, speak, voice, speed, presentation, priority, group, icon, imageURL, tags): " +
+      "no buttons, commands, callbacks or scripts are accepted, and a request with such fields is refused with 400 naming them. By default the banner stays until the user dismisses it. " +
+      "A spoken banner that stays: {\"title\":\"Build done\",\"body\":\"All tests passed\",\"speak\":true,\"persistent\":true}. Quiet hours and mute are enforced on the Mac, " +
       "so check get_receipt: `received` means the relay has it, `displayed` that a banner was shown, `spoken` that speech finished, `suppressed` (with `reason`) that the user's settings held it back. " +
       "Limits: 60 per 10 minutes per key, 32 KB per request.",
     inputSchema: { type: "object", additionalProperties: false, required: ["title"], properties: NOTIFY_PROPS },
@@ -101,7 +113,8 @@ export async function handleMcp(req: Request, forward: (path: string, init?: Req
         protocolVersion: SUPPORTED.has(asked) ? asked : PROTOCOL,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "herald-relay", title: "Herald cloud relay", version: "1.0.0" },
-        instructions: "Send notifications to the user's Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text only. Nothing else is exposed.",
+        instructions: "Send notifications to the user's Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text and presentation fields only (persistent, timeoutSeconds, sound, speak, presentation...). Nothing else is exposed. " +
+          "No browser to sign in with? Use the OAuth device flow instead of a key: POST /register (client_name, grant_types [\"urn:ietf:params:oauth:grant-type:device_code\"]), POST /device_authorization (client_id), tell the user the user_code, poll POST /token (grant_type urn:ietf:params:oauth:grant-type:device_code) every `interval` seconds.",
       }));
     }
     case "ping": return reply(ok(msg.id, {}));

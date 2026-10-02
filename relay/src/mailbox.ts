@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { agentKey, oauthToken, parseOAuthSecret, parseToken, type Principal } from "./ids";
 import { DAY_MS, bearer, err, hmacHex, json, randomHex, safeEqual, sha256Hex } from "./util";
 import { limitsFor } from "./limits";
-import { validateNotification } from "./validate";
+import { ICON_BODY_ALLOWANCE, validateNotification } from "./validate";
 
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
 export const MAX_LONG_POLL_S = 60;
@@ -22,11 +22,17 @@ type OAuthReq = {
   id: string; client_id: string; client_name: string; redirect_uri: string; challenge: string; state: string | null; scope: string; resource: string;
   user_code: string; status: string; attempts: number; code: string | null; code_hash: string | null; key_id: string | null;
   created_at: number; expires_at: number; decided_at: number | null; redeemed_at: number | null;
+  flow: string | null; device_hash: string | null; device_user_code: string | null; last_poll: number | null; poll_interval: number | null;
 }
 type OAuthTok = { hash: string; kind: string; key_id: string; client_id: string; resource: string; family: string; expires_at: number; created_at: number; used_at: number | null }
 
 export const OAUTH_REQUEST_TTL_MS = 10 * 60_000;
 export const OAUTH_CODE_TTL_MS = 5 * 60_000;
+export const DEVICE_TTL_S = 600;
+export const DEVICE_INTERVAL_S = 5;
+/** Consonants only: no vowels (no words), no 0/O/1/I/L/5/S/U/V ambiguity beyond what is left out here. */
+const USER_CODE_ALPHABET = "BCDFGHJKMNPQRTWXZ";
+export const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 export const OAUTH_ACCESS_TTL_S = 3600;
 export const OAUTH_REFRESH_TTL_S = 30 * 86400;
 const OAUTH_MAX_PENDING = 3;
@@ -79,6 +85,11 @@ export class Mailbox extends DurableObject<Env> {
     `);
     for (const col of ["kind TEXT", "client_name TEXT", "oauth_client TEXT"]) {
       try { this.ctx.storage.sql.exec(`ALTER TABLE keys ADD COLUMN ${col}`); } catch { /* already there */ }
+    }
+    // The device flow (RFC 8628) shares the table: flow = 'device', the hash of the device_code, the code a person matches
+    // ("BDFGHJKM"), when it was last polled and the interval it is held to.
+    for (const col of ["flow TEXT", "device_hash TEXT", "device_user_code TEXT", "last_poll INTEGER", "poll_interval INTEGER"]) {
+      try { this.ctx.storage.sql.exec(`ALTER TABLE oauth_requests ADD COLUMN ${col}`); } catch { /* already there */ }
     }
   }
 
@@ -415,12 +426,21 @@ export class Mailbox extends DurableObject<Env> {
   }
 
   private async notify(req: Request, key: KeyRow): Promise<Response> {
+    // A data: icon (up to 256 KB) is the one thing allowed past the normal body limit; everything else still has to fit it.
+    const hard = this.lim.bodyBytes + ICON_BODY_ALLOWANCE;
+    const tooLarge = () => err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes (a data: icon may add up to 256 KB)`);
     const declared = Number(req.headers.get("content-length") ?? 0);
-    if (declared > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
+    if (declared > hard) return tooLarge();
     const text = await req.text();
-    if (new TextEncoder().encode(text).length > this.lim.bodyBytes) return err(413, "too_large", `body is larger than ${this.lim.bodyBytes} bytes`);
+    const size = new TextEncoder().encode(text).length;
+    if (size > hard) return tooLarge();
     let input: unknown;
     try { input = JSON.parse(text); } catch { return err(400, "invalid_request", "body must be JSON"); }
+    if (size > this.lim.bodyBytes) {
+      const icon = (input as { icon?: unknown } | null)?.icon;
+      const rest = typeof icon === "string" ? size - new TextEncoder().encode(icon).length : size;
+      if (rest > this.lim.bodyBytes) return tooLarge();
+    }
     const v = validateNotification(input);
     if (!v.ok) return err(400, v.error, v.message, v.fields ? { fields: v.fields } : {});
 
@@ -541,8 +561,11 @@ export class Mailbox extends DurableObject<Env> {
       id: r.id, clientId: r.client_id, clientName: r.client_name, redirectHost: this.redirectHost(r.redirect_uri), scope: r.scope,
       code: r.user_code, status: r.status === "pending" && r.expires_at <= Date.now() ? "expired" : r.status,
       createdAt: iso(r.created_at), expiresAt: iso(r.expires_at),
+      ...(r.flow === "device" && r.device_user_code ? { flow: "device", userCode: this.dashed(r.device_user_code) } : { flow: "code" }),
     };
   }
+
+  private dashed(c: string) { return c.slice(0, 4) + "-" + c.slice(4); }
 
   private sendConsent(r: OAuthReq) {
     const ws = this.sockets()[0];
@@ -576,6 +599,8 @@ export class Mailbox extends DurableObject<Env> {
       case "code": return this.oauthCode(b.id ?? "", b.code ?? "", now);
       case "deny": return this.oauthDecide(b.id ?? "", "deny", now);
       case "token": return this.oauthTokenEndpoint(b, now);
+      case "device_begin": return this.deviceBegin(b, now);
+      case "device_lookup": return this.deviceLookup(b.user_code ?? "", now);
       case "revoke": return this.oauthRevoke(b);
     }
     return err(404, "not_found", "no such oauth operation");
@@ -596,6 +621,72 @@ export class Mailbox extends DurableObject<Env> {
     return json(201, { id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online() });
   }
 
+  // ---------- device authorization grant (RFC 8628)
+
+  private newUserCode(): string {
+    for (;;) {
+      const b = crypto.getRandomValues(new Uint8Array(8));
+      const c = [...b].map((x) => USER_CODE_ALPHABET[x % USER_CODE_ALPHABET.length]).join("");
+      if (this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM oauth_requests WHERE device_user_code = ? AND status = 'pending' AND expires_at > ?", c, Date.now())[0].n === 0) return c;
+    }
+  }
+
+  private async deviceBegin(b: Record<string, string | undefined>, now: number): Promise<Response> {
+    if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
+    if (this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 3_600_000)[0].n >= OAUTH_BEGINS_PER_HOUR) {
+      return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
+    }
+    const deviceId = this.getMeta("device_id");
+    if (!deviceId) return err(404, "not_paired", "this relay has no paired Herald");
+    const id = deviceId + randomHex(12);
+    const approval = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+    const userCode = this.newUserCode();
+    const deviceCode = oauthToken("hrv", deviceId, randomHex(32));
+    const expires = now + DEVICE_TTL_S * 1000;
+    this.sql("INSERT INTO oauth_requests (id, client_id, client_name, redirect_uri, challenge, state, scope, resource, user_code, status, created_at, expires_at, flow, device_hash, device_user_code, last_poll, poll_interval) VALUES (?, ?, ?, '', '', NULL, ?, ?, ?, 'pending', ?, ?, 'device', ?, ?, ?, ?)",
+      id, b.clientId ?? "", (b.clientName ?? "").slice(0, 60), b.scope ?? "notify", b.resource ?? "", approval, now, expires, await sha256Hex(deviceCode), userCode, now, DEVICE_INTERVAL_S);
+    this.sendConsent(this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    return json(201, { id, deviceCode, userCode: this.dashed(userCode), expiresIn: DEVICE_TTL_S, interval: DEVICE_INTERVAL_S, online: this.online() });
+  }
+
+  /** /activate: the request a typed user code belongs to (the page then asks for the approval code Herald shows). */
+  private deviceLookup(userCode: string, now: number): Response {
+    const code = userCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const r = code.length === 8 ? this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE flow = 'device' AND device_user_code = ? AND status = 'pending' AND expires_at > ?", code, now)[0] : undefined;
+    if (!r) return json(404, { status: "unknown" });
+    return json(200, { id: r.id, clientName: r.client_name, userCode: this.dashed(code) });
+  }
+
+  private async deviceTokenGrant(b: Record<string, string | undefined>, now: number): Promise<Response> {
+    const dc = b.device_code ?? "";
+    if (!parseOAuthSecret(dc, "hrv")) return this.oerr("invalid_grant", "malformed device_code");
+    const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE device_hash = ?", await sha256Hex(dc))[0];
+    if (!r) return this.oerr("expired_token", "unknown or expired device_code; start again with /device_authorization");
+    if (r.client_id !== (b.client_id ?? "")) return this.oerr("invalid_grant", "device_code was issued to another client");
+    if (r.redeemed_at) {
+      if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id); // a code used twice is treated as stolen
+      return this.oerr("invalid_grant", "device_code already used");
+    }
+    if (r.status === "denied") return this.oerr("access_denied", "the user denied the request");
+    if (r.status === "pending") {
+      if (r.expires_at <= now) return this.oerr("expired_token", "the user code expired; start again");
+      const interval = r.poll_interval ?? DEVICE_INTERVAL_S;
+      const last = r.last_poll ?? r.created_at;
+      this.sql("UPDATE oauth_requests SET last_poll = ? WHERE id = ?", now, r.id);
+      if (now - last < interval * 1000) {
+        this.sql("UPDATE oauth_requests SET poll_interval = ? WHERE id = ?", interval + 5, r.id);
+        return this.oerr("slow_down", `poll no faster than every ${interval} seconds; the interval is now ${interval + 5}`);
+      }
+      return this.oerr("authorization_pending", "waiting for the user to approve in Herald");
+    }
+    if (r.status !== "approved" || r.expires_at <= now) return this.oerr("expired_token", "the approval expired; start again");
+    if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
+    this.sql("UPDATE oauth_requests SET redeemed_at = ? WHERE id = ?", now, r.id);
+    const key = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
+    if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+    return this.issueTokens(key.id, r.client_id, r.resource, randomHex(8), now);
+  }
+
   private redirectFor(r: OAuthReq): string {
     const u = new URL(r.redirect_uri);
     if (r.status === "approved" && r.code) u.searchParams.set("code", r.code);
@@ -608,6 +699,7 @@ export class Mailbox extends DurableObject<Env> {
     const r = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     if (!r) return json(404, { status: "unknown" });
     if (r.status === "pending") return json(200, { status: r.expires_at <= now ? "expired" : "pending" });
+    if (r.flow === "device") return json(200, { status: r.status === "pending" && r.expires_at <= now ? "expired" : r.status });
     if (r.status === "approved" && (!r.code || r.expires_at <= now)) return json(200, { status: "expired" });
     return json(200, { status: r.status, redirect: this.redirectFor(r) });
   }
@@ -632,13 +724,13 @@ export class Mailbox extends DurableObject<Env> {
     } else {
       const keyId = await this.createOAuthKey(r.client_id, r.client_name, now);
       if (!keyId) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys; revoke one first`);
-      const code = oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
+      const code = r.flow === "device" ? null : oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
       this.sql("UPDATE oauth_requests SET status = 'approved', decided_at = ?, key_id = ?, code = ?, code_hash = ?, expires_at = ? WHERE id = ?",
-        now, keyId, code, await sha256Hex(code), now + OAUTH_CODE_TTL_MS, id);
+        now, keyId, code, code ? await sha256Hex(code) : null, now + OAUTH_CODE_TTL_MS, id);
     }
     const done = this.sql<OAuthReq>("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
     this.sendResolved(done);
-    return json(200, { status: done.status, redirect: this.redirectFor(done) });
+    return json(200, { status: done.status, ...(done.flow === "device" ? {} : { redirect: this.redirectFor(done) }) });
   }
 
   /** One key per connector, kind "oauth". Re-authorizing the same client replaces its earlier key. */
@@ -685,6 +777,7 @@ export class Mailbox extends DurableObject<Env> {
 
   private async oauthTokenEndpoint(b: Record<string, string | undefined>, now: number): Promise<Response> {
     const clientId = b.client_id ?? "";
+    if (b.grant_type === DEVICE_GRANT) return this.deviceTokenGrant(b, now);
     if (b.grant_type === "authorization_code") {
       const code = b.code ?? "";
       if (!parseOAuthSecret(code, "hrc")) return this.oerr("invalid_grant", "malformed authorization code");
@@ -724,7 +817,7 @@ export class Mailbox extends DurableObject<Env> {
       this.sql("UPDATE oauth_tokens SET used_at = ? WHERE hash = ?", now, t.hash);
       return this.issueTokens(key.id, clientId, t.resource, t.family, now);
     }
-    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code, refresh_token or urn:ietf:params:oauth:grant-type:device_code");
   }
 
   /** RFC 7009: an unknown token is not an error. A refresh token takes its whole family with it. */
