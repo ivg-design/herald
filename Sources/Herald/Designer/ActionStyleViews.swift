@@ -19,7 +19,7 @@ struct ActionStyleField: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            FieldRow("Style") {
+            FieldRow("Button style") {
                 Picker("", selection: Binding<String?>(
                     get: { style.map { HeraldActionStyle.parse($0).rawValue } },
                     set: { style = $0 })) {

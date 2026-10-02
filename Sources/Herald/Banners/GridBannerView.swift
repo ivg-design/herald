@@ -105,7 +105,7 @@ struct GridRenderState {
         // its row with it (whatever the cell's own emptyBehavior says), so the question has nothing to fight with.
         // Icon buttons (close, snooze) stay: the user can always dismiss the banner, which cancels the question.
         var planTemplate = t
-        if model.confirmation != nil {
+        if model.replacesActions {
             for i in planTemplate.cells.indices {
                 switch planTemplate.cells[i].component {
                 case .actions(var a):
@@ -181,7 +181,7 @@ struct GridBannerView: View {
                 TimestampComponentView(component: c, ctx: ctx)
             }
         case .button(let c): ButtonComponentView(component: c, ctx: ctx)
-        case .actions(let c): ActionsComponentView(component: c, ctx: ctx)
+        case .actions(let c): ActionsComponentView(component: c, ctx: ctx, cellAlign: cell.align)
         case .iconButton(let c): IconButtonComponentView(component: c, ctx: ctx)
         case .badge(let c): BadgeComponentView(component: c, ctx: ctx)
         case .stackBadge(let c): StackBadgeComponentView(component: c, ctx: ctx)
@@ -220,7 +220,7 @@ struct GridBannerView: View {
         DispatchQueue.main.async {
             if linkClicks.swallowsBannerTap() { return }
             // A stray click on the card must not open it (and dismiss it, cancelling the question) while it is asking.
-            if model.confirmation != nil { return }
+            if model.replacesActions { return }
             model.onOpen()
         }
     }

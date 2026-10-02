@@ -295,6 +295,16 @@ public struct HeraldActionsComponent: Codable, Equatable, Sendable {
     /// True when the row flows onto further lines.
     public var wraps: Bool { layout == .stack ? false : (wrap ?? (layout == .wrap)) }
     public var effectiveAlign: HeraldActionsAlign { align ?? .leading }
+    /// The row's alignment inside its cell: its own `align`, else the horizontal part of the cell's 9-point alignment
+    /// (a trailing cell puts the buttons against the trailing edge).
+    public func effectiveAlign(in cell: HeraldAlign) -> HeraldActionsAlign {
+        if let align { return align }
+        switch cell.horizontal {
+        case .leading: return .leading
+        case .center: return .center
+        case .trailing: return .trailing
+        }
+    }
     public var effectiveSpacing: Double { spacing ?? 6 }
 
     private enum CodingKeys: String, CodingKey {

@@ -7,6 +7,9 @@ import SwiftUI
 struct ActionsComponentView: View {
     let component: HeraldActionsComponent
     let ctx: GridContext
+    /// The cell's 9-point alignment: the row's alignment when the component sets none.
+    var cellAlign: HeraldAlign = .topLeading
+    private var align: HeraldActionsAlign { component.effectiveAlign(in: cellAlign) }
 
     /// The extras only belong to the issuer's side of the list, never to a template-only action row.
     private var includesExtras: Bool { component.source != .template }
@@ -47,18 +50,18 @@ struct ActionsComponentView: View {
     @ViewBuilder private var flow: some View {
         switch component.layout {
         case .stack:
-            VStack(alignment: component.effectiveAlign.horizontal, spacing: gap) { items(visible: visibleCount) }
-                .frame(maxWidth: .infinity, alignment: component.effectiveAlign.frame)
+            VStack(alignment: align.horizontal, spacing: gap) { items(visible: visibleCount) }
+                .frame(maxWidth: .infinity, alignment: align.frame)
         case .wrap, .row:
             if component.wraps {
-                ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: true, align: component.effectiveAlign) {
+                ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: true, align: align) {
                     items(visible: visibleCount)
                 }
             } else {
                 // The first variant that fits the width wins: all the buttons, else one fewer plus "+N", and so on.
                 ViewThatFits(in: .horizontal) {
                     ForEach(Array(stride(from: visibleCount, through: 0, by: -1)), id: \.self) { k in
-                        ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: false, align: component.effectiveAlign) {
+                        ActionRowLayout(spacing: gap, lineSpacing: gap, wrap: false, align: align) {
                             items(visible: k)
                         }
                     }

@@ -339,7 +339,7 @@ enum DesignerComponent {
         case .issuerIcon(let p): IssuerIconComponentView(component: p, ctx: ctx)
         case .timestamp(let p): TimestampComponentView(component: p, ctx: ctx)
         case .button(let p): ButtonComponentView(component: p, ctx: ctx)
-        case .actions(let p): ActionsComponentView(component: p, ctx: ctx)
+        case .actions(let p): ActionsComponentView(component: p, ctx: ctx, cellAlign: align)
         case .iconButton(let p): IconButtonComponentView(component: p, ctx: ctx)
         case .badge(let p): BadgeComponentView(component: p, ctx: ctx)
         case .stackBadge(let p): StackBadgeComponentView(component: p, ctx: ctx)
