@@ -207,3 +207,18 @@ public enum StackListLayout {
         return total > limit ? (limit, true) : (total, false)
     }
 }
+
+/// Decides whether a banner tap is really the tail of a link click. SwiftUI delivers both the `openURL` action
+/// and the banner's `onTapGesture` for one click on a Markdown link, in either order; the link action calls
+/// `record()`, the tap (after one main-queue hop) asks `swallowsBannerTap()`. A reference type so the record
+/// survives the `@State` copy the closures capture (issue #24).
+final class LinkClickGuardBox {
+    var last: Date = .distantPast
+}
+
+struct LinkClickGuard {
+    private let box = LinkClickGuardBox()
+    static let window: TimeInterval = 0.5
+    func record(at now: Date = Date()) { box.last = now }
+    func swallowsBannerTap(at now: Date = Date()) -> Bool { now.timeIntervalSince(box.last) < Self.window }
+}

@@ -349,3 +349,27 @@ final class HeadCheckTests: XCTestCase {
         XCTAssertNil(check(head("POST", "/v1/snooze", auth: "bearer tok")))
     }
 }
+
+// MARK: Link click vs banner tap (issue #24)
+
+final class LinkClickGuardTests: XCTestCase {
+    func testTapRightAfterLinkClickIsSwallowed() {
+        let g = LinkClickGuard(); let t = Date()
+        g.record(at: t)
+        XCTAssertTrue(g.swallowsBannerTap(at: t.addingTimeInterval(0.01)))
+    }
+    func testPlainTapWithNoLinkClickOpensBanner() {
+        XCTAssertFalse(LinkClickGuard().swallowsBannerTap())
+    }
+    func testOldLinkClickDoesNotSwallowLaterTap() {
+        let g = LinkClickGuard(); let t = Date()
+        g.record(at: t)
+        XCTAssertFalse(g.swallowsBannerTap(at: t.addingTimeInterval(LinkClickGuard.window + 0.1)))
+    }
+    func testCopiesShareTheRecord() {
+        // The openURL closure and the tap closure capture copies of the same @State value.
+        let a = LinkClickGuard(); let b = a
+        a.record()
+        XCTAssertTrue(b.swallowsBannerTap())
+    }
+}

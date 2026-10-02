@@ -134,7 +134,7 @@ struct GridBannerView: View {
     @ObservedObject private var voice = VoiceCoordinator.shared
     @Environment(\.colorScheme) private var scheme
     /// Set by the link action so the banner's tap gesture (open url + dismiss) can tell it was a link click.
-    @State private var linkClickedAt: Date = .distantPast
+    @State private var linkClicks = LinkClickGuard()
 
     var body: some View {
         let state = GridRenderState(model: model, scheme: scheme)
@@ -203,8 +203,10 @@ struct GridBannerView: View {
     /// so the banner's tap gesture does not additionally open the notification's own url and dismiss.
     private var linkAction: OpenURLAction {
         OpenURLAction { url in
+            // Record the click before the policy check: a blocked link (file:, custom scheme) is still a click
+            // on a link, and must not fall through to the banner's own open-and-dismiss.
+            linkClicks.record()
             guard LinkPolicy.isOpenable(url) else { return .discarded }
-            linkClickedAt = Date()
             return .systemAction
         }
     }
@@ -213,7 +215,7 @@ struct GridBannerView: View {
     /// main-queue hop lets the link action run first, then a link click is ignored here.
     private func bannerTapped() {
         DispatchQueue.main.async {
-            if Date().timeIntervalSince(linkClickedAt) < 0.5 { return }
+            if linkClicks.swallowsBannerTap() { return }
             // A stray click on the card must not open it (and dismiss it, cancelling the question) while it is asking.
             if model.confirmation != nil { return }
             model.onOpen()
