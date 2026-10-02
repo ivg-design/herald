@@ -41,7 +41,9 @@ final class MCPTools: @unchecked Sendable {
             case "speak": return try await speak(args)
             case "get_quiet_hours": return try await getQuietHours()
             case "set_quiet_hours": return try await setQuietHours(args)
-            default: throw RPCError.invalidParams("Unknown tool: \(name)")
+            default:
+                if let result = try await callParity(name, args) { return result }
+                throw RPCError.invalidParams("Unknown tool: \(name)")
             }
         } catch let failure as ToolFailure {
             return .failure(failure)

@@ -346,7 +346,7 @@ enum MCPToolCatalog {
                 "resume": Schema.boolean("End the current silence now."),
             ], required: []),
             destructive: false, idempotent: false),
-    ]
+    ] + ParityTools.definitions
 
     static let byName: [String: MCPToolDefinition] = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })
 }

@@ -46,6 +46,8 @@ public protocol HeraldBackend: AnyObject, Sendable {
     /// `GET/PUT /v1/settings/stacking`: the global default stacking level (the bell menu's choice).
     func stackingLevel() async throws -> StackingLevel
     func setStackingLevel(_ level: StackingLevel) async throws -> StackingLevel
+    /// The routes added for MCP/API parity with the editor and Settings (docs/reference/parity.md). nil: not supported.
+    var parity: ParityService? { get }
 }
 
 /// Which template a preview draws: one stored for the app (or a `builtin.*` one) by name, or one sent inline.
@@ -94,6 +96,7 @@ public struct PreviewSpec: Sendable, Equatable {
 /// Template support is opt-in for a backend, so a conformer that predates it still compiles
 /// (a test double, say) and answers 501 instead of pretending to store anything.
 public extension HeraldBackend {
+    var parity: ParityService? { nil }
     func templates(app: String?) async throws -> [HeraldTemplate] { throw BackendError(501, "templates are not supported") }
     func putTemplate(_ t: HeraldTemplate) async throws { throw BackendError(501, "templates are not supported") }
     func deleteTemplate(app: String, name: String) async throws { throw BackendError(501, "templates are not supported") }
@@ -264,7 +267,7 @@ public final class Router: @unchecked Sendable {
             case ("GET", "/v1/shortcuts"):
                 return .json(200, ShortcutsReply(items: try await backend.shortcuts()))
             case ("POST", "/v1/preview"):
-                return .png(try await backend.preview(try decodePreview(req)))
+                return .png(try await backend.preview(try await decodePreview(req)))
             case ("GET", "/v1/preview"):
                 return .png(try await backend.preview(try previewRequest(query: req.query)))
             case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/rive/check"), (_, "/v1/designer/snapshot"), (_, "/v1/settings/stacking"),
@@ -273,6 +276,12 @@ public final class Router: @unchecked Sendable {
                  (_, "/v1/preview"):
                 return .error(405, "method not allowed")
             default:
+                // The parity routes (settings, per-app settings, assets, bundles, history search, symbols, voice, MCP
+                // install, approvals): see ParityService. A backend without it answers 501 for those paths.
+                if ParityService.owns(req.path) {
+                    guard let parity = backend.parity else { throw BackendError(501, "this route is not supported by this Herald") }
+                    return await parity.handle(req)
+                }
                 return .error(404, "not found")
             }
         } catch let e as BackendError {
@@ -411,7 +420,7 @@ public final class Router: @unchecked Sendable {
     /// (default 2); `confirmation` (optional) draws a pending inline confirmation (`BannerConfirmation.fromPreview`);
     /// `stackCount` (optional, 1 to 99) draws the banner as the top card of a stack of that many (DESIGN section 9),
     /// `stackExpanded: true` as the open list of them.
-    private func decodePreview(_ req: HTTPRequest) throws -> PreviewSpec {
+    private func decodePreview(_ req: HTTPRequest) async throws -> PreviewSpec {
         guard let obj = (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any] else {
             throw BackendError(400, req.body.isEmpty ? "a JSON body is required" : "invalid JSON")
         }
@@ -449,7 +458,16 @@ public final class Router: @unchecked Sendable {
         switch obj["data"] {
         case nil, is NSNull: break
         case let s as String:
-            guard s == "sample" else { throw BackendError(400, "invalid field: data (an object, or \"sample\")") }
+            switch s {
+            case "sample": break
+            case "last":
+                // The Designer's "Last" preview: the most recent notification the app was sent.
+                guard let item = try await backend.history(app: app, limit: 1).first else {
+                    throw BackendError(400, "no notification has been delivered for \(app) yet; use \"sample\" or an object")
+                }
+                data = item.notification
+            default: throw BackendError(400, "invalid field: data (an object, \"sample\" or \"last\")")
+            }
         case let dict as [String: Any]:
             data = try previewNotification(app: app, data: dict)
         default:

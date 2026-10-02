@@ -5,7 +5,8 @@ import Foundation
 /// Adapter that lets the (nonisolated) router call into the main-actor controller.
 final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     private let controller: AppController
-    init(_ c: AppController) { controller = c }
+    let parity: ParityService?
+    init(_ c: AppController, parity: ParityService? = nil) { controller = c; self.parity = parity }
     func notify(_ n: HeraldNotification) async throws -> String { try await controller.notify(n) }
     func register(_ r: HeraldAppRegistration) async throws { try await controller.register(r) }
     func dismiss(app: String, id: String) async throws { await controller.dismissItem(app: app, id: id, action: nil) }
@@ -64,6 +65,8 @@ final class AppController {
     private(set) var banners: BannerCenter!
     /// The inline confirmations (DESIGN 8): questions asked inside a banner, never in a modal alert.
     private(set) var confirmations: ConfirmationFlow!
+    /// The MCP/API parity routes (settings, assets, bundles, History search, symbols...); see ParityService.
+    private(set) var parityService: ParityService!
     private var listener: HTTPLoopbackListener?
     private var token = ""
     private(set) var serverStatus = "Not started"
@@ -77,6 +80,8 @@ final class AppController {
         banners = BannerCenter(controller: self)
         confirmations = ConfirmationFlow(registry: registry, approvals: commandApprovals) { [unowned self] in changed() }
         confirmations.surface = banners
+        parityService = ParityService(templates: templates, manifests: manifests, history: history, registry: registry,
+                                      assets: AssetStore.shared, approvals: commandApprovals, host: AppParityHost(controller: self))
         // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
@@ -105,9 +110,9 @@ final class AppController {
 
     func startServer() {
         listener?.stop(); listener = nil; serverRunning = false
-        let router = Router(token: token, backend: BackendAdapter(self), version: Self.version)
+        let router = Router(token: token, backend: BackendAdapter(self, parity: parityService), version: Self.version)
         // /v1/snooze and /v1/unsnooze are answered ahead of the router (see SnoozeRoutes); everything else falls through to it.
-        let handler = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self)) { await router.handle($0) }
+        let handler = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self, parity: parityService)) { await router.handle($0) }
         // The token is checked on the request head too, so an unauthenticated caller is turned away before
         // any of its body is buffered (the router still checks it again).
         let l = HTTPLoopbackListener(port: settings.effectivePort, headCheck: BearerAuth.headCheck(token: token), handler: handler)
