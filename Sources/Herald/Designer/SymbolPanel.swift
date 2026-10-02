@@ -15,22 +15,35 @@ struct SymbolPanel: View {
 
     private var s: HeraldSymbol { symbol ?? HeraldSymbol(name: "") }
     private func set(_ new: HeraldSymbol) { symbol = SymbolEditing.normalized(new) }
+    private func applyPicked(_ name: String) { symbol = SymbolEditing.normalized(SymbolEditing.setName(symbol, name)) }
+
+    /// The floating browser: a child of the window this panel is in, never activating the app.
+    private func openPanel() {
+        let binding = $symbol
+        let designer = model
+        SymbolBrowserPanel.show(parent: NSApp.keyWindow ?? NSApp.mainWindow) {
+            SymbolBrowserHost(designer: designer, current: { binding.wrappedValue ?? HeraldSymbol(name: "") },
+                              apply: { binding.wrappedValue = SymbolEditing.normalized(SymbolEditing.setName(binding.wrappedValue, $0)) })
+        }
+    }
 
     var body: some View {
         InspectorSection(title: "Symbol", hint: "An SF Symbol on this component") {
             FieldRow("Name") {
                 TextField("bell.badge", text: Binding(get: { s.name }, set: { symbol = SymbolEditing.normalized(SymbolEditing.setName(symbol, $0)) }))
                     .textFieldStyle(.roundedBorder).font(.system(size: 12, design: .monospaced))
-                Button { picking = true } label: {
+                Menu {
+                    Button("Browse in a sheet") { picking = true }
+                    Button("Browse in a floating panel") { openPanel() }
+                } label: {
                     Image(systemName: s.name.isEmpty || !HeraldSymbol.isKnown(s.name) ? "square.grid.3x3" : s.name)
-                }
-                .buttonStyle(.bordered).controlSize(.small).help("Pick from the SF Symbols on this Mac")
-                .popover(isPresented: $picking, arrowEdge: .leading) {
-                    SymbolPicker(model: model) { picked in
-                        symbol = SymbolEditing.normalized(SymbolEditing.setName(symbol, picked))
-                        SymbolShortlist().noteUsed(picked)
-                        picking = false
-                    }
+                } primaryAction: { picking = true }
+                .menuStyle(.borderedButton).controlSize(.small).fixedSize()
+                .help("Browse the SF Symbols on this Mac (the arrow opens a floating panel)")
+                .sheet(isPresented: $picking) {
+                    SymbolBrowserHost(designer: model, current: { s }, apply: { applyPicked($0) },
+                                      closeAfterUse: { picking = false }, onClose: { picking = false },
+                                      onFloat: { picking = false; openPanel() })
                 }
                 if symbol != nil {
                     Button { symbol = nil } label: { Image(systemName: "xmark.circle.fill") }
@@ -156,57 +169,6 @@ private struct SymbolColorWell: View {
                 Button("Accent") { value = "accent" }; Button("Primary") { value = "primary" }; Button("Secondary") { value = "secondary" }
             } label: { Image(systemName: "paintpalette") }.menuStyle(.borderlessButton).fixedSize()
             TokenMenu(model: model) { value = $0 }
-        }
-    }
-}
-
-/// The searchable grid of symbols. Typing filters the catalog; a recent / favourites row sits on top.
-struct SymbolPicker: View {
-    @ObservedObject var model: DesignerModel
-    let onPick: (String) -> Void
-    @State private var query = ""
-    @State private var results: [String] = []
-    @State private var shortlist = SymbolShortlist()
-    @State private var refresh = 0
-
-    private static let catalog = SymbolCatalog.load()
-    private let columns = [GridItem(.adaptive(minimum: 38, maximum: 44), spacing: 4)]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Search symbols (bell, mail, arrow...)", text: $query).textFieldStyle(.roundedBorder)
-            let favs = shortlist.favorites, recents = shortlist.recents.filter { !favs.contains($0) }
-            if query.isEmpty, !(favs + recents).isEmpty {
-                Text("Favourites and recent").font(.caption).foregroundStyle(.secondary)
-                grid(Array((favs + recents).prefix(16)))
-                Divider()
-            }
-            if Self.catalog == nil {
-                Text("The system symbol list was not found; type a name in the field instead.").font(.caption).foregroundStyle(.secondary)
-            } else {
-                Text(query.isEmpty ? "All symbols" : "\(results.count) found").font(.caption).foregroundStyle(.secondary)
-                ScrollView { grid(results) }.frame(height: 260)
-            }
-        }
-        .padding(12).frame(width: 330)
-        .onAppear { results = Self.catalog?.search("") ?? [] }
-        .onChange(of: query) { q in results = Self.catalog?.search(q) ?? [] }
-    }
-
-    private func grid(_ names: [String]) -> some View {
-        LazyVGrid(columns: columns, spacing: 4) {
-            ForEach(names, id: \.self) { n in
-                Button { onPick(n) } label: {
-                    Image(systemName: n).font(.system(size: 16)).frame(width: 36, height: 30)
-                }
-                .buttonStyle(.bordered).help(n)
-                .contextMenu {
-                    Button(shortlist.isFavorite(n) ? "Remove from favourites" : "Add to favourites") {
-                        shortlist.toggleFavorite(n); refresh += 1
-                    }
-                    Button("Copy name") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(n, forType: .string) }
-                }
-            }
         }
     }
 }
