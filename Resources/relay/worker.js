@@ -59,17 +59,27 @@ async function deviceIdValid(relaySecret, id) {
   return safeEqual(mac, id.slice(32));
 }
 __name(deviceIdValid, "deviceIdValid");
-function parseToken(token) {
-  const p = token.split("_");
+function parseToken(token2) {
+  const p = token2.split("_");
   if (p[0] === "hrd" && p.length === 3 && /^[0-9a-f]{48}$/.test(p[1]) && /^[0-9a-f]{64}$/.test(p[2])) {
     return { kind: "device", deviceId: p[1], secret: p[2] };
   }
   if (p[0] === "hrk" && p.length === 4 && /^[0-9a-f]{48}$/.test(p[1]) && /^[0-9a-f]{8}$/.test(p[2]) && /^[0-9a-f]{64}$/.test(p[3])) {
     return { kind: "agent", deviceId: p[1], keyId: p[2], secret: p[3] };
   }
+  if (p[0] === "hra" && p.length === 3 && /^[0-9a-f]{48}$/.test(p[1]) && /^[0-9a-f]{64}$/.test(p[2])) {
+    return { kind: "oauth", deviceId: p[1], secret: p[2] };
+  }
   return null;
 }
 __name(parseToken, "parseToken");
+function parseOAuthSecret(token2, prefix) {
+  const p = token2.split("_");
+  if (p[0] === prefix && p.length === 3 && /^[0-9a-f]{48}$/.test(p[1]) && /^[0-9a-f]{32,64}$/.test(p[2])) return { deviceId: p[1] };
+  return null;
+}
+__name(parseOAuthSecret, "parseOAuthSecret");
+var oauthToken = /* @__PURE__ */ __name((prefix, deviceId, secret) => `${prefix}_${deviceId}_${secret}`, "oauthToken");
 var deviceToken = /* @__PURE__ */ __name((deviceId, secret) => `hrd_${deviceId}_${secret}`, "deviceToken");
 var agentKey = /* @__PURE__ */ __name((deviceId, keyId, secret) => `hrk_${deviceId}_${keyId}_${secret}`, "agentKey");
 
@@ -276,6 +286,19 @@ var ONLINE_WINDOW_MS = 11 * 6e4;
 var MAX_AUDIO_BYTES = 1024 * 1024;
 var AUDIO_URL_TTL_S = 3600;
 var READ_LIMIT = 600;
+var OAUTH_REQUEST_TTL_MS = 10 * 6e4;
+var OAUTH_CODE_TTL_MS = 5 * 6e4;
+var OAUTH_ACCESS_TTL_S = 3600;
+var OAUTH_REFRESH_TTL_S = 30 * 86400;
+var OAUTH_MAX_PENDING = 3;
+var OAUTH_BEGINS_PER_HOUR = 12;
+var OAUTH_CODE_ATTEMPTS = 5;
+async function s256(v) {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+  return btoa(String.fromCharCode(...d)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+__name(s256, "s256");
+var sameResource = /* @__PURE__ */ __name((a, b) => a.replace(/\/+$/, "") === b.replace(/\/+$/, ""), "sameResource");
 var iso = /* @__PURE__ */ __name((t) => t == null ? void 0 : new Date(t).toISOString(), "iso");
 var Mailbox = class extends DurableObject {
   static {
@@ -299,7 +322,19 @@ var Mailbox = class extends DurableObject {
         suppressed_reason TEXT, suppressed_scope TEXT);
       CREATE UNIQUE INDEX IF NOT EXISTS notes_key_nid ON notes (key_id, nid);
       CREATE TABLE IF NOT EXISTS rate (key_id TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_name TEXT NOT NULL, redirect_uri TEXT NOT NULL,
+        challenge TEXT NOT NULL, state TEXT, scope TEXT NOT NULL, resource TEXT NOT NULL, user_code TEXT NOT NULL, status TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0, code TEXT, code_hash TEXT, key_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+        decided_at INTEGER, redeemed_at INTEGER);
+      CREATE TABLE IF NOT EXISTS oauth_tokens (hash TEXT PRIMARY KEY, kind TEXT NOT NULL, key_id TEXT NOT NULL, client_id TEXT NOT NULL, resource TEXT NOT NULL,
+        family TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, used_at INTEGER);
     `);
+    for (const col of ["kind TEXT", "client_name TEXT", "oauth_client TEXT"]) {
+      try {
+        this.ctx.storage.sql.exec(`ALTER TABLE keys ADD COLUMN ${col}`);
+      } catch {
+      }
+    }
   }
   /** This device's limits (per device: each Mac has its own mailbox and its own counters). */
   get lim() {
@@ -322,10 +357,11 @@ var Mailbox = class extends DurableObject {
   }
   // ---------- auth
   async authenticate(req, want) {
-    const token = bearer(req);
-    const p = token ? parseToken(token) : null;
-    if (!token || !p) return err(401, "unauthorized", "missing or malformed bearer token");
-    if (p.kind !== want) {
+    const token2 = bearer(req);
+    const p = token2 ? parseToken(token2) : null;
+    if (!token2 || !p) return err(401, "unauthorized", "missing or malformed bearer token");
+    const have = p.kind === "oauth" ? "agent" : p.kind;
+    if (have !== want) {
       return err(403, "wrong_credential", want === "device" ? "agent keys cannot use device endpoints" : "the device token cannot be used on agent endpoints; use an agent key");
     }
     if (p.kind === "device") {
@@ -333,9 +369,17 @@ var Mailbox = class extends DurableObject {
       if (!hash || !safeEqual(hash, await sha256Hex(p.secret))) return err(401, "unauthorized", "invalid device token");
       return { p };
     }
-    const row = this.sql("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
-    const good = row && !row.revoked_at && safeEqual(row.hash, await sha256Hex(p.secret));
-    if (!good) return err(401, "unauthorized", "invalid or revoked agent key");
+    let row;
+    let good;
+    if (p.kind === "oauth") {
+      const t = this.sql("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'access'", await sha256Hex(p.secret))[0];
+      row = t && t.expires_at > Date.now() ? this.sql("SELECT * FROM keys WHERE id = ?", t.key_id)[0] : void 0;
+      good = !!row && !row.revoked_at;
+    } else {
+      row = this.sql("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
+      good = !!row && !row.revoked_at && row.kind !== "oauth" && safeEqual(row.hash, await sha256Hex(p.secret));
+    }
+    if (!good || !row) return err(401, "unauthorized", p.kind === "oauth" ? "invalid, expired or revoked access token" : "invalid or revoked agent key");
     if (row.scope !== "notify") return err(403, "scope", "this key has no notify scope");
     if (!row.last_used_at || Date.now() - row.last_used_at > 10 * 6e4) this.sql("UPDATE keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
     return { p, key: row };
@@ -348,6 +392,7 @@ var Mailbox = class extends DurableObject {
     try {
       if (path === "/internal/init" && m === "POST") return this.internalInit(req);
       if (path === "/internal/wipe" && m === "POST") return this.internalWipe();
+      if (path.startsWith("/internal/oauth/") && m === "POST") return this.oauthInternal(path.slice("/internal/oauth/".length), req);
       if (path.startsWith("/v1/device")) {
         const a2 = await this.authenticate(req, "device");
         if (a2 instanceof Response) return a2;
@@ -360,6 +405,8 @@ var Mailbox = class extends DurableObject {
         if (path === "/v1/device/reply" && m === "POST") return this.httpReceipt(req, "replied");
         const am = /^\/v1\/device\/reply\/(r_[0-9a-f]{24})\/audio$/.exec(path);
         if (am && m === "PUT") return this.putAudio(req, am[1]);
+        if (path === "/v1/device/consents" && m === "GET") return json(200, { consents: this.consentList() });
+        if (path === "/v1/device/consent" && m === "POST") return this.deviceConsent(req);
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a2.p);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
@@ -421,6 +468,8 @@ var Mailbox = class extends DurableObject {
       name: k.name,
       client: k.client,
       scope: k.scope,
+      kind: k.kind ?? "static",
+      ...k.client_name ? { displayName: k.client_name } : {},
       createdAt: iso(k.created_at),
       lastUsedAt: iso(k.last_used_at),
       revokedAt: iso(k.revoked_at)
@@ -445,13 +494,14 @@ var Mailbox = class extends DurableObject {
     if (rows.some((k) => k.name === name)) return err(409, "name_taken", `a key named ${name} already exists`);
     if (rows.length >= MAX_KEYS) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys`);
     const id = randomHex(4), secret = randomHex(32), now = Date.now();
-    this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at) VALUES (?, ?, ?, 'notify', ?, ?)", id, name, client, await sha256Hex(secret), now);
-    return json(201, { id, name, client, scope: "notify", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
+    this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at, kind) VALUES (?, ?, ?, 'notify', ?, ?, 'static')", id, name, client, await sha256Hex(secret), now);
+    return json(201, { id, name, client, scope: "notify", kind: "static", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
   }
   revokeKey(id) {
     const row = this.sql("SELECT * FROM keys WHERE id = ?", id)[0];
     if (!row) return err(404, "not_found", "no such key");
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
+    this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
     return json(200, { revoked: true, id });
   }
   async unpair() {
@@ -711,6 +761,7 @@ var Mailbox = class extends DurableObject {
     pair[1].send(JSON.stringify({ type: "welcome", ttlSeconds: this.lim.ttlMs / 1e3 }));
     this.expireSweep(Date.now());
     this.flush(true);
+    for (const r of this.pendingRequests()) this.sendConsent(r);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
   async webSocketMessage(ws, message) {
@@ -746,6 +797,267 @@ var Mailbox = class extends DurableObject {
   }
   async webSocketError() {
     this.setMeta("last_seen", String(Date.now()));
+  }
+  // ---------- OAuth (connector approvals). Reached only through the Worker's /authorize and /token routes.
+  pendingRequests() {
+    return this.sql("SELECT * FROM oauth_requests WHERE status = 'pending' AND expires_at > ? ORDER BY created_at", Date.now());
+  }
+  redirectHost(uri) {
+    try {
+      const u = new URL(uri);
+      return u.host || u.protocol;
+    } catch {
+      return "";
+    }
+  }
+  consentView(r) {
+    return {
+      id: r.id,
+      clientId: r.client_id,
+      clientName: r.client_name,
+      redirectHost: this.redirectHost(r.redirect_uri),
+      scope: r.scope,
+      code: r.user_code,
+      status: r.status === "pending" && r.expires_at <= Date.now() ? "expired" : r.status,
+      createdAt: iso(r.created_at),
+      expiresAt: iso(r.expires_at)
+    };
+  }
+  sendConsent(r) {
+    const ws = this.sockets()[0];
+    if (!ws) return;
+    try {
+      ws.send(JSON.stringify({ type: "consent", ...this.consentView(r) }));
+    } catch {
+    }
+  }
+  sendResolved(r) {
+    const ws = this.sockets()[0];
+    if (!ws) return;
+    try {
+      ws.send(JSON.stringify({ type: "consent_resolved", id: r.id, status: r.status }));
+    } catch {
+    }
+  }
+  /** Requests of the last day, newest first (Herald shows them under Connector approvals). */
+  consentList() {
+    return this.sql("SELECT * FROM oauth_requests WHERE created_at > ? ORDER BY created_at DESC LIMIT 20", Date.now() - DAY_MS).map((r) => this.consentView(r));
+  }
+  oauthSweep(now) {
+    this.sql("DELETE FROM oauth_requests WHERE created_at < ?", now - DAY_MS);
+    this.sql("DELETE FROM oauth_tokens WHERE expires_at < ?", now - DAY_MS);
+  }
+  async oauthInternal(op, req) {
+    const b = await req.json().catch(() => ({}));
+    const now = Date.now();
+    this.oauthSweep(now);
+    switch (op) {
+      case "begin":
+        return this.oauthBegin(b, now);
+      case "status":
+        return this.oauthStatus(b.id ?? "", now);
+      case "code":
+        return this.oauthCode(b.id ?? "", b.code ?? "", now);
+      case "deny":
+        return this.oauthDecide(b.id ?? "", "deny", now);
+      case "token":
+        return this.oauthTokenEndpoint(b, now);
+      case "revoke":
+        return this.oauthRevoke(b);
+    }
+    return err(404, "not_found", "no such oauth operation");
+  }
+  async oauthBegin(b, now) {
+    if (this.pendingRequests().length >= OAUTH_MAX_PENDING) return err(429, "rate_limited", "approvals are already waiting in Herald; answer them or wait 10 minutes", { retryAfterSeconds: 600 });
+    if (this.sql("SELECT COUNT(*) AS n FROM oauth_requests WHERE created_at > ?", now - 36e5)[0].n >= OAUTH_BEGINS_PER_HOUR) {
+      return err(429, "rate_limited", "too many connector requests; try again in an hour", { retryAfterSeconds: 3600 });
+    }
+    const deviceId = this.getMeta("device_id");
+    if (!deviceId) return err(404, "not_paired", "this relay has no paired Herald");
+    const id = deviceId + randomHex(12);
+    const userCode = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1e6).padStart(6, "0");
+    this.sql(
+      "INSERT INTO oauth_requests (id, client_id, client_name, redirect_uri, challenge, state, scope, resource, user_code, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+      id,
+      b.clientId ?? "",
+      (b.clientName ?? "").slice(0, 60),
+      b.redirectUri ?? "",
+      b.challenge ?? "",
+      b.state ?? null,
+      b.scope ?? "notify",
+      b.resource ?? "",
+      userCode,
+      now,
+      now + OAUTH_REQUEST_TTL_MS
+    );
+    this.sendConsent(this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0]);
+    return json(201, { id, expiresAt: iso(now + OAUTH_REQUEST_TTL_MS), online: this.online() });
+  }
+  redirectFor(r) {
+    const u = new URL(r.redirect_uri);
+    if (r.status === "approved" && r.code) u.searchParams.set("code", r.code);
+    else u.searchParams.set("error", "access_denied");
+    if (r.state) u.searchParams.set("state", r.state);
+    return u.toString();
+  }
+  oauthStatus(id, now) {
+    const r = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r) return json(404, { status: "unknown" });
+    if (r.status === "pending") return json(200, { status: r.expires_at <= now ? "expired" : "pending" });
+    if (r.status === "approved" && (!r.code || r.expires_at <= now)) return json(200, { status: "expired" });
+    return json(200, { status: r.status, redirect: this.redirectFor(r) });
+  }
+  async oauthCode(id, code, now) {
+    const r = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r || r.status !== "pending" || r.expires_at <= now) return this.oauthStatus(id, now);
+    const attempts = r.attempts + 1;
+    this.sql("UPDATE oauth_requests SET attempts = ? WHERE id = ?", attempts, id);
+    if (safeEqual(r.user_code, code.replace(/\D/g, ""))) return this.oauthDecide(id, "approve", now);
+    if (attempts >= OAUTH_CODE_ATTEMPTS) return this.oauthDecide(id, "deny", now);
+    return json(200, { status: "wrong_code", attemptsLeft: OAUTH_CODE_ATTEMPTS - attempts });
+  }
+  async oauthDecide(id, decision, now) {
+    const r = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    if (!r) return err(404, "not_found", "no such request");
+    if (r.status !== "pending") return err(409, "already_decided", `this request is already ${r.status}`, { status: r.status });
+    if (r.expires_at <= now) return err(410, "expired", "this request has expired");
+    if (decision === "deny") {
+      this.sql("UPDATE oauth_requests SET status = 'denied', decided_at = ? WHERE id = ?", now, id);
+    } else {
+      const keyId = await this.createOAuthKey(r.client_id, r.client_name, now);
+      if (!keyId) return err(429, "too_many_keys", `at most ${MAX_KEYS} active keys; revoke one first`);
+      const code = oauthToken("hrc", this.getMeta("device_id") ?? "", randomHex(32));
+      this.sql(
+        "UPDATE oauth_requests SET status = 'approved', decided_at = ?, key_id = ?, code = ?, code_hash = ?, expires_at = ? WHERE id = ?",
+        now,
+        keyId,
+        code,
+        await sha256Hex(code),
+        now + OAUTH_CODE_TTL_MS,
+        id
+      );
+    }
+    const done = this.sql("SELECT * FROM oauth_requests WHERE id = ?", id)[0];
+    this.sendResolved(done);
+    return json(200, { status: done.status, redirect: this.redirectFor(done) });
+  }
+  /** One key per connector, kind "oauth". Re-authorizing the same client replaces its earlier key. */
+  async createOAuthKey(clientId, clientName, now) {
+    for (const old of this.sql("SELECT * FROM keys WHERE kind = 'oauth' AND oauth_client = ? AND revoked_at IS NULL", clientId)) {
+      this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", now, old.id);
+      this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", old.id);
+    }
+    const active = this.sql("SELECT * FROM keys WHERE revoked_at IS NULL");
+    if (active.length >= MAX_KEYS) return null;
+    const base = clientName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "") || "connector";
+    let name = base;
+    for (let i = 2; active.some((k) => k.name === name); i++) name = `${base}-${i}`;
+    const id = randomHex(4);
+    this.sql(
+      "INSERT INTO keys (id, name, client, scope, hash, created_at, kind, client_name, oauth_client) VALUES (?, ?, 'other', 'notify', ?, ?, 'oauth', ?, ?)",
+      id,
+      name,
+      await sha256Hex(randomHex(32)),
+      now,
+      clientName,
+      clientId
+    );
+    return id;
+  }
+  /** Herald approves or denies from its banner. */
+  async deviceConsent(req) {
+    const b = await req.json().catch(() => null);
+    if (!b || typeof b.id !== "string" || b.decision !== "approve" && b.decision !== "deny") return err(400, "invalid_request", "id and decision (approve|deny) are required");
+    this.touch();
+    return this.oauthDecide(b.id, b.decision, Date.now());
+  }
+  async issueTokens(keyId, clientId, resource, family, now) {
+    const deviceId = this.getMeta("device_id") ?? "";
+    const access = randomHex(32), refresh = randomHex(32);
+    this.sql(
+      "INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'access', ?, ?, ?, ?, ?, ?)",
+      await sha256Hex(access),
+      keyId,
+      clientId,
+      resource,
+      family,
+      now + OAUTH_ACCESS_TTL_S * 1e3,
+      now
+    );
+    this.sql(
+      "INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'refresh', ?, ?, ?, ?, ?, ?)",
+      await sha256Hex(refresh),
+      keyId,
+      clientId,
+      resource,
+      family,
+      now + OAUTH_REFRESH_TTL_S * 1e3,
+      now
+    );
+    return json(200, {
+      access_token: oauthToken("hra", deviceId, access),
+      token_type: "Bearer",
+      expires_in: OAUTH_ACCESS_TTL_S,
+      refresh_token: oauthToken("hrr", deviceId, refresh),
+      scope: "notify"
+    });
+  }
+  oerr(error, description) {
+    return json(400, { error, error_description: description });
+  }
+  async oauthTokenEndpoint(b, now) {
+    const clientId = b.client_id ?? "";
+    if (b.grant_type === "authorization_code") {
+      const code = b.code ?? "";
+      if (!parseOAuthSecret(code, "hrc")) return this.oerr("invalid_grant", "malformed authorization code");
+      const r = this.sql("SELECT * FROM oauth_requests WHERE code_hash = ?", await sha256Hex(code))[0];
+      if (!r) return this.oerr("invalid_grant", "unknown or already used authorization code");
+      if (r.redeemed_at) {
+        if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id);
+        return this.oerr("invalid_grant", "authorization code already used");
+      }
+      if (r.status !== "approved" || r.expires_at <= now) return this.oerr("invalid_grant", "authorization code expired");
+      if (r.client_id !== clientId) return this.oerr("invalid_grant", "code was issued to another client");
+      if (r.redirect_uri !== (b.redirect_uri ?? "")) return this.oerr("invalid_grant", "redirect_uri does not match the authorization request");
+      const v = b.code_verifier ?? "";
+      if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(v)) return this.oerr("invalid_grant", "code_verifier is missing or malformed");
+      if (!safeEqual(await s256(v), r.challenge)) return this.oerr("invalid_grant", "PKCE verification failed");
+      if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
+      this.sql("UPDATE oauth_requests SET redeemed_at = ?, code = NULL WHERE id = ?", now, r.id);
+      const key = this.sql("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
+      if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+      return this.issueTokens(key.id, clientId, r.resource, randomHex(8), now);
+    }
+    if (b.grant_type === "refresh_token") {
+      const rt = b.refresh_token ?? "";
+      if (!parseOAuthSecret(rt, "hrr")) return this.oerr("invalid_grant", "malformed refresh token");
+      const t = this.sql("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'refresh'", await sha256Hex(rt.split("_")[2]))[0];
+      if (!t || t.client_id !== clientId) return this.oerr("invalid_grant", "unknown refresh token");
+      if (t.used_at) {
+        this.sql("DELETE FROM oauth_tokens WHERE family = ?", t.family);
+        return this.oerr("invalid_grant", "refresh token already used; authorize the connector again");
+      }
+      if (t.expires_at <= now) return this.oerr("invalid_grant", "refresh token expired");
+      const key = this.sql("SELECT * FROM keys WHERE id = ?", t.key_id)[0];
+      if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
+      if (b.resource && !sameResource(b.resource, t.resource)) return this.oerr("invalid_target", "resource does not match the original grant");
+      if (b.scope && b.scope.split(/\s+/).some((x) => x !== "notify")) return this.oerr("invalid_scope", "the only scope is notify");
+      this.sql("UPDATE oauth_tokens SET used_at = ? WHERE hash = ?", now, t.hash);
+      return this.issueTokens(key.id, clientId, t.resource, t.family, now);
+    }
+    return this.oerr("unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+  }
+  /** RFC 7009: an unknown token is not an error. A refresh token takes its whole family with it. */
+  async oauthRevoke(b) {
+    const tok = b.token ?? "";
+    if (parseOAuthSecret(tok, "hrr") || parseOAuthSecret(tok, "hra")) {
+      const t = this.sql("SELECT * FROM oauth_tokens WHERE hash = ?", await sha256Hex(tok.split("_")[2]))[0];
+      if (t && t.client_id === b.client_id) {
+        if (t.kind === "refresh") this.sql("DELETE FROM oauth_tokens WHERE family = ?", t.family);
+        else this.sql("DELETE FROM oauth_tokens WHERE hash = ?", t.hash);
+      }
+    }
+    return json(200, {});
   }
   // ---------- receipts from Herald
   async httpReceipt(req, forceKind) {
@@ -1057,6 +1369,343 @@ function toolError(message) {
 }
 __name(toolError, "toolError");
 
+// src/oauth.ts
+var SCOPE = "notify";
+var CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "authorization, content-type, mcp-protocol-version", "access-control-allow-methods": "GET, POST, OPTIONS" };
+var mcpUrl = /* @__PURE__ */ __name((origin) => origin + "/mcp", "mcpUrl");
+var resourceMetadataUrl = /* @__PURE__ */ __name((origin) => origin + "/.well-known/oauth-protected-resource", "resourceMetadataUrl");
+function challenge(origin, invalidToken) {
+  return `Bearer ${invalidToken ? 'error="invalid_token", ' : ""}resource_metadata="${resourceMetadataUrl(origin)}"`;
+}
+__name(challenge, "challenge");
+var cors = /* @__PURE__ */ __name((r) => {
+  for (const [k, v] of Object.entries(CORS)) r.headers.set(k, v);
+  return r;
+}, "cors");
+var oerr = /* @__PURE__ */ __name((status, error, description, headers = {}) => cors(json(status, { error, error_description: description }, headers)), "oerr");
+function esc(s) {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+__name(esc, "esc");
+async function readForm(req) {
+  const out = new URLSearchParams();
+  try {
+    for (const [k, v] of (await req.formData()).entries()) if (typeof v === "string") out.append(k, v);
+  } catch {
+  }
+  return out;
+}
+__name(readForm, "readForm");
+function registry(env, path, body) {
+  return env.REGISTRY.get(env.REGISTRY.idFromName("registry")).fetch(new Request("https://registry" + path, { method: "POST", body: JSON.stringify(body) }));
+}
+__name(registry, "registry");
+function mailbox(env, deviceId, path, body) {
+  return env.MAILBOX.get(env.MAILBOX.idFromName(deviceId)).fetch(new Request("https://mailbox/internal/oauth/" + path, { method: "POST", body: JSON.stringify(body) }));
+}
+__name(mailbox, "mailbox");
+function protectedResource(origin) {
+  return {
+    resource: mcpUrl(origin),
+    authorization_servers: [origin],
+    scopes_supported: [SCOPE],
+    bearer_methods_supported: ["header"],
+    resource_name: "Herald relay"
+  };
+}
+__name(protectedResource, "protectedResource");
+function serverMetadata(origin) {
+  return {
+    issuer: origin,
+    authorization_endpoint: origin + "/authorize",
+    token_endpoint: origin + "/token",
+    registration_endpoint: origin + "/register",
+    revocation_endpoint: origin + "/revoke",
+    scopes_supported: [SCOPE],
+    response_types_supported: ["code"],
+    response_modes_supported: ["query"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+    revocation_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+    service_documentation: "https://github.com/ivg-design/herald/blob/main/docs/CLOUD.md"
+  };
+}
+__name(serverMetadata, "serverMetadata");
+var BAD_SCHEMES = /* @__PURE__ */ new Set(["javascript:", "data:", "vbscript:", "file:", "blob:", "about:", "ftp:"]);
+function redirectUriValid(raw) {
+  if (typeof raw !== "string" || raw.length > 500) return false;
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.hash || u.username || u.password || BAD_SCHEMES.has(u.protocol)) return false;
+  if (u.protocol === "https:") return true;
+  if (u.protocol === "http:") return ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+  return /^[a-z][a-z0-9+.-]*:$/.test(u.protocol) && u.protocol !== "http:";
+}
+__name(redirectUriValid, "redirectUriValid");
+async function register(env, req) {
+  let b;
+  try {
+    b = await req.json();
+  } catch {
+    return oerr(400, "invalid_client_metadata", "body must be JSON");
+  }
+  if (!Array.isArray(b.redirect_uris) || b.redirect_uris.length < 1 || b.redirect_uris.length > 10 || !b.redirect_uris.every(redirectUriValid)) {
+    return oerr(400, "invalid_redirect_uri", "redirect_uris must be 1-10 https (or loopback http) URLs without a fragment");
+  }
+  const method = b.token_endpoint_auth_method ?? "none";
+  if (method !== "none" && method !== "client_secret_post" && method !== "client_secret_basic") {
+    return oerr(400, "invalid_client_metadata", "token_endpoint_auth_method must be none, client_secret_post or client_secret_basic");
+  }
+  const grants = b.grant_types ?? ["authorization_code"];
+  if (!Array.isArray(grants) || !grants.every((g) => g === "authorization_code" || g === "refresh_token")) {
+    return oerr(400, "invalid_client_metadata", "grant_types may only be authorization_code and refresh_token");
+  }
+  if (b.response_types !== void 0 && !(Array.isArray(b.response_types) && b.response_types.every((t) => t === "code"))) {
+    return oerr(400, "invalid_client_metadata", "response_types may only be code");
+  }
+  const name = (typeof b.client_name === "string" ? b.client_name : "").replace(/[\u0000-\u001f\u007f<>]/g, "").trim().slice(0, 60) || "An app";
+  const id = "hc_" + randomHex(16);
+  const secret = method === "none" ? null : randomHex(32);
+  const r = await registry(env, "/client/register", { id, name, redirectUris: b.redirect_uris, secretHash: secret ? await sha256Hex(secret) : null });
+  if (!r.ok) return cors(new Response(r.body, { status: r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } }));
+  return cors(json(201, {
+    client_id: id,
+    client_id_issued_at: Math.floor(Date.now() / 1e3),
+    client_name: name,
+    redirect_uris: b.redirect_uris,
+    token_endpoint_auth_method: method,
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    scope: SCOPE,
+    ...secret ? { client_secret: secret, client_secret_expires_at: 0 } : {}
+  }));
+}
+__name(register, "register");
+async function getClient(env, id) {
+  if (!/^hc_[0-9a-f]{32}$/.test(id)) return null;
+  const r = await registry(env, "/client/get", { id });
+  return r.ok ? await r.json() : null;
+}
+__name(getClient, "getClient");
+async function clientAuth(env, req, form) {
+  let id = form.get("client_id") ?? "";
+  let secret = form.get("client_secret") ?? "";
+  const basic = /^Basic\s+(\S+)$/i.exec(req.headers.get("authorization") ?? "");
+  if (basic) {
+    try {
+      const [u, ...rest] = atob(basic[1]).split(":");
+      id = decodeURIComponent(u);
+      secret = decodeURIComponent(rest.join(":"));
+    } catch {
+      return oerr(401, "invalid_client", "malformed Basic credentials", { "www-authenticate": 'Basic realm="herald-relay"' });
+    }
+  }
+  const c = await getClient(env, id);
+  if (!c) return oerr(401, "invalid_client", "unknown client_id");
+  if (c.secretHash && !safeEqual(c.secretHash, await sha256Hex(secret))) {
+    return oerr(401, "invalid_client", "client authentication failed", basic ? { "www-authenticate": 'Basic realm="herald-relay"' } : {});
+  }
+  form.set("client_id", c.id);
+  return c;
+}
+__name(clientAuth, "clientAuth");
+var CSS = `:root{color-scheme:light dark;--bg:#f6f5f2;--fg:#1c1b19;--mut:#6b6862;--card:#fff;--line:#dedbd4;--acc:#1f5eff}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--fg:#eeece6;--mut:#a09d95;--card:#201f1d;--line:#38362f;--acc:#7da2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:30rem;margin:0 auto;padding:2.5rem 1rem}h1{font-size:1.4rem;line-height:1.25;margin:0 0 .5rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin:1rem 0}
+.mut{color:var(--mut);font-size:.9rem}ul{margin:.4rem 0 0;padding-left:1.2rem}h2{font-size:1rem;margin:0 0 .25rem}
+input[type=text]{font:600 1.5rem ui-monospace,Menlo,monospace;letter-spacing:.3em;width:100%;padding:.5rem .7rem;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);padding:.5rem 1rem;cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}.row{display:flex;gap:.6rem;margin-top:.7rem}.bad{color:#c0392b}.dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%;background:var(--acc);margin-right:.4rem;animation:b 1.2s infinite}
+@keyframes b{50%{opacity:.25}}`;
+function page(status, title, body, script = "") {
+  const nonce = randomHex(12);
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title><style nonce="${nonce}">${CSS}</style></head><body><main>${body}</main>${script ? `<script nonce="${nonce}">${script}<\/script>` : ""}</body></html>`;
+  return new Response(html, { status, headers: {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    "x-frame-options": "DENY",
+    "content-security-policy": `default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'`
+  } });
+}
+__name(page, "page");
+var errorPage = /* @__PURE__ */ __name((message, status = 400) => page(status, "Herald", `<h1>Can't connect</h1><div class="card">${esc(message)}</div><p class="mut">Nothing was approved. Close this tab and start again from the app.</p>`), "errorPage");
+function consentPage(rid, client, redirectHost, online, note = "") {
+  const name = esc(client.name);
+  const body = `<h1>${name} wants to connect to Herald</h1>
+<p class="mut">It will return to <b>${esc(redirectHost)}</b> after you decide.</p>
+<div class="card"><h2>It will be able to</h2><ul><li>send notifications to your Mac</li><li>read receipts and your replies</li></ul>
+<p class="mut" style="margin:.6rem 0 0">Nothing else: no commands, no files, no settings. You can revoke it any time in Herald, Settings, Cloud.</p></div>
+<div class="card"><h2>Approve in Herald</h2>
+<p id="wait"><span class="dot"></span>${online ? `A banner is waiting on your Mac. Click <b>Approve</b> there.` : `Herald does not look connected right now. Open Herald on your Mac; the request will appear there.`} This page continues by itself.</p></div>
+<div class="card"><h2>Or enter the code</h2><p class="mut" style="margin-top:0">Herald, Settings, Cloud, Connector approvals shows a 6-digit code.</p>
+${note ? `<p class="bad">${esc(note)}</p>` : ""}
+<form method="post" action="/authorize/code"><input type="hidden" name="rid" value="${rid}"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required>
+<div class="row"><button class="p" type="submit">Approve</button></div></form></div>
+<form method="post" action="/authorize/deny"><input type="hidden" name="rid" value="${rid}"><button type="submit">Deny</button></form>`;
+  const script = `var rid=${JSON.stringify(rid)};(function poll(){fetch('/authorize/status?rid='+rid,{cache:'no-store'}).then(function(r){return r.json()}).then(function(s){
+if(s.redirect){location.replace(s.redirect)}else if(s.status==='expired'||s.status==='unknown'){document.getElementById('wait').textContent='This request expired. Start again from the app.'}else{setTimeout(poll,2000)}}).catch(function(){setTimeout(poll,4000)})})();`;
+  return page(200, "Connect to Herald", body, script);
+}
+__name(consentPage, "consentPage");
+function errorRedirect(redirect, error, description, state) {
+  const u = new URL(redirect);
+  u.searchParams.set("error", error);
+  u.searchParams.set("error_description", description);
+  if (state) u.searchParams.set("state", state);
+  return new Response(null, { status: 302, headers: { location: u.toString(), "cache-control": "no-store" } });
+}
+__name(errorRedirect, "errorRedirect");
+async function authorize(env, req, url) {
+  if (!env.RELAY_SECRET) return errorPage("The relay is misconfigured.", 500);
+  const q = url.searchParams;
+  const client = await getClient(env, q.get("client_id") ?? "");
+  if (!client) return errorPage("Unknown client. The app has to register with this relay first.");
+  const redirect = q.get("redirect_uri") ?? "";
+  if (!client.redirectUris.includes(redirect)) return errorPage("The redirect address does not match what this app registered.");
+  const state = q.get("state");
+  if (q.get("response_type") !== "code") return errorRedirect(redirect, "unsupported_response_type", "response_type must be code", state);
+  const chal = q.get("code_challenge") ?? "";
+  if (q.get("code_challenge_method") !== "S256" || !/^[A-Za-z0-9_-]{43}$/.test(chal)) {
+    return errorRedirect(redirect, "invalid_request", "PKCE is required: code_challenge with code_challenge_method=S256", state);
+  }
+  const resource = q.get("resource");
+  const mcp = mcpUrl(url.origin);
+  if (resource !== null && resource.replace(/\/+$/, "") !== mcp) return errorRedirect(redirect, "invalid_target", `resource must be ${mcp}`, state);
+  const scope = (q.get("scope") ?? "").trim();
+  if (scope && scope.split(/\s+/).some((s) => s !== SCOPE)) return errorRedirect(redirect, "invalid_scope", "the only scope is notify", state);
+  const devices = (await (await registry(env, "/devices", {})).json()).devices;
+  if (devices.length === 0) return page(200, "Pair Herald first", `<h1>Pair Herald first</h1><div class="card">This relay is not paired with a Mac yet. In Herald, open Settings, Cloud and pair this relay, then connect ${esc(client.name)} again.</div>`);
+  let device = devices[0];
+  if (devices.length > 1) {
+    const pick = Number(q.get("device"));
+    if (!Number.isInteger(pick) || pick < 1 || pick > devices.length) {
+      const next = new URL(url);
+      const links = devices.map((d, i) => {
+        next.searchParams.set("device", String(i + 1));
+        return `<li><a href="${esc(next.pathname + next.search)}">${esc(d.name ?? "Mac " + (i + 1))}</a></li>`;
+      }).join("");
+      return page(200, "Choose a Mac", `<h1>Which Mac?</h1><p class="mut">${esc(client.name)} will notify the Mac you choose.</p><div class="card"><ul>${links}</ul></div>`);
+    }
+    device = devices[pick - 1];
+  }
+  const r = await mailbox(env, device.id, "begin", { clientId: client.id, clientName: client.name, redirectUri: redirect, challenge: chal, state, scope: SCOPE, resource: mcp });
+  if (r.status === 429) return errorPage("Approvals are already waiting in Herald (or too many were requested). Answer them there, or wait a few minutes.", 429);
+  if (!r.ok) return errorPage("Could not start the approval.", 502);
+  const { id, online } = await r.json();
+  let host = redirect;
+  try {
+    host = new URL(redirect).host || new URL(redirect).protocol;
+  } catch {
+  }
+  return consentPage(id, client, host, online);
+}
+__name(authorize, "authorize");
+async function ridDevice(env, rid) {
+  if (!/^[0-9a-f]{72}$/.test(rid)) return null;
+  const deviceId = rid.slice(0, 48);
+  return await deviceIdValid(env.RELAY_SECRET, deviceId) ? deviceId : null;
+}
+__name(ridDevice, "ridDevice");
+async function decided(r) {
+  const j = await r.json().catch(() => ({}));
+  if (j.redirect) return new Response(null, { status: 302, headers: { location: j.redirect, "cache-control": "no-store" } });
+  return errorPage(j.status === "expired" ? "This request expired. Start again from the app." : "This request is no longer open.");
+}
+__name(decided, "decided");
+async function codeEntry(env, req) {
+  const form = await readForm(req);
+  const rid = form.get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  const r = await mailbox(env, deviceId, "code", { id: rid, code: form.get("code") ?? "" });
+  const j = await r.clone().json().catch(() => ({}));
+  if (j.status === "wrong_code") {
+    return page(200, "Wrong code", `<h1>That code is wrong</h1><div class="card bad">${j.attemptsLeft} ${j.attemptsLeft === 1 ? "try" : "tries"} left. Check Herald, Settings, Cloud, Connector approvals.</div>
+<form method="post" action="/authorize/code"><input type="hidden" name="rid" value="${esc(rid)}"><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required><div class="row"><button class="p" type="submit">Approve</button></div></form>`);
+  }
+  return decided(r);
+}
+__name(codeEntry, "codeEntry");
+async function denyEntry(env, req) {
+  const rid = (await readForm(req)).get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return errorPage("Unknown request.");
+  return decided(await mailbox(env, deviceId, "deny", { id: rid }));
+}
+__name(denyEntry, "denyEntry");
+async function statusEntry(env, url) {
+  const rid = url.searchParams.get("rid") ?? "";
+  const deviceId = await ridDevice(env, rid);
+  if (!deviceId) return json(404, { status: "unknown" });
+  const r = await mailbox(env, deviceId, "status", { id: rid });
+  return new Response(r.body, { status: r.status === 404 ? 200 : r.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+}
+__name(statusEntry, "statusEntry");
+async function token(env, req) {
+  const form = await readForm(req);
+  const c = await clientAuth(env, req, form);
+  if (c instanceof Response) return c;
+  const grant = form.get("grant_type");
+  const raw = grant === "authorization_code" ? form.get("code") : grant === "refresh_token" ? form.get("refresh_token") : null;
+  const parsed = raw ? parseOAuthSecret(raw, grant === "refresh_token" ? "hrr" : "hrc") : null;
+  if (grant !== "authorization_code" && grant !== "refresh_token") return oerr(400, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token");
+  if (!parsed || !await deviceIdValid(env.RELAY_SECRET, parsed.deviceId)) return oerr(400, "invalid_grant", "unknown or malformed grant");
+  const body = Object.fromEntries(form.entries());
+  delete body.client_secret;
+  const r = await mailbox(env, parsed.deviceId, "token", body);
+  return cors(new Response(r.body, { status: r.status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", pragma: "no-cache" } }));
+}
+__name(token, "token");
+async function revoke(env, req) {
+  const form = await readForm(req);
+  const c = await clientAuth(env, req, form);
+  if (c instanceof Response) return c;
+  const t = form.get("token") ?? "";
+  const parsed = parseOAuthSecret(t, "hrr") ?? parseOAuthSecret(t, "hra");
+  if (parsed && await deviceIdValid(env.RELAY_SECRET, parsed.deviceId)) await mailbox(env, parsed.deviceId, "revoke", { token: t, client_id: c.id });
+  return cors(json(200, {}));
+}
+__name(revoke, "revoke");
+async function handleOAuth(req, env, url) {
+  const p = url.pathname, m = req.method;
+  const wellKnown = p.startsWith("/.well-known/");
+  const ours = wellKnown || ["/register", "/authorize", "/authorize/code", "/authorize/deny", "/authorize/status", "/token", "/revoke"].includes(p);
+  if (!ours) return null;
+  if (m === "OPTIONS") return new Response(null, { status: 204, headers: { ...CORS, "access-control-max-age": "86400" } });
+  if (wellKnown) {
+    if (m !== "GET") return err(405, "method_not_allowed", "GET only");
+    if (p === "/.well-known/oauth-protected-resource" || p === "/.well-known/oauth-protected-resource/mcp") return cors(json(200, protectedResource(url.origin), { "cache-control": "public, max-age=300" }));
+    if (p === "/.well-known/oauth-authorization-server" || p === "/.well-known/openid-configuration") return cors(json(200, serverMetadata(url.origin), { "cache-control": "public, max-age=300" }));
+    return null;
+  }
+  if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
+  if (p === "/authorize" && m === "GET") return authorize(env, req, url);
+  if (p === "/authorize/status" && m === "GET") return statusEntry(env, url);
+  if (m !== "POST") return err(405, "method_not_allowed", "POST only");
+  switch (p) {
+    case "/register":
+      return register(env, req);
+    case "/token":
+      return token(env, req);
+    case "/revoke":
+      return revoke(env, req);
+    case "/authorize/code":
+      return codeEntry(env, req);
+    case "/authorize/deny":
+      return denyEntry(env, req);
+  }
+  return err(405, "method_not_allowed", "GET only");
+}
+__name(handleOAuth, "handleOAuth");
+
 // src/registry.ts
 import { DurableObject as DurableObject2 } from "cloudflare:workers";
 var CODE_TTL_MS = 10 * 6e4;
@@ -1082,6 +1731,7 @@ var Registry = class extends DurableObject2 {
       CREATE TABLE IF NOT EXISTS codes (hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, name TEXT, ip TEXT);
       CREATE TABLE IF NOT EXISTS devices (id TEXT PRIMARY KEY, name TEXT, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS events (kind TEXT NOT NULL, at INTEGER NOT NULL, ip TEXT);
+      CREATE TABLE IF NOT EXISTS clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, secret_hash TEXT, created_at INTEGER NOT NULL);
     `);
     for (const t of ["codes", "events"]) {
       try {
@@ -1108,6 +1758,25 @@ var Registry = class extends DurableObject2 {
     try {
       body = await req.json();
     } catch {
+    }
+    if (path === "/client/register") {
+      const perHour = Number(this.env.REGISTER_PER_HOUR ?? "30") || 30;
+      if (this.q("SELECT COUNT(*) AS n FROM events WHERE kind = 'register'")[0].n >= perHour) {
+        return err(429, "rate_limited", "too many client registrations; try again later", { retryAfterSeconds: 3600 });
+      }
+      const c = body;
+      this.q("INSERT INTO events (kind, at) VALUES ('register', ?)", now);
+      this.q("INSERT INTO clients (id, name, redirect_uris, secret_hash, created_at) VALUES (?, ?, ?, ?, ?)", c.id, c.name, JSON.stringify(c.redirectUris), c.secretHash ?? null, now);
+      this.q("DELETE FROM clients WHERE id NOT IN (SELECT id FROM clients ORDER BY created_at DESC, rowid DESC LIMIT 200)");
+      return json(201, { ok: true });
+    }
+    if (path === "/client/get") {
+      const row = this.q("SELECT id, name, redirect_uris, secret_hash FROM clients WHERE id = ?", String(body.id ?? ""))[0];
+      if (!row) return err(404, "not_found", "unknown client");
+      return json(200, { id: row.id, name: row.name, redirectUris: JSON.parse(row.redirect_uris), secretHash: row.secret_hash });
+    }
+    if (path === "/devices") {
+      return json(200, { devices: this.q("SELECT id, name FROM devices ORDER BY created_at, rowid") });
     }
     const ip = (await sha256Hex("ip:" + (req.headers.get("x-client-ip") || "unknown"))).slice(0, 16);
     if (path === "/pair/start") {
@@ -1160,12 +1829,12 @@ var Registry = class extends DurableObject2 {
 
 // src/index.ts
 async function mailboxFor(env, req) {
-  const token = bearer(req);
-  const p = token ? parseToken(token) : null;
-  if (!token || !p) return err(401, "unauthorized", "missing or malformed bearer token", {});
+  const token2 = bearer(req);
+  const p = token2 ? parseToken(token2) : null;
+  if (!token2 || !p) return err(401, "unauthorized", "missing or malformed bearer token", {});
   if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
   if (!await deviceIdValid(env.RELAY_SECRET, p.deviceId)) return err(401, "unauthorized", "invalid credential");
-  return { stub: env.MAILBOX.get(env.MAILBOX.idFromName(p.deviceId)), token };
+  return { stub: env.MAILBOX.get(env.MAILBOX.idFromName(p.deviceId)), token: token2 };
 }
 __name(mailboxFor, "mailboxFor");
 var AGENT_PATHS = [/^\/v1\/notify$/, /^\/v1\/status$/, /^\/v1\/receipts\/[^/]+$/, /^\/v1\/replies\/[^/]+$/];
@@ -1174,6 +1843,8 @@ var index_default = {
     const url = new URL(req.url);
     const path = url.pathname;
     if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true, ...env.BUNDLE_HASH ? { bundle: env.BUNDLE_HASH } : {} });
+    const oauth = await handleOAuth(req, env, url);
+    if (oauth) return oauth;
     if (req.method === "POST" && (path === "/v1/pair/start" || path === "/v1/pair")) {
       if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
       const reg = env.REGISTRY.get(env.REGISTRY.idFromName("registry"));
@@ -1195,10 +1866,16 @@ var index_default = {
       return new Response(obj.body, { headers: { "content-type": "audio/mp4", "cache-control": "private, no-store", "content-length": String(obj.size) } });
     }
     if (path === "/mcp") {
+      const unauthorized = /* @__PURE__ */ __name((r) => {
+        if (r.status !== 401) return r;
+        const h = new Headers(r.headers);
+        h.set("www-authenticate", challenge(url.origin, !!bearer(req)));
+        return new Response(r.body, { status: 401, headers: h });
+      }, "unauthorized");
       const m = await mailboxFor(env, req);
-      if (m instanceof Response) return m;
+      if (m instanceof Response) return unauthorized(m);
       const auth = "Bearer " + m.token;
-      return handleMcp(req, (p, init) => m.stub.fetch(new Request(url.origin + p, { ...init, headers: { authorization: auth, "content-type": "application/json" } })));
+      return unauthorized(await handleMcp(req, (p, init) => m.stub.fetch(new Request(url.origin + p, { ...init, headers: { authorization: auth, "content-type": "application/json" } }))));
     }
     const isDevice = path === "/v1/device" || path.startsWith("/v1/device/");
     if (isDevice || AGENT_PATHS.some((r) => r.test(path))) {
