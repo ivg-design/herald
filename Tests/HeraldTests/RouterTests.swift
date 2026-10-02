@@ -172,3 +172,59 @@ final class RouterTests: XCTestCase {
         XCTAssertEqual(b.composeCalls, 1)
     }
 }
+
+// MARK: POST /v1/rive/check (issues #33 and #38: the headless Rive test hook)
+
+final class RiveCheckBackend: HeraldBackend, @unchecked Sendable {
+    var seen: [RiveCheckRequest] = []
+    func notify(_ n: HeraldNotification) async throws -> String { "x" }
+    func register(_ r: HeraldAppRegistration) async throws {}
+    func dismiss(app: String, id: String) async throws {}
+    func dismissAll(app: String?) async throws {}
+    func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { [] }
+    func clearHistory(app: String?) async throws {}
+    func apps() async throws -> [HeraldAppRegistration] { [] }
+    func riveCheck(_ r: RiveCheckRequest) async throws -> RiveCheckReply {
+        seen.append(r)
+        return RiveCheckReply(loaded: true, inputs: ["count": "number"], applied: ["count": "3.0"], takesClicks: true,
+                              pointerWrites: ["hover": "true"], clickedActions: ["go"])
+    }
+}
+
+final class RiveCheckRouteTests: XCTestCase {
+    private func call(_ router: Router, _ method: String, body: String, token: String? = "t") async -> HTTPResponse {
+        var h: [String: String] = [:]
+        if let token { h["authorization"] = "Bearer \(token)" }
+        return await router.handle(HTTPRequest(method: method, path: "/v1/rive/check", headers: h, body: Data(body.utf8)))
+    }
+
+    func testDecodesComponentFieldsAndPointerStepsAndReturnsTheReport() async throws {
+        let b = RiveCheckBackend()
+        let r = Router(token: "t", backend: b, version: "1", pid: 1)
+        let res = await call(r, "POST", body: #"{"app":"a","component":{"asset":"marble","inputBindings":{"step":"{count}","hover":"hover"},"actionRef":"go"},"fields":{"count":3},"simulate":["hoverIn","pressDown","pressUp"]}"#)
+        XCTAssertEqual(res.status, 200, String(data: res.body, encoding: .utf8) ?? "")
+        let req = try XCTUnwrap(b.seen.first)
+        XCTAssertEqual(req.app, "a")
+        XCTAssertEqual(req.component.asset, "marble")
+        XCTAssertEqual(req.component.inputBindings["step"], "{count}")
+        XCTAssertEqual(req.fields?["count"], .number(3))
+        XCTAssertEqual(req.simulate, ["hoverIn", "pressDown", "pressUp"])
+        let reply = try JSONDecoder().decode(RiveCheckReply.self, from: res.body)
+        XCTAssertTrue(reply.loaded)
+        XCTAssertEqual(reply.clickedActions, ["go"])
+        XCTAssertEqual(reply.pointerWrites, ["hover": "true"])
+    }
+
+    func testNeedsTokenAppAndPostAndIsUnsupportedWithoutABackend() async {
+        let r = Router(token: "t", backend: RiveCheckBackend(), version: "1", pid: 1)
+        let noToken = await call(r, "POST", body: "{}", token: nil)
+        XCTAssertEqual(noToken.status, 401)
+        let noApp = await call(r, "POST", body: #"{"app":"","component":{"path":"/x.riv"}}"#)
+        XCTAssertEqual(noApp.status, 400)
+        let wrongVerb = await call(r, "GET", body: "")
+        XCTAssertEqual(wrongVerb.status, 405)
+        let plain = Router(token: "t", backend: MockBackend(), version: "1", pid: 1)
+        let unsupported = await call(plain, "POST", body: #"{"app":"a","component":{"path":"/x.riv"}}"#)
+        XCTAssertEqual(unsupported.status, 501)
+    }
+}

@@ -538,6 +538,33 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertEqual(real.failureReason(timedOut), "timed out after 1 s")
     }
 
+    /// Issue #38: the Shortcuts success path through a real process. A stub `shortcuts` that behaves like the
+    /// real tool for `run <name> --input-path <file>` (reads the input file, prints, exits 0) stands in for it, so
+    /// the argv, the temporary input file, the success verdict and the action log are all exercised without
+    /// running anything on the user's Shortcuts.
+    func testRealShortcutSuccessPathWithAStandInShortcutsTool() async {
+        write("fake-shortcuts", """
+            #!/bin/sh
+            [ "$1" = run ] || { echo "bad verb $1" >&2; exit 64; }
+            name="$2"; [ "$3" = --input-path ] || { echo "no input path" >&2; exit 65; }
+            printf 'ran %s with %s' "$name" "$(cat "$4")"
+            """, mode: 0o755)
+        let stub = scripts.appendingPathComponent("fake-shortcuts").path
+        let real = runner(launcher: SystemProcessLauncher(), shortcuts: stub)
+        let a = HeraldAction(id: "f", label: "Follow up", kind: .shortcut, shortcut: "Create follow-up", input: "{title}")
+        guard let s = spec(plan(a, using: real)) else { return }
+        let result = await real.run(s, context: context, origin: .template)
+        XCTAssertTrue(result.succeeded, result.summary + result.output)
+        XCTAssertEqual(result.output, "ran Create follow-up with 2 new from Acme")
+        let log = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+        XCTAssertTrue(log.contains("kind=shortcut"), log)
+        // The same stub failing: a non-zero exit is reported with its reason, not as success.
+        write("fake-shortcuts", "#!/bin/sh\necho 'Error: Couldn\u{2019}t find shortcut' >&2\nexit 1\n", mode: 0o755)
+        let failed = await real.run(s, context: context, origin: .template)
+        XCTAssertFalse(failed.succeeded)
+        XCTAssertTrue(real.failureReason(failed).contains("find shortcut"), real.failureReason(failed))
+    }
+
     func testRealMissingProgramIsALaunchError() async {
         let real = runner(launcher: SystemProcessLauncher(), shortcuts: "/nonexistent/shortcuts")
         guard let s = spec(plan(HeraldAction(id: "f", label: "F", kind: .shortcut, shortcut: "X"), using: real)) else { return }
