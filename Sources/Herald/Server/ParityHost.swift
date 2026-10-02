@@ -18,6 +18,7 @@ final class AppParityHost: ParityHost, @unchecked Sendable {
             case "muteAllSounds": return .bool(s.muted)
             case "stacking": return .string(s.stacking.rawValue)
             case "historyCapPerApp": return .number(Double(controller.history.capPerApp))
+            case "tooltipLevel": return .string(s.tooltipLevel.rawValue)
             case "voiceEngine": return .string(v.engine.rawValue)
             case "voiceDefault": return .string(v.defaultVoice)
             case "voiceSpeed": return .number(v.speed)
@@ -43,6 +44,7 @@ final class AppParityHost: ParityHost, @unchecked Sendable {
             case "launchAtLogin": s.launchAtLogin = value.parityBool ?? false
             case "muteAllSounds": controller.muted = value.parityBool ?? false
             case "stacking": if let l = value.parityString.flatMap(StackingLevel.init(rawValue:)) { s.stacking = l }
+            case "tooltipLevel": if let l = value.parityString.flatMap(TooltipLevel.init(rawValue:)) { s.tooltipLevel = l }
             case "historyCapPerApp":
                 if let n = value.parityNumber.map(Int.init) {
                     HistoryCapSetting.save(n)

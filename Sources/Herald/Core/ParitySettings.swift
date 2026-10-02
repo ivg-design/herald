@@ -79,6 +79,8 @@ public enum SettingsSchema {
                           "How banners stack by default: byApp, byIssuer, bySender or never. An app can override it."),
         SettingDescriptor("historyCapPerApp", "General", .integer(1...HistoryStore.maxCap),
                           "How many notifications History keeps per app; the oldest beyond it are removed."),
+        SettingDescriptor("tooltipLevel", "Tooltips", .choice(TooltipLevel.allCases.map(\.rawValue)),
+                          "How much a tooltip says (Settings > Tooltips): nameOnly, or nameAndDescription."),
         SettingDescriptor("voiceEngine", "Voice", .choice(engines), "The speech engine: kokoro (local, natural; needs the install), system or off."),
         SettingDescriptor("voiceDefault", "Voice", .text(maxLength: 64, nullable: false), "The default voice name, for example af_heart.",
                           check: { HeraldSpeak.isValidVoice($0) ? nil : "not a valid voice name" }),

@@ -1,49 +1,35 @@
 import Foundation
 
 /// SF Symbol names with their categories, for `GET /v1/symbols`: an agent building a template needs real names for
-/// the `symbol` property. Names and search terms come from `SymbolCatalog`; the categories from the system's
-/// `categories.plist` (the category keys and icons) and `symbol_categories.plist` (symbol to category keys), both
-/// in the same CoreGlyphs bundle. A missing plist only means fewer categories.
+/// the `symbol` property. It is a view over `SymbolCatalog` (the Designer's browser reads the same catalog), so the
+/// categories, Apple's order and the synonym search are the ones a person sees.
 public struct SymbolListing: Sendable {
     public struct Category: Equatable, Sendable {
         public var key: String
+        public var title: String
         public var icon: String
         public var count: Int
     }
 
     public let catalog: SymbolCatalog
+    /// "all" first, then Apple's categories in the browser's order, each with its symbol count.
     public let categories: [Category]
-    private let byName: [String: [String]]
 
-    public init(catalog: SymbolCatalog, categoryKeys: [(key: String, icon: String)] = [], symbolCategories: [String: [String]] = [:]) {
+    public init(catalog: SymbolCatalog) {
         self.catalog = catalog
-        self.byName = symbolCategories
-        var counts: [String: Int] = [:]
-        for n in catalog.names { for k in symbolCategories[n] ?? [] { counts[k, default: 0] += 1 } }
-        self.categories = categoryKeys.map { Category(key: $0.key, icon: $0.icon, count: $0.key == "all" ? catalog.names.count : counts[$0.key, default: 0]) }
+        self.categories = [Category(key: "all", title: "All", icon: "square.grid.2x2", count: catalog.names.count)]
+            + catalog.categories.map { Category(key: $0.key, title: $0.title, icon: $0.icon, count: catalog.names(in: $0.key).count) }
     }
 
-    /// nil when the folder has no symbol list.
-    public static func load(from folder: URL = SymbolCatalog.systemFolder) -> SymbolListing? {
-        guard let catalog = SymbolCatalog.load(from: folder) else { return nil }
-        var keys: [(String, String)] = []
-        if let data = try? Data(contentsOf: folder.appendingPathComponent("categories.plist")),
-           let list = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [[String: Any]] {
-            keys = list.compactMap { d in (d["key"] as? String).map { ($0, d["icon"] as? String ?? "") } }
-        }
-        var map: [String: [String]] = [:]
-        if let data = try? Data(contentsOf: folder.appendingPathComponent("symbol_categories.plist")),
-           let m = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: [String]] { map = m }
-        return SymbolListing(catalog: catalog, categoryKeys: keys, symbolCategories: map)
-    }
+    /// nil when this Mac has no symbol list.
+    public static func load() -> SymbolListing? { SymbolCatalog.cached().map(SymbolListing.init) }
 
-    public func categories(of name: String) -> [String] { byName[name] ?? [] }
+    public func categories(of name: String) -> [String] { catalog.categoryKeys(of: name) }
 
-    /// Matches of `query` (every word, in the name or a search term), optionally inside one category, paged.
+    /// Matches of `query` (every word, in the name, a search term or a synonym), optionally inside one category, paged.
     public func search(_ query: String, category: String?, limit: Int, offset: Int) -> (total: Int, names: [String]) {
-        var names = query.trimmingCharacters(in: .whitespaces).isEmpty ? catalog.names : catalog.search(query, limit: catalog.names.count)
-        if let category, category != "all" { names = names.filter { byName[$0]?.contains(category) ?? false } }
-        let page = names.dropFirst(max(0, offset)).prefix(max(0, limit))
-        return (names.count, Array(page))
+        let scope = (category == nil || category == "all") ? nil : category
+        let names = catalog.search(query, category: scope, limit: Int.max)
+        return (names.count, Array(names.dropFirst(max(0, offset)).prefix(max(0, limit))))
     }
 }

@@ -359,7 +359,7 @@ extension ParityService {
         return Self.reply([
             "total": r.total, "offset": offset, "limit": limit,
             "symbols": r.names.map { ["name": $0, "categories": listing.categories(of: $0)] as [String: Any] },
-            "categories": listing.categories.map { ["key": $0.key, "icon": $0.icon, "count": $0.count] as [String: Any] },
+            "categories": listing.categories.map { ["key": $0.key, "title": $0.title, "icon": $0.icon, "count": $0.count] as [String: Any] },
         ])
     }
 }

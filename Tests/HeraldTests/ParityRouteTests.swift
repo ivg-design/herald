@@ -49,9 +49,11 @@ final class ParityRouteTests: XCTestCase {
         approvals = TemplateCommandApprovals(file: root.appendingPathComponent("approvals.json"))
         assets = AssetStore(directory: root.appendingPathComponent("assets"))
         let catalog = SymbolCatalog(names: ["bell", "bell.fill", "arrow.up", "cloud.sun"],
-                                    terms: ["bell": ["ring", "alarm"], "cloud.sun": ["weather"]])
-        let listing = SymbolListing(catalog: catalog, categoryKeys: [("all", "square"), ("communication", "bubble"), ("weather", "sun")],
-                                    symbolCategories: ["bell": ["communication"], "bell.fill": ["communication"], "cloud.sun": ["weather"]])
+                                    terms: ["bell": ["ring", "alarm"], "cloud.sun": ["weather"]],
+                                    categories: [SymbolCategory(key: "communication", title: "Communication", icon: "bubble"),
+                                                 SymbolCategory(key: "weather", title: "Weather", icon: "sun.max")],
+                                    categoryKeys: ["bell": ["communication"], "bell.fill": ["communication"], "cloud.sun": ["weather"]])
+        let listing = SymbolListing(catalog: catalog)
         service = ParityService(templates: templates, manifests: manifests, history: history, registry: registry, assets: assets,
                                 approvals: approvals, host: host, symbols: { listing })
     }
@@ -488,7 +490,8 @@ final class ParityRouteTests: XCTestCase {
     func testRealSymbolListingLoadsWhenThisMacHasOne() throws {
         guard let listing = SymbolListing.load() else { throw XCTSkip("no CoreGlyphs on this machine") }
         XCTAssertTrue(listing.catalog.contains("bell"))
-        XCTAssertFalse(listing.categories.isEmpty)
+        XCTAssertEqual(listing.categories.first?.key, "all")
+        XCTAssertGreaterThan(listing.categories.count, 5)
         XCTAssertFalse(listing.categories(of: "bell").isEmpty)
     }
 }
