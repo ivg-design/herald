@@ -163,6 +163,15 @@ public final class AppRegistry: @unchecked Sendable {
         return rec
     }
 
+    /// Forgets the app's record. False when there was none.
+    @discardableResult
+    public func remove(_ app: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard records.removeValue(forKey: app) != nil else { return false }
+        persist()
+        return true
+    }
+
     public func update(_ app: String, _ mutate: (inout AppRecord) -> Void) {
         lock.lock(); defer { lock.unlock() }
         var rec = records[app] ?? AppRecord(registration: HeraldAppRegistration(app: app))

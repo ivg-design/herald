@@ -7,7 +7,7 @@ Run it with Herald running:
 
 What it does, in order (the README next to this file walks through each step):
 
-  1. registers the app "bidbot" (name, icon, default sound);
+  1. registers the app "example.bidbot" (name, icon, default sound);
   2. PUTs a manifest: the fields BidBot can send (bid, amount, client, deadline, url, image) with samples,
      and the two actions it offers;
   3. PUTs a default grid template, "bid-card" (3 rows x 4 columns), that the manifest names as its default,
@@ -53,7 +53,7 @@ except ImportError:  # pragma: no cover
     sys.exit("herald.py not found: run this from a checkout of the Herald repository, or copy "
              "clients/python/herald.py next to this script.")
 
-APP = "bidbot"
+APP = "example.bidbot"
 TEMPLATE_NAME = "bid-card"
 SHORTCUT_NAME = "Bid follow-up"
 ASSETS = HERE / "assets"

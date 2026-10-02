@@ -268,7 +268,7 @@ In the Designer, select the component and use the Symbol panel: a searchable pic
 ### Compact one-liner that keeps its shape
 
 ```json
-{"name":"line","app":"bidbot","layoutVersion":2,"collapseEmpty":false,
+{"name":"line","app":"example.bidbot","layoutVersion":2,"collapseEmpty":false,
  "grid":{"rows":1,"cols":3,"rowSizes":["auto"],"colSizes":["22","fill","auto"],"gap":8,"padding":10,"width":360},
  "cells":[
   {"id":"i","row":0,"col":0,"component":{"type":"issuerIcon","size":22,"shape":"rounded"}},

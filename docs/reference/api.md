@@ -84,7 +84,7 @@ No auth. `{"ok":true,"version":"1.2.0","pid":123}`. Use it to detect that Herald
 ## POST /v1/register
 
 ```json
-{"app":"bidbot","appName":"BidBot","icon":"/path/icon.png","bundleId":"com.example.bidbot",
+{"app":"example.bidbot","appName":"BidBot","icon":"/path/icon.png","bundleId":"com.example.bidbot",
  "callbackURL":"http://127.0.0.1:5123/herald","allowCommands":false,
  "defaults":{"sound":"Glass","persistent":true,"timeout":0,"corner":"topRight"}}
 ```
@@ -107,7 +107,7 @@ generic icon. A registered name and icon always win over the manifest's.
 Show a notification.
 
 ```json
-{"app":"bidbot","id":"bid-42","template":"bid-won",
+{"app":"example.bidbot","id":"bid-42","template":"bid-won",
  "title":"Bid accepted","subtitle":"Acme RFP","body":"Accepted. [Open](https://example.com/p/42)",
  "image":"/path/preview.png","url":"https://example.com/p/42","group":"acme",
  "sound":"default","persistent":true,"timeout":0,"priority":"high",

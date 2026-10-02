@@ -109,6 +109,8 @@ public struct RelayAPI: Sendable {
     }
 
     public func revokeKey(id: String) async throws { try await perform(try request("DELETE", "/v1/device/keys/\(id)")) }
+    /// Forgets a throw-away key altogether (its row, tokens and what it sent), instead of leaving it listed as revoked.
+    public func purgeKey(id: String) async throws { try await perform(try request("DELETE", "/v1/device/keys/\(id)?purge=1")) }
     public func info() async throws -> RelayDeviceInfo { try await run(try request("GET", "/v1/device/info"), as: RelayDeviceInfo.self) }
     public func usage() async throws -> RelayUsage { try await run(try request("GET", "/v1/device/usage"), as: RelayUsage.self) }
 

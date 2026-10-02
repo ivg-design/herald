@@ -102,6 +102,33 @@ final class RelayClientTests: XCTestCase {
         XCTAssertEqual(c.state, .online)   // set by the welcome frame
     }
 
+    func testTheRelayTestIsAHeraldNotificationAndRegistersNoCloudApp() async {
+        let host = FakeRelayHost()
+        let (c, _) = make(host: host)
+        let socket = FakeRelaySocket(incoming: [welcome, notifyFrame(id: "r_t1", nid: "test-1", key: "herald-test-ab12cd", keyId: "kt", payload: ["title": "Relay test", "body": "The relay works."])])
+        await run(c, socket)
+        XCTAssertEqual(host.delivered.count, 1)
+        XCTAssertEqual(host.delivered[0].app, "herald")           // never cloud.herald-test-ab12cd
+        XCTAssertEqual(host.delivered[0].title, "Relay test")
+        XCTAssertEqual(host.issuers, [], "no issuer (app, manifest, icon) is made for the throw-away key")
+        XCTAssertEqual(socket.receipts("displayed").count, 1)      // the test still gets its receipt
+        // an ordinary key is untouched
+        let host2 = FakeRelayHost()
+        let (c2, _) = make(host: host2)
+        await run(c2, FakeRelaySocket(incoming: [welcome, notifyFrame()]))
+        XCTAssertEqual(host2.delivered.first?.app, "cloud.build-bot"); XCTAssertEqual(host2.issuers, ["k1"])
+    }
+
+    func testRelayTestItemsAreRecognisedByTheirNotificationId() {
+        var n = HeraldNotification(app: "herald", id: "r_t1", title: "Relay test")
+        n.metadata = .object(["relayNotificationId": .string("test-1")])
+        let item = HeraldHistoryItem(id: "r_t1", app: "herald", notification: n, deliveredAt: Date())
+        XCTAssertTrue(HeraldIdentity.isRelayTestItem(item, notificationId: "test-1"))
+        XCTAssertFalse(HeraldIdentity.isRelayTestItem(item, notificationId: "test-2"))
+        var other = item; other.app = "cloud.x"
+        XCTAssertFalse(HeraldIdentity.isRelayTestItem(other, notificationId: "test-1"))
+    }
+
     func testQuietHoursSuppressWithReasonAndShowNothing() async {
         let host = FakeRelayHost()
         host.quiet = HeraldQuietStatus(active: true, speech: true, sounds: true, banners: true, until: Date().addingTimeInterval(3600), source: "window")

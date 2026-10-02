@@ -23,9 +23,9 @@ python3 docs/examples/bidbot/bidbot_demo.py
 
 ```
 Herald 1.1.0 answers on port 48617
-1. registered 'bidbot'
+1. registered 'example.bidbot'
 2. manifest saved: fields bid, amount, client, deadline, url, image
-3. template 'bid-card' saved (3 x 4 grid, default for bidbot)
+3. template 'bid-card' saved (3 x 4 grid, default for example.bidbot)
    note: no Shortcut named 'Bid follow-up' yet; the Follow up button is wired and will work once you create one (README, "The Shortcut").
 4. sent accepted -> bid-4021
 4. sent lost     -> bid-4017
@@ -71,7 +71,7 @@ reserves room for it.
 ### 1. Register the app
 
 ```python
-h.register("bidbot", appName="BidBot", icon="assets/icon.png", defaults={"sound": "Glass", "persistent": True})
+h.register("example.bidbot", appName="BidBot", icon="assets/icon.png", defaults={"sound": "Glass", "persistent": True})
 ```
 
 `POST /v1/register`. Optional (the first notification registers an app implicitly), but this gives the banners BidBot's
@@ -79,11 +79,11 @@ name and icon. With `--wait` it also passes a `callbackURL`, the address Herald 
 
 ### 2. The manifest: what BidBot can send
 
-`PUT /v1/manifest` replaces the manifest for `bidbot`; Herald stores it at `~/Library/Application Support/Herald/manifests/bidbot.json`.
+`PUT /v1/manifest` replaces the manifest for `example.bidbot`; Herald stores it at `~/Library/Application Support/Herald/manifests/bidbot.json`.
 
 ```json
 {
-  "app": "bidbot",
+  "app": "example.bidbot",
   "appName": "BidBot",
   "icon": "/path/to/icon.png",
   "version": 1,
@@ -130,7 +130,7 @@ the user can design a template before BidBot has sent a single event. The two `a
 ```json
 {
   "name": "bid-card",
-  "app": "bidbot",
+  "app": "example.bidbot",
   "layoutVersion": 2,
   "collapseEmpty": true,
   "grid": {"rows": 3, "cols": 4, "rowSizes": ["auto", "auto", "auto"], "colSizes": ["72", "fill", "fill", "auto"], "gap": 8, "padding": 14, "width": 400},
@@ -160,7 +160,7 @@ the user can design a template before BidBot has sent a single event. The two `a
 Each event is one `POST /v1/notify`. The fields ride at the top level, next to the usual keys:
 
 ```python
-h.notify("bidbot", "Bid accepted",
+h.notify("example.bidbot", "Bid accepted",
          id="bid-4021",                                   # a later event with this id replaces the banner in place
          bid="BID-4021 \u00b7 Brand refresh", amount="$4,200", client="Acme Corp",
          url="https://example.com/bids/4021",

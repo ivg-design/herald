@@ -82,7 +82,7 @@ Errors: `401 {"error":"unauthorized"}`, `400 {"error":"..."}`, `404`, `405`.
 ### Notification
 
 ```json
-{"app":"bidbot","id":"bid-42","title":"Bid accepted","subtitle":"Acme RFP",
+{"app":"example.bidbot","id":"bid-42","title":"Bid accepted","subtitle":"Acme RFP",
  "body":"Your bid was accepted. [Open proposal](https://example.com)",
  "image":"/path/preview.png","url":"https://example.com","sound":"default",
  "persistent":true,"timeout":0,"priority":"high",

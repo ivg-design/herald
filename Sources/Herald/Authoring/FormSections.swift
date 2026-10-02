@@ -51,7 +51,7 @@ struct ComposerIdentitySection: View {
     var body: some View {
         Section("Notification") {
             HStack {
-                TextField("App", text: $model.app, prompt: Text("app id, e.g. bidbot"))
+                TextField("App", text: $model.app, prompt: Text("app id, e.g. example.bidbot"))
                 Menu {
                     ForEach(apps, id: \.id) { a in Button(a.name) { model.app = a.id } }
                 } label: { Image(systemName: "chevron.up.chevron.down") }

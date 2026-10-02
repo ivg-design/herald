@@ -82,7 +82,7 @@ enum BannerSamples {
     /// One representative notification per layout, exercising every presentation field.
     static func notification(layout: HeraldLayout, accent: String? = "#0A84FF") -> HeraldNotification {
         var n = HeraldNotification(
-            app: "bidbot", id: "sample-\(layout.rawValue)",
+            app: "example.bidbot", id: "sample-\(layout.rawValue)",
             title: "Bid accepted",
             subtitle: "Acme RFP",
             body: "Your bid of $4,200 was accepted. [Open proposal](https://example.com/proposal) to review the terms and next steps with the client.",
@@ -122,7 +122,7 @@ extension BannerSamples {
         ]
         let grid = HeraldGrid(rows: 4, cols: 4, rowSizes: [.auto, .auto, .auto, .auto],
                               colSizes: [.points(72), .fill, .fill, .auto], gap: 8, padding: 14, width: 400)
-        return HeraldTemplate(name: "sample", app: "bidbot", grid: grid, cells: cells)
+        return HeraldTemplate(name: "sample", app: "example.bidbot", grid: grid, cells: cells)
     }
 
     static func gridModel(template: HeraldTemplate = gridTemplate(), withImage: Bool = true,

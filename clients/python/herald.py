@@ -10,16 +10,16 @@ Examples::
 
     h = Herald()
     if h.is_available():
-        h.register("bidbot", appName="BidBot", callbackURL="http://127.0.0.1:5123/herald")
-        h.notify("bidbot", "Bid accepted", body="Won the Acme RFP",
+        h.register("example.bidbot", appName="BidBot", callbackURL="http://127.0.0.1:5123/herald")
+        h.notify("example.bidbot", "Bid accepted", body="Won the Acme RFP",
                  id="bid-42", url="https://example.com/bids/42", sound="Glass",
                  buttons=[{"label": "Open", "url": "https://example.com/bids/42"}],
                  snooze=True)
-        print(h.history("bidbot", limit=5))
-        h.dismiss("bidbot", "bid-42")
+        print(h.history("example.bidbot", limit=5))
+        h.dismiss("example.bidbot", "bid-42")
 
     try:
-        Herald().notify("bidbot", "hello")
+        Herald().notify("example.bidbot", "hello")
     except HeraldUnavailable:
         pass  # Herald is not running
 """

@@ -7,7 +7,7 @@ Herald is a local notification service. You can make it show the user a banner t
 `herald` is installed at `/usr/local/bin/herald` (if missing: `cd ~/github/herald && make install-cli`).
 
 ```bash
-herald notify --app bidbot --title "Bid accepted" --body "Your bid of \$4,200 was accepted" \
+herald notify --app example.bidbot --title "Bid accepted" --body "Your bid of \$4,200 was accepted" \
   --url "https://example.com/bids/42" --image /path/preview.png \
   --button "Open=https://example.com/bids/42" --sound Glass --snooze
 ```
@@ -15,7 +15,7 @@ herald notify --app bidbot --title "Bid accepted" --body "Your bid of \$4,200 wa
 JSON on stdin also works:
 
 ```bash
-echo '{"app":"bidbot","title":"Bid accepted","body":"Your bid was accepted","url":"https://…",
+echo '{"app":"example.bidbot","title":"Bid accepted","body":"Your bid was accepted","url":"https://…",
        "buttons":[{"label":"Open","url":"https://…"}],"sound":"Glass","persistent":true}' | herald notify --json -
 ```
 
@@ -31,7 +31,7 @@ Exit codes: 0 ok, 1 usage/HTTP error (reply printed), 2 Herald is not running (l
 
 ```python
 from herald import Herald
-Herald().notify(app="bidbot", title="Bid accepted", body="…", url="https://…")
+Herald().notify(app="example.bidbot", title="Bid accepted", body="…", url="https://…")
 ```
 
 ## 4. Cloud agents (not on this Mac)
@@ -68,7 +68,7 @@ create a token, and approve a connector on the Mac.
 
 ## Conventions
 
-- Always use the same `app` id (e.g. `bidbot`) so your messages get their own history, icon, sound and templates.
+- Always use the same `app` id (e.g. `example.bidbot`) so your messages get their own history, icon, sound and templates.
 - Buttons: `{"label":"Open","url":"…"}`, `{"label":"Done","callback":{"payload":{…}}}` (Herald POSTs to your callbackURL), `{"label":"Archive","command":"…"}` (runs only after the user approves commands for your app once), or Apple Shortcuts via the user's templates.
 - `id` lets a later notification replace an earlier banner (use it for accumulating counts).
 - `persistent: true` keeps the banner until the user dismisses it; `timeout: 8` auto-dismisses.

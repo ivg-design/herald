@@ -105,6 +105,8 @@ final class ParityToolTests: XCTestCase {
             Case(tool: "set_default_template", args: ["app": s("demo")], method: "PUT", path: "/v1/templates/default", body: ["app": s("demo")]),
             Case(tool: "export_template_bundle", args: ["app": s("demo"), "name": s("hero"), "path": s("/tmp/h.heraldtemplate")], method: "GET", path: "/v1/templates/export", query: ["app": "demo", "name": "hero", "path": "/tmp/h.heraldtemplate"]),
             Case(tool: "import_template_bundle", args: ["path": s("/tmp/h.heraldtemplate"), "onConflict": s("replace")], method: "POST", path: "/v1/templates/import", body: ["path": s("/tmp/h.heraldtemplate"), "onConflict": s("replace")]),
+            Case(tool: "delete_app", args: ["app": s("example.bidbot")], method: "DELETE", path: "/v1/apps/example.bidbot"),
+            Case(tool: "delete_app", args: ["app": s("my app")], method: "DELETE", path: "/v1/apps/my%20app"),
             Case(tool: "delete_manifest", args: ["app": s("demo")], method: "DELETE", path: "/v1/manifest", query: ["app": "demo"]),
             Case(tool: "list_assets", args: ["app": s("demo")], method: "GET", path: "/v1/assets", query: ["app": "demo"]),
             Case(tool: "upload_asset", args: ["app": s("demo"), "name": s("a.png"), "base64": s("AAAA")], method: "POST", path: "/v1/assets", body: ["app": s("demo"), "name": s("a.png"), "base64": s("AAAA")]),
@@ -174,7 +176,7 @@ final class ParityToolTests: XCTestCase {
     func testCatalogHasEveryToolWithAnnotationsAndNoDuplicates() throws {
         let names = MCPToolCatalog.all.map(\.name)
         XCTAssertEqual(names.count, Set(names).count, "tool names are unique")
-        let expected = ["get_settings", "set_settings", "list_apps", "update_app_settings", "register_app", "voice_status", "install_voice",
+        let expected = ["get_settings", "set_settings", "list_apps", "update_app_settings", "register_app", "delete_app", "voice_status", "install_voice",
                         "install_mcp", "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template",
                         "export_template_bundle", "import_template_bundle", "delete_manifest", "list_assets", "upload_asset", "delete_asset",
                         "list_symbols", "rive_check", "history_search", "reshow_notification", "delete_history", "export_history", "snooze",
@@ -185,7 +187,7 @@ final class ParityToolTests: XCTestCase {
             guard case .object(let schema) = d.inputSchema, schema["type"] == .string("object") else { XCTFail("\(d.name) schema"); continue }
         }
         // Destructive tools say so; read tools are read-only.
-        for n in ["delete_history", "delete_asset", "delete_manifest", "revoke_approval", "rename_template", "import_template_bundle"] {
+        for n in ["delete_history", "delete_app", "delete_asset", "delete_manifest", "revoke_approval", "rename_template", "import_template_bundle"] {
             XCTAssertTrue(MCPToolCatalog.byName[n]?.destructive == true, "\(n) is destructive")
         }
         for n in ["get_settings", "list_apps", "list_symbols", "history_search", "list_assets", "voice_status", "list_approvals", "designer_snapshot", "rive_check"] {

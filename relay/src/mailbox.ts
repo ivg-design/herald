@@ -175,7 +175,7 @@ export class Mailbox extends DurableObject<Env> {
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a.p as Extract<Principal, { kind: "device" }>);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
-        if (km && m === "DELETE") return this.revokeKey(km[1]);
+        if (km && m === "DELETE") return this.revokeKey(km[1], url.searchParams.get("purge") === "1");
         if (path === "/v1/device" && m === "DELETE") return this.unpair();
         // The Macs on this relay. A Mac may list them, drop its own same-name or stale siblings (prune), and remove one entry
         // that is same-name, rotated or idle. The Registry enforces that; a different active Mac is never removable from here.
@@ -260,9 +260,16 @@ export class Mailbox extends DurableObject<Env> {
     return json(201, { id, name, client, scope: "notify", kind: "static", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
   }
 
-  private revokeKey(id: string): Response {
+  /** `purge` (Herald's relay test, a throw-away key) forgets the key altogether: its row, its tokens and what it sent. */
+  private revokeKey(id: string, purge = false): Response {
     const row = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", id)[0];
     if (!row) return err(404, "not_found", "no such key");
+    if (purge) {
+      this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
+      this.sql("DELETE FROM notes WHERE key_id = ?", id);
+      this.sql("DELETE FROM keys WHERE id = ?", id);
+      return json(200, { revoked: true, purged: true, id });
+    }
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id); // a revoked connector's tokens die with its key
     return json(200, { revoked: true, id });

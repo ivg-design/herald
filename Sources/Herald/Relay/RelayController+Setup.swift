@@ -249,13 +249,19 @@ extension RelayController: RelaySwitchBackend, RelayRepairBackend, RelaySetupBac
             return RelayTestReply(healthy: true, paired: true, online: false, roundTrip: false, receipt: nil, detail: "Paired, but the connection is not up yet.")
         }
         // A temporary key sends a notification through the relay; the Mac shows it and reports the receipt back.
-        let name = "herald-test-" + String(UUID().uuidString.prefix(6)).lowercased()
+        let name = HeraldIdentity.relayTestKeyPrefix + String(UUID().uuidString.prefix(6)).lowercased()
         let made = try await api.createKey(name: name, client: "other")
-        defer { Task { try? await api.revokeKey(id: made.id); await refreshKeys() } }
         let nid = "test-" + UUID().uuidString.prefix(8)
+        // The test leaves no trace: the key is deleted at the end and the notification (a `herald` one, see RelayPolicy) is removed
+        // from History, the banner and the relay log. No `cloud.herald-test-xxxx` app is ever registered.
+        defer { Task { @MainActor in
+            try? await api.purgeKey(id: made.id)
+            self.removeRelayTestTraces(notificationId: String(nid), keyName: name)
+            await self.refreshKeys()
+        } }
         var r = URLRequest(url: URL(string: url + "/v1/notify")!)
         r.httpMethod = "POST"; r.setValue("Bearer " + made.key, forHTTPHeaderField: "Authorization"); r.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        r.httpBody = try JSONSerialization.data(withJSONObject: ["title": "Herald relay test", "body": "The relay works.", "notificationId": String(nid)])
+        r.httpBody = try JSONSerialization.data(withJSONObject: ["title": HeraldIdentity.relayTestTitle, "body": "The relay works.", "notificationId": String(nid)])
         let (_, h) = try await http.send(r)
         guard (200..<300).contains(h.statusCode) else {
             return RelayTestReply(healthy: true, paired: true, online: true, roundTrip: false, receipt: nil, detail: "The relay refused the test notification (\(h.statusCode)).")
@@ -272,6 +278,16 @@ extension RelayController: RelaySwitchBackend, RelayRepairBackend, RelaySetupBac
             }
         }
         return RelayTestReply(healthy: true, paired: true, online: true, roundTrip: false, receipt: nil, detail: "The notification was accepted but no receipt came back in 10 seconds.")
+    }
+
+    /// Removes what one relay test left: its History item and banner, and its line in the relay log.
+    func removeRelayTestTraces(notificationId: String, keyName: String) {
+        for item in controller.history.items(app: HeraldIdentity.app) where HeraldIdentity.isRelayTestItem(item, notificationId: notificationId) {
+            controller.dismissItem(app: item.app, id: item.id, action: nil, notify: false)
+            controller.history.delete(app: item.app, id: item.id)
+        }
+        store.update { $0.log.removeAll { $0.key == keyName } }
+        controller.changed()
     }
 
     func relayInstructions(client kind: String) async throws -> String {

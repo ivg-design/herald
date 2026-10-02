@@ -18,7 +18,7 @@ final class RelayController: RelayHost, RelayBackend {
     private(set) var lastError: String?
     /// Connector requests the relay has pushed (the OAuth flow): pending ones show a banner and a code in Settings > Cloud.
     private(set) var consents: [RelayConsent] = []
-    static let consentApp = "herald.connectors"
+    static let consentApp = HeraldIdentity.app
     // Relay setup (Cloudflare deploy): see RelayController+Setup.swift.
     let cloudConfig: RelayCloudConfigStore
     let cloudSecrets: CloudflareSecrets
@@ -174,12 +174,13 @@ final class RelayController: RelayHost, RelayBackend {
     /// The question lives on a banner (the inline strip of DESIGN 8): Approve / Deny, no window, no focus change. Closing the
     /// banner without answering leaves the request pending; its code is still in Settings > Cloud.
     private func presentConsentBanner(_ c: RelayConsent) async {
-        _ = try? controller.register(HeraldAppRegistration(app: Self.consentApp, appName: "Herald connectors"))
+        HeraldIdentity.ensureRegistered(registry: controller.registry, supportDirectory: controller.supportDirectory, iconPNG: nil)
         let body = c.isDevice
             ? "Approve \(c.clientName) to send you notifications? Code \(c.userCode ?? "")"
             : "\(c.clientName) is asking to connect to Herald."
         var n = HeraldNotification(app: Self.consentApp, id: c.id, title: "Connector request", body: body)
         n.persistent = true
+        n.group = HeraldIdentity.connectorsGroup
         n.metadata = .object(["source": .string("connector-approval")])
         guard (try? await controller.notify(n)) != nil else { return }
         let host = c.redirectHost ?? "its own site"

@@ -389,6 +389,22 @@ describe("unpair, usage and config", () => {
     expect((await notify(key, { title: "x" })).status).toBe(401);
     expect((await f("/v1/device/info", { headers: auth(token) })).status).toBe(401);
   });
+  it("DELETE /v1/device/keys/:id?purge=1 forgets a throw-away key altogether (Herald's relay test)", async () => {
+    const { token } = await pair();
+    const { id, key } = await mintKey(token, "herald-test-abc123");
+    await notify(key, { title: "Relay test", notificationId: "t1" });
+    const r = await f("/v1/device/keys/" + id + "?purge=1", { method: "DELETE", headers: auth(token) });
+    expect(r.status).toBe(200);
+    expect((await j(r)).purged).toBe(true);
+    const list = await j(await f("/v1/device/keys", { headers: auth(token) }));
+    expect(list.keys.some((k: any) => k.id === id)).toBe(false);   // not even listed as revoked
+    expect((await notify(key, { title: "x" })).status).toBe(401);
+    // a plain revoke still keeps the row, marked revoked
+    const b = await mintKey(token, "plain-one");
+    await f("/v1/device/keys/" + b.id, { method: "DELETE", headers: auth(token) });
+    const list2 = await j(await f("/v1/device/keys", { headers: auth(token) }));
+    expect(list2.keys.find((k: any) => k.id === b.id)?.revokedAt).toBeTruthy();
+  });
   it("reports usage for the day", async () => {
     const { token } = await pair();
     const { key } = await mintKey(token);

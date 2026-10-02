@@ -19,8 +19,9 @@ final class ChangeTicker: ObservableObject {
 struct HistoryView: View {
     let controller: AppController
     @StateObject private var ticker = ChangeTicker()
-    /// `nil` is "All Apps"; otherwise an app id. (Optional so the sidebar List can bind it directly.)
-    @State private var selection: String? = Self.allApps
+    /// The sidebar's selection, tagged by `HistorySelection.id`: "All Apps" (the default on open) or an app id. (Optional so the
+    /// sidebar List can bind it directly.)
+    @State private var selection: String? = HistorySelection.all.id
     @State private var search = ""
     @State private var picked = Set<HistoryKey>()
     @State private var confirmClearApp: String?
@@ -28,19 +29,16 @@ struct HistoryView: View {
     @State private var openGroups = Set<String>()
     @FocusState private var searchFocused: Bool
 
-    private static let allApps = "__all__"
-
-    private var appFilter: String? { selection == Self.allApps ? nil : selection }
+    private var browser: HistoryBrowser { HistoryBrowser(selection: HistorySelection(id: selection), search: search) }
+    private var appFilter: String? { browser.selection.app }
 
     private var apps: [String] { _ = ticker.tick; return controller.history.apps() }
-    private var counts: [String: HistoryCount] { _ = ticker.tick; return controller.history.counts() }
 
     private func displayName(_ app: String) -> String { controller.registry.record(for: app)?.displayName ?? app }
 
     private var items: [HeraldHistoryItem] {
         _ = ticker.tick
-        let base = appFilter.map { controller.history.items(app: $0) } ?? controller.history.allItems()
-        return HistorySearch.filter(HistorySearch.scoped(base, app: appFilter), query: search) { displayName($0) }
+        return browser.items(history: controller.history) { displayName($0) }
     }
 
     var body: some View {
@@ -63,37 +61,47 @@ struct HistoryView: View {
     // MARK: Sidebar
 
     private var sidebar: some View {
-        let counts = self.counts
+        _ = ticker.tick   // re-read the stores whenever Herald data changes
         return List(selection: $selection) {
-            Label("All Apps", systemImage: "tray.full")
-                .badge(counts.values.reduce(0) { $0 + $1.total })
-                .tag(Self.allApps as String?)
-            Section("Apps") {
-                ForEach(apps, id: \.self) { app in
-                    HStack(spacing: 8) {
-                        Image(nsImage: AppIcons.icon(for: controller.registry.record(for: app), app: app))
-                            .resizable().frame(width: 18, height: 18)
-                        Text(displayName(app)).lineLimit(1)
-                        Spacer(minLength: 4)
-                        if let c = counts[app] {
-                            if c.unread > 0 {
-                                Text("\(c.unread)").font(.caption2.weight(.semibold)).foregroundStyle(.white)
-                                    .padding(.horizontal, 6).padding(.vertical, 1)
-                                    .background(Capsule().fill(Color.accentColor))
-                                    .help("\(c.unread) not dismissed")
-                            }
-                            Text("\(c.total)").font(.caption).foregroundStyle(.secondary)
+            // "All Apps" is a row like the others (same ForEach, same tag type), so it selects the same way.
+            ForEach(browser.rows(history: controller.history) { displayName($0) }) { row in
+                sidebarRow(row)
+                    .tag(row.id as String?)
+                    .contextMenu {
+                        if let app = row.selection.app {
+                            Button("Export JSON\u{2026}") { export(controller.history.items(app: app), name: app) }
+                            Button("Clear \(displayName(app)) History", role: .destructive) { confirmClearApp = app }
+                        } else {
+                            Button("Export JSON\u{2026}") { export(controller.history.allItems(), name: "all-apps") }
                         }
                     }
-                    .tag(app as String?)
-                    .contextMenu {
-                        Button("Export JSON\u{2026}") { export(controller.history.items(app: app), name: app) }
-                        Button("Clear \(displayName(app)) History", role: .destructive) { confirmClearApp = app }
-                    }
-                }
             }
         }
         .onChange(of: selection) { _ in picked.removeAll() }
+        .onChange(of: apps) { _ in
+            var b = browser
+            b.reconcile(history: controller.history)   // the selected app is gone (deleted): back to All Apps
+            if b.selection.id != selection { selection = b.selection.id }
+        }
+    }
+
+    @ViewBuilder private func sidebarRow(_ row: HistoryBrowser.Row) -> some View {
+        HStack(spacing: 8) {
+            if let app = row.selection.app {
+                Image(nsImage: AppIcons.icon(for: controller.registry.record(for: app), app: app)).resizable().frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "tray.full").frame(width: 18, height: 18)
+            }
+            Text(row.title).lineLimit(1)
+            Spacer(minLength: 4)
+            if row.unread > 0 {
+                Text("\(row.unread)").font(.caption2.weight(.semibold)).foregroundStyle(.white)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Capsule().fill(Color.accentColor))
+                    .help("\(row.unread) not dismissed")
+            }
+            Text("\(row.total)").font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     // MARK: Detail
@@ -260,9 +268,7 @@ struct HistoryView: View {
     private func delete(_ targets: [HeraldHistoryItem]) {
         guard !targets.isEmpty else { return }
         for t in targets { controller.dismissItem(app: t.app, id: t.id, action: nil, notify: false) } // closes a live banner; one refresh below
-        for (app, group) in Dictionary(grouping: targets, by: \.app) {
-            controller.history.delete(app: app, ids: Set(group.map(\.id)))
-        }
+        HistoryBrowser.delete(targets, from: controller.history)
         picked.subtract(targets.map(HistoryKey.init))
         controller.changed()
     }

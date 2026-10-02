@@ -121,6 +121,16 @@ enum ParityTools {
                                     body: body(a, ["app", "appName", "icon", "bundleId", "callbackURL", "allowCommands", "defaults"])) }),
 
         ParityTool(definition: MCPToolDefinition(
+            name: "delete_app", title: "Delete an app",
+            description: "Remove an issuing app from Herald for good: its record, ALL of its History, its templates, its manifest (and the Rive copies) and the icon files Herald made for it. Use it for test and demo apps you registered by mistake. Herald's own app (`herald`) cannot be removed. 404 when there is no such app.",
+            inputSchema: Schema.input(["app": Schema.string("The app id, as list_apps shows it.")], required: ["app"]), destructive: true, idempotent: true),
+            route: { a in
+                guard let id = try text(a, "app") else { throw ToolFailure("app is required") }
+                guard !id.contains("/") else { throw ToolFailure("app must not contain /") }
+                return RouteCall(method: "DELETE", path: "/v1/apps/\(id)")   // the client percent-encodes the path
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
             name: "voice_status", title: "Voice and Kokoro status",
             description: "The speech engine, whether the optional Kokoro voice is installed (what is missing, install progress, whether ~/.claude/tts can be reused), the available voices and the last error.",
             inputSchema: Schema.input(), readOnly: true, idempotent: true),

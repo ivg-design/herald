@@ -288,8 +288,10 @@ public final class RelayClient {
             return
         }
         store.logEntry(env.id, create: RelayLogEntry(id: env.id, key: env.key.name, title: env.payload.title, receivedAt: Date())) { _ in }
-        await host.relayEnsureIssuer(env.key)
-        if let icon = RelayPolicy.iconSource(for: env) { await host.relayApplyIcon(icon, for: env.key) }
+        if !HeraldIdentity.isRelayTestKey(env.key.name) {   // the relay test is a `herald` notification: no issuer, no icon
+            await host.relayEnsureIssuer(env.key)
+            if let icon = RelayPolicy.iconSource(for: env) { await host.relayApplyIcon(icon, for: env.key) }
+        }
         let inputs = host.relayInputs(for: env)
         switch RelayPolicy.decide(muted: inputs.muted, quiet: inputs.quiet) {
         case .suppress(let reason):

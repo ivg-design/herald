@@ -15,6 +15,8 @@ public protocol HeraldBackend: AnyObject, Sendable {
     func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem]
     func clearHistory(app: String?) async throws
     func apps() async throws -> [HeraldAppRegistration]
+    /// `DELETE /v1/apps/{id}`: the app's record, History, templates, manifest and icon files, together.
+    func deleteApp(app: String) async throws
     func templates(app: String?) async throws -> [HeraldTemplate]
     func putTemplate(_ t: HeraldTemplate) async throws
     func deleteTemplate(app: String, name: String) async throws
@@ -102,6 +104,7 @@ public struct PreviewSpec: Sendable, Equatable {
 /// (a test double, say) and answers 501 instead of pretending to store anything.
 public extension HeraldBackend {
     var parity: ParityService? { nil }
+    func deleteApp(app: String) async throws { throw BackendError(501, "removing apps is not supported") }
     func templates(app: String?) async throws -> [HeraldTemplate] { throw BackendError(501, "templates are not supported") }
     func putTemplate(_ t: HeraldTemplate) async throws { throw BackendError(501, "templates are not supported") }
     func deleteTemplate(app: String, name: String) async throws { throw BackendError(501, "templates are not supported") }
@@ -223,6 +226,12 @@ public final class Router: @unchecked Sendable {
                 return .json(200, ["ok": true])
             case ("GET", "/v1/apps"):
                 return .json(200, AppsReply(apps: try await backend.apps()))
+            case ("DELETE", _) where req.path.hasPrefix("/v1/apps/") && req.path != "/v1/apps/settings":
+                guard let id = String(req.path.dropFirst("/v1/apps/".count)).removingPercentEncoding, !id.isEmpty, !id.contains("/") else {
+                    throw BackendError(400, "app id is required: DELETE /v1/apps/{id}")
+                }
+                try await backend.deleteApp(app: id)
+                return .json(200, DeletedAppReply(ok: true, deleted: id))
             case ("GET", "/v1/templates"):
                 let app = req.query["app"].flatMap { $0.isEmpty ? nil : $0 }
                 // Names that start with "_" are scratch templates (the Designer's "Send test" writes `_designer-test`):
@@ -306,6 +315,7 @@ public final class Router: @unchecked Sendable {
     }
     private struct HistoryReply: Encodable { var items: [HeraldHistoryItem] }
     private struct AppsReply: Encodable { var apps: [HeraldAppRegistration] }
+    private struct DeletedAppReply: Encodable { var ok: Bool; var deleted: String }
     private struct TemplatesReply: Encodable { var items: [HeraldTemplate] }
     private struct ManifestsReply: Encodable { var items: [HeraldManifest] }
     private struct ShortcutsReply: Encodable { var items: [String] }

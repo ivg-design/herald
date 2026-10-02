@@ -22,7 +22,7 @@ A template is a reusable banner design for one app, stored as
 Partial files are fine: missing fields take their defaults.
 
 ```json
-{"name":"bid-won","app":"bidbot","layout":"hero","accentColor":"#2E7D32",
+{"name":"bid-won","app":"example.bidbot","layout":"hero","accentColor":"#2E7D32",
  "title":"Bid accepted: {amount}","subtitle":"{client}",
  "body":"{client} accepted your bid. [Open](https://example.com/p/{id})",
  "buttons":[{"label":"Open","url":"https://example.com/p/{id}"}],
@@ -32,7 +32,7 @@ Partial files are fine: missing fields take their defaults.
 Use it by name:
 
 ```sh
-herald notify --app bidbot --json - <<< '{"template":"bid-won","metadata":{"amount":"$4,200","client":"Acme"},"id":"42"}'
+herald notify --app example.bidbot --json - <<< '{"template":"bid-won","metadata":{"amount":"$4,200","client":"Acme"},"id":"42"}'
 ```
 
 ### Resolution rules
@@ -108,7 +108,7 @@ curl:
 D="$HOME/Library/Application Support/Herald"
 curl -s -X POST "http://127.0.0.1:$(cat "$D/port")/v1/notify" \
   -H "Authorization: Bearer $(cat "$D/token")" -H 'Content-Type: application/json' \
-  -d '{"app":"bidbot","id":"bid-42","title":"Bid accepted","subtitle":"Acme RFP",
+  -d '{"app":"example.bidbot","id":"bid-42","title":"Bid accepted","subtitle":"Acme RFP",
        "body":"Your bid of $4,200 was accepted. [Open proposal](https://example.com/p/42)",
        "url":"https://example.com/p/42","sound":"Glass","snooze":true,
        "buttons":[{"label":"Open","url":"https://example.com/p/42"}]}'
@@ -120,7 +120,7 @@ Swift:
 import HeraldClient
 
 let id = try await HeraldClient.shared.notify(HeraldNotification(
-    app: "bidbot", id: "bid-42", title: "Bid accepted", subtitle: "Acme RFP",
+    app: "example.bidbot", id: "bid-42", title: "Bid accepted", subtitle: "Acme RFP",
     body: "Your bid of $4,200 was accepted. [Open proposal](https://example.com/p/42)",
     url: "https://example.com/p/42", sound: "Glass",
     buttons: [HeraldButton(label: "Open", url: "https://example.com/p/42")], snooze: true))
@@ -130,7 +130,7 @@ Python:
 
 ```python
 from herald import Herald
-Herald().notify(app="bidbot", id="bid-42", title="Bid accepted", subtitle="Acme RFP",
+Herald().notify(app="example.bidbot", id="bid-42", title="Bid accepted", subtitle="Acme RFP",
                 body="Your bid of $4,200 was accepted. [Open proposal](https://example.com/p/42)",
                 url="https://example.com/p/42", sound="Glass", snooze=True,
                 buttons=[{"label": "Open", "url": "https://example.com/p/42"}])
@@ -140,7 +140,7 @@ Node:
 
 ```js
 const { Herald } = require('./herald');
-await new Herald().notify('bidbot', 'Bid accepted', {
+await new Herald().notify('example.bidbot', 'Bid accepted', {
   id: 'bid-42', subtitle: 'Acme RFP',
   body: 'Your bid of $4,200 was accepted. [Open proposal](https://example.com/p/42)',
   url: 'https://example.com/p/42', sound: 'Glass', snooze: true,
@@ -151,7 +151,7 @@ await new Herald().notify('bidbot', 'Bid accepted', {
 CLI:
 
 ```sh
-herald notify --app bidbot --id bid-42 --title "Bid accepted" --subtitle "Acme RFP" \
+herald notify --app example.bidbot --id bid-42 --title "Bid accepted" --subtitle "Acme RFP" \
   --body "Your bid of \$4,200 was accepted. [Open proposal](https://example.com/p/42)" \
   --url https://example.com/p/42 --sound Glass --snooze --button "Open=https://example.com/p/42"
 ```

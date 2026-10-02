@@ -19,6 +19,7 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { await controller.historyItems(app: app, limit: limit) }
     func clearHistory(app: String?) async throws { await controller.clearHistory(app: app) }
     func apps() async throws -> [HeraldAppRegistration] { await controller.registeredApps() }
+    func deleteApp(app: String) async throws { try await controller.deleteApp(app) }
     func templates(app: String?) async throws -> [HeraldTemplate] { await controller.templateList(app: app) }
     func putTemplate(_ t: HeraldTemplate) async throws { try await controller.putTemplate(t) }
     func deleteTemplate(app: String, name: String) async throws { try await controller.deleteTemplate(app: app, name: name) }
@@ -114,6 +115,12 @@ final class AppController {
         // Installed agents (agent.claude-code, ...) get the current default manifest and template; the user's own edits stay.
         AgentIssuer.refreshInstalled(supportDirectory: supportDirectory, registry: registry, manifests: manifests, templates: templates,
                                      detectedHost: HeraldHostApp.detectCurrent())
+        // One Herald entry (name and icon), the old connectors app folded into it, no History for apps that are gone, and once the known
+        // test and demo leftovers removed.
+        let migrated = HeraldMigrations.run(supportDirectory: supportDirectory, registry: registry, history: history, templates: templates,
+                                            manifests: manifests, assets: AssetStore.shared, iconPNG: Self.appIconPNG())
+        if !migrated.isEmpty { log("startup cleanup: \(migrated)") }
+        AppIcons.invalidate()
         startServer()
         restoreBanners()
         relay.start()
@@ -208,6 +215,13 @@ final class AppController {
         return id
     }
 
+    /// The app icon from the asset catalog, as PNG: exported once into the support folder so Herald's own entry has an icon like agents do.
+    static func appIconPNG() -> Data? {
+        let image = NSApp?.applicationIconImage ?? NSImage(named: "AppIcon")
+        guard let image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
+        return rep.representation(using: .png, properties: [:])
+    }
+
     func register(_ r: HeraldAppRegistration) throws {
         try PayloadLimits.validate(r)
         guard registry.hasRoom(for: r.app) else { throw BackendError(429, "too many apps (at most \(AppRegistry.maxApps))") }
@@ -289,6 +303,20 @@ final class AppController {
     }
 
     func registeredApps() -> [HeraldAppRegistration] { registry.all().map(\.registration) }
+
+    /// `DELETE /v1/apps/{id}`: the app, its History, templates, manifest and icon files, and any banner it still has up.
+    func deleteApp(_ app: String) throws {
+        guard app != HeraldIdentity.app else { throw BackendError(409, "\(app) is Herald itself and cannot be removed") }
+        guard registry.record(for: app) != nil || history.apps().contains(app) || manifests.get(app: app) != nil else {
+            throw BackendError(404, "no such app")
+        }
+        pendingNotifies.invalidateAll(prefix: app + "\u{1}")
+        for item in history.items(app: app) { banners.close(app: app, id: item.id) }
+        AppLifecycle.remove(app: app, supportDirectory: supportDirectory, registry: registry, history: history,
+                            templates: templates, manifests: manifests, assets: AssetStore.shared)
+        AppIcons.invalidate()
+        changed()
+    }
 
     // MARK: Templates
 

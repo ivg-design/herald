@@ -14,7 +14,7 @@ in the list. See [components/button.md](components/button.md).
 **`actionRules`.** The template's ordered rules over the issuer's actions: hide, relabel, restyle, reorder, add.
 See [actions.md](actions.md#rules-actionrules).
 
-**App id / issuer.** The identifier a sending app uses (`bidbot`, `webwatcher.email`). Its history, icon, sound,
+**App id / issuer.** The identifier a sending app uses (`example.bidbot`, `webwatcher.email`). Its history, icon, sound,
 templates, manifest and Rive assets are all keyed by it. "Issuer" is the app seen as the source of notifications.
 
 **Artboard.** A canvas inside a `.riv` file. A `rive` component plays one. See [rive.md](rive.md).

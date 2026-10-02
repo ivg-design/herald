@@ -44,7 +44,7 @@ Errors: `401 {"error":"unauthorized"}`, `400 {"error":"..."}`, `404`, `405`.
 ### POST /v1/register
 
 ```json
-{"app":"bidbot","appName":"BidBot","icon":"/path/icon.png","bundleId":"com.example.bidbot",
+{"app":"example.bidbot","appName":"BidBot","icon":"/path/icon.png","bundleId":"com.example.bidbot",
  "callbackURL":"http://127.0.0.1:5123/herald","allowCommands":false,
  "defaults":{"sound":"Glass","persistent":true,"timeout":0,"corner":"topRight"}}
 ```
@@ -56,7 +56,7 @@ the user must confirm it in Settings > Apps before `command` buttons run.
 ### POST /v1/notify
 
 ```json
-{"app":"bidbot","id":"bid-42","template":"bid-won",
+{"app":"example.bidbot","id":"bid-42","template":"bid-won",
  "title":"Bid accepted","subtitle":"Acme RFP",
  "body":"Your bid of $4,200 was accepted. [Open proposal](https://example.com/p/42)",
  "image":"/path/preview.png","url":"https://example.com/p/42",
@@ -129,7 +129,7 @@ the open list. `GET /v1/stacks` also reports each stack panel's `frame` in scree
 
 ### POST /v1/snooze and /v1/unsnooze
 
-`{"app":"bidbot","id":"bid-42","minutes":15}` hides the banner and shows it again (same id) after
+`{"app":"example.bidbot","id":"bid-42","minutes":15}` hides the banner and shows it again (same id) after
 15 minutes (`0 < minutes <= 43200`, fractions allowed). The reply is `{"ok":true,"until":"2026-10-02T13:15:00.000Z"}`.
 Snoozes are persisted and survive a relaunch of Herald; History marks the item as snoozed. `404` if the
 notification is unknown, `400` if it was already dismissed or `minutes` is out of range.
@@ -139,10 +139,10 @@ Sending a notification with the same id also cancels a pending snooze.
 
 ### Templates
 
-`GET /v1/templates?app=bidbot`:
+`GET /v1/templates?app=example.bidbot`:
 
 ```json
-{"items":[{"name":"bid-won","app":"bidbot","layout":"hero","accentColor":"#2E7D32",
+{"items":[{"name":"bid-won","app":"example.bidbot","layout":"hero","accentColor":"#2E7D32",
            "showSubtitle":true,"showBody":true,"showTimestamp":true,"maxBodyLines":3,
            "title":"Bid accepted: {amount}","body":"{client} accepted your bid.",
            "buttons":[{"label":"Open","url":"{url}"}],"snooze":true}]}

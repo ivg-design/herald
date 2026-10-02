@@ -511,7 +511,7 @@ var Mailbox = class extends DurableObject {
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a2.p);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
-        if (km && m === "DELETE") return this.revokeKey(km[1]);
+        if (km && m === "DELETE") return this.revokeKey(km[1], url.searchParams.get("purge") === "1");
         if (path === "/v1/device" && m === "DELETE") return this.unpair();
         if (path === "/v1/device/devices" && m === "GET") return this.registryCall("/internal/list", {});
         if (path === "/v1/device/prune" && m === "POST") return this.registryCall("/internal/prune", {});
@@ -602,9 +602,16 @@ var Mailbox = class extends DurableObject {
     this.sql("INSERT INTO keys (id, name, client, scope, hash, created_at, kind) VALUES (?, ?, ?, 'notify', ?, ?, 'static')", id, name, client, await sha256Hex(secret), now);
     return json(201, { id, name, client, scope: "notify", kind: "static", key: agentKey(p.deviceId, id, secret), createdAt: iso(now) });
   }
-  revokeKey(id) {
+  /** `purge` (Herald's relay test, a throw-away key) forgets the key altogether: its row, its tokens and what it sent. */
+  revokeKey(id, purge = false) {
     const row = this.sql("SELECT * FROM keys WHERE id = ?", id)[0];
     if (!row) return err(404, "not_found", "no such key");
+    if (purge) {
+      this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
+      this.sql("DELETE FROM notes WHERE key_id = ?", id);
+      this.sql("DELETE FROM keys WHERE id = ?", id);
+      return json(200, { revoked: true, purged: true, id });
+    }
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
     return json(200, { revoked: true, id });

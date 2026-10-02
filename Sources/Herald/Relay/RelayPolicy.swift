@@ -25,7 +25,9 @@ public enum RelayPolicy {
     /// the banner stays.
     public static func notification(for e: RelayEnvelope, silenceSpeech: Bool) -> HeraldNotification {
         let p = e.payload
-        let app = RelayDefaults.appPrefix + HeraldAgent.slug(e.key.name)
+        // The relay test's throw-away key is Herald talking to itself: a `herald` notification, never a `cloud.herald-test-xxxx` app.
+        let isTest = HeraldIdentity.isRelayTestKey(e.key.name)
+        let app = isTest ? HeraldIdentity.app : RelayDefaults.appPrefix + HeraldAgent.slug(e.key.name)
         var n = HeraldNotification(app: app, id: e.id, title: String(p.title.prefix(200)))
         n.subtitle = p.subtitle.map { String($0.prefix(200)) }
         n.body = p.body.map { String($0.prefix(8000)) }

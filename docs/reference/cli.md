@@ -61,10 +61,10 @@ Designer. Nothing in the CLI grants an approval for commands or callbacks; only 
 ## notify
 
 ```sh
-herald notify --app bidbot --title "Bid accepted" --body "Your bid of \$4,200 was accepted" \
+herald notify --app example.bidbot --title "Bid accepted" --body "Your bid of \$4,200 was accepted" \
   --url "https://example.com/bids/42" --image /path/preview.png \
   --button "Open=https://example.com/bids/42" --sound Glass --snooze
-echo '{"app":"bidbot","title":"Bid accepted","buttons":[{"label":"Open","url":"https://x"}]}' | herald notify --json -
+echo '{"app":"example.bidbot","title":"Bid accepted","buttons":[{"label":"Open","url":"https://x"}]}' | herald notify --json -
 ```
 
 | Option | Maps to | Notes |
@@ -97,7 +97,7 @@ echo '{"app":"bidbot","title":"Bid accepted","buttons":[{"label":"Open","url":"h
 ## register
 
 ```sh
-herald register --app bidbot --name BidBot --icon /path/icon.png --bundle-id com.example.bidbot \
+herald register --app example.bidbot --name BidBot --icon /path/icon.png --bundle-id com.example.bidbot \
   --callback-url http://127.0.0.1:5123/herald --allow-commands --sound Glass --timeout 0 --corner topRight
 ```
 
@@ -128,8 +128,8 @@ herald quiet off                    # resume now
 ## history, stacks, dismiss
 
 ```sh
-herald history --app bidbot --limit 10
-herald history --app bidbot --clear
+herald history --app example.bidbot --limit 10
+herald history --app example.bidbot --clear
 herald stacks --app webwatcher.email
 herald dismiss-all --app webwatcher.email --group "billing@acme.com"
 ```
@@ -158,10 +158,10 @@ herald approvals;  herald approvals revoke --app webwatcher.email --template ema
 ## History search, re-show, delete, export
 
 ```sh
-herald history search invoice paid --app bidbot --limit 20
-herald history reshow --app bidbot --id bid-42
-herald history delete --app bidbot --id bid-42
-herald history export --app bidbot --out ~/Desktop/bidbot.json
+herald history search invoice paid --app example.bidbot --limit 20
+herald history reshow --app example.bidbot --id bid-42
+herald history delete --app example.bidbot --id bid-42
+herald history export --app example.bidbot --out ~/Desktop/bidbot.json
 ```
 
 ## template list, put, delete, duplicate, rename, default

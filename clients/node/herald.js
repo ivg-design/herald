@@ -8,8 +8,8 @@
  *
  *   const h = new Herald();
  *   if (await h.isAvailable()) {
- *     await h.notify('bidbot', 'Bid accepted', { body: 'Won', id: 'bid-42', url: 'https://example.com' });
- *     await h.dismiss('bidbot', 'bid-42');
+ *     await h.notify('example.bidbot', 'Bid accepted', { body: 'Won', id: 'bid-42', url: 'https://example.com' });
+ *     await h.dismiss('example.bidbot', 'bid-42');
  *   }
  * Rejects with HeraldUnavailable when Herald is not running.
  */

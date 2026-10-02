@@ -242,6 +242,28 @@ public final class HistoryStore: @unchecked Sendable {
         removeOrphanedImages(removed)
     }
 
+    /// Moves every item of `from` to `to` (the notification's own `app` too) and, when the item has no group, gives it `group`.
+    /// An item whose id already exists under `to` is replaced. Returns how many moved. The folded `herald.connectors` -> `herald` uses it.
+    @discardableResult
+    public func reassign(from: String, to: String, group: String? = nil) -> Int {
+        guard from != to else { return 0 }
+        let moved: [HeraldHistoryItem] = items(app: from).reversed().map { old in
+            var item = old
+            item.app = to; item.notification.app = to
+            if let group, item.notification.group == nil { item.notification.group = group }
+            return item
+        }
+        guard !moved.isEmpty else { return 0 }
+        // The two lists are merged by delivery time and written oldest first, so the new app's list stays newest first (rows are
+        // ordered by when they were written; rewriting the existing ones keeps them in line with the moved ones).
+        let merged = (items(app: to).reversed() + moved).enumerated()
+            .sorted { $0.element.deliveredAt != $1.element.deliveredAt ? $0.element.deliveredAt < $1.element.deliveredAt : $0.offset < $1.offset }
+            .map(\.element)
+        upsert(contentsOf: merged)
+        clear(app: from)
+        return moved.count
+    }
+
     public func clear(app: String) {
         lock.lock(); defer { lock.unlock() }
         let removed = db.deleteApp(app)

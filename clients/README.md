@@ -17,10 +17,10 @@ clear "Herald is not running" error when the app is down. The wire format is in
 from herald import Herald, HeraldUnavailable
 h = Herald()
 if h.is_available():
-    h.register("bidbot", appName="BidBot", defaults={"sound": "Glass"})
-    h.notify(app="bidbot", title="Bid accepted", template="bid-won", metadata={"amount": "$4,200"})
-    h.dismiss("bidbot", "bid-42")
-    print(h.history("bidbot", limit=10))
+    h.register("example.bidbot", appName="BidBot", defaults={"sound": "Glass"})
+    h.notify(app="example.bidbot", title="Bid accepted", template="bid-won", metadata={"amount": "$4,200"})
+    h.dismiss("example.bidbot", "bid-42")
+    print(h.history("example.bidbot", limit=10))
 ```
 
 ## Node
@@ -29,8 +29,8 @@ if h.is_available():
 const { Herald } = require('./herald');
 const h = new Herald();
 if (await h.isAvailable()) {
-  await h.notify('bidbot', 'Bid accepted', { template: 'bid-won', metadata: { amount: '$4,200' } });
-  console.log(await h.history('bidbot', 10));
+  await h.notify('example.bidbot', 'Bid accepted', { template: 'bid-won', metadata: { amount: '$4,200' } });
+  console.log(await h.history('example.bidbot', 10));
 }
 ```
 
@@ -43,10 +43,10 @@ Add the package and depend on `HeraldClient`. `HeraldClient.shared.isAvailable` 
 
 ```sh
 herald health
-herald notify --app bidbot --title "Bid accepted" --button "Open=https://example.com"
-herald notify --app bidbot --json payload.json      # or --json - for stdin
-herald history --app bidbot --limit 20
-herald dismiss --app bidbot --id bid-42
+herald notify --app example.bidbot --title "Bid accepted" --button "Open=https://example.com"
+herald notify --app example.bidbot --json payload.json      # or --json - for stdin
+herald history --app example.bidbot --limit 20
+herald dismiss --app example.bidbot --id bid-42
 herald compose                                       # opens the Composer window
 ```
 
@@ -69,7 +69,7 @@ from herald import Herald
 
 h = Herald()
 manifest = {
-    "app": "bidbot", "appName": "BidBot", "version": 1,
+    "app": "example.bidbot", "appName": "BidBot", "version": 1,
     "fields": [{"key": "title", "type": "text", "required": True, "sample": "Bid accepted"},
                {"key": "amount", "type": "text", "sample": "$4,200"},
                {"key": "url", "type": "url"}],
@@ -80,7 +80,7 @@ req = urllib.request.Request(h.base_url + "/v1/manifest", method="PUT",
                              headers={"Authorization": "Bearer " + h.token,
                                       "Content-Type": "application/json"})
 urllib.request.urlopen(req).read()
-h.notify(app="bidbot", title="Bid accepted", amount="$4,200", url="https://example.com/p/42")
+h.notify(app="example.bidbot", title="Bid accepted", amount="$4,200", url="https://example.com/p/42")
 ```
 
 ### Node
@@ -89,12 +89,12 @@ h.notify(app="bidbot", title="Bid accepted", amount="$4,200", url="https://examp
 const { Herald } = require('./herald');
 const h = new Herald();
 await h._request('PUT', '/v1/manifest', { body: {
-  app: 'bidbot', appName: 'BidBot', version: 1,
+  app: 'example.bidbot', appName: 'BidBot', version: 1,
   fields: [{ key: 'title', type: 'text', required: true, sample: 'Bid accepted' },
            { key: 'amount', type: 'text', sample: '$4,200' }],
   actions: [{ id: 'archive', label: 'Archive', kind: 'callback' }],
 }});
-await h.notify('bidbot', 'Bid accepted', { amount: '$4,200' });
+await h.notify('example.bidbot', 'Bid accepted', { amount: '$4,200' });
 ```
 
 ### CLI / curl
@@ -104,7 +104,7 @@ D="$HOME/Library/Application Support/Herald"
 curl -s -X PUT "http://127.0.0.1:$(cat "$D/port")/v1/manifest" \
   -H "Authorization: Bearer $(cat "$D/token")" -H 'Content-Type: application/json' \
   -d @manifest.json
-herald notify --app bidbot --json payload.json
+herald notify --app example.bidbot --json payload.json
 ```
 
 Read manifests back with `GET /v1/manifests`; list installed Apple Shortcuts with `GET /v1/shortcuts`.
