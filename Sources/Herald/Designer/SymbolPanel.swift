@@ -39,7 +39,7 @@ struct SymbolPanel: View {
                     Image(systemName: s.name.isEmpty || !HeraldSymbol.isKnown(s.name) ? "square.grid.3x3" : s.name)
                 } primaryAction: { picking = true }
                 .menuStyle(.borderedButton).controlSize(.small).fixedSize()
-                .help("Browse the SF Symbols on this Mac (the arrow opens a floating panel)")
+                .heraldHelp(.designerPickSymbol)
                 .sheet(isPresented: $picking) {
                     SymbolBrowserHost(designer: model, current: { s }, apply: { applyPicked($0) },
                                       closeAfterUse: { picking = false }, onClose: { picking = false },
@@ -47,7 +47,7 @@ struct SymbolPanel: View {
                 }
                 if symbol != nil {
                     Button { symbol = nil } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.borderless).help("Remove the symbol")
+                        .buttonStyle(.borderless).heraldHelp(.designerRemoveSymbol)
                 }
             }
             if let _ = symbol {

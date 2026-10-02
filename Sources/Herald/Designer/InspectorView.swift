@@ -1040,7 +1040,7 @@ private struct TrackRow: View {
             }.heraldHelp(.designerTrackSize)
             .labelsHidden().fixedSize()
             if case .points(let p) = size {
-                NumberField(value: Binding(get: { p }, set: { size = .points($0).heraldHelp(.designerTrackPoints) }), range: 0...4000)
+                NumberField(value: Binding(get: { p }, set: { size = .points($0) }), range: 0...4000).heraldHelp(.designerTrackPoints)
             }
             Spacer(minLength: 0)
             Button(role: .destructive, action: remove) { Image(systemName: "minus.circle") }

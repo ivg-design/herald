@@ -147,6 +147,11 @@ extension HelpEntry {
     static let designerRemoveTrack = HelpEntry("designer.removeTrack", "Remove track", "delete this row or column from the grid")
     static let designerCheckRow = HelpEntry("designer.checkRow", "Problem", "select the cell this problem is about")
     static let designerTrackPoints = HelpEntry("designer.trackPoints", "Track points", "the exact size of this row or column in points")
+    static let designerResizeCell = HelpEntry("designer.resizeCell", "Resize cell", "drag to span more or fewer rows and columns")
+    static let designerTrackMenu = HelpEntry("designer.trackMenu", "Row or column size", "choose Auto, Fill or a fixed size for this track; double-click the handle to reset")
+    static let designerTrackHandle = HelpEntry("designer.trackHandle", "Resize track", "drag to set the size of this row or column; double-click to reset")
+    static let designerPickSymbol = HelpEntry("designer.pickSymbol", "Pick symbol", "browse the SF Symbols on this Mac and apply one")
+    static let designerRemoveSymbol = HelpEntry("designer.removeSymbol", "Remove symbol", "take the SF Symbol off this component")
 }
 
 extension HeraldHelpCatalog {
@@ -296,5 +301,10 @@ extension HeraldHelpCatalog {
         .designerRemoveTrack,
         .designerCheckRow,
         .designerTrackPoints,
+        .designerResizeCell,
+        .designerTrackMenu,
+        .designerTrackHandle,
+        .designerPickSymbol,
+        .designerRemoveSymbol,
     ]
 }

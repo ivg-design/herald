@@ -458,7 +458,7 @@ struct SpanHandle: View {
 
     var body: some View {
         shape
-            .help(axis == .both ? "Drag to resize" : axis == .cols ? "Drag to span columns" : "Drag to span rows")
+            .heraldHelp(.designerResizeCell)
             .gesture(DragGesture(minimumDistance: 2, coordinateSpace: .named(DesignerCanvasSpace.name))
                 .onChanged { v in
                     guard let r = GridEditing.rect(ofCell: cellID, in: model.draft) else { return }
@@ -682,7 +682,7 @@ private struct TrackLabel: View {
                     .fill(live ? Color.accentColor : Color(nsColor: .windowBackgroundColor).opacity(0.80)))
         }
         .menuStyle(.borderlessButton).menuIndicator(.hidden)
-        .help("\(columns ? "Column" : "Row") \(index + 1): drag the handle to resize, double-click it to reset")
+        .heraldHelp(.designerTrackMenu)
         .accessibilityLabel("\(columns ? "Column" : "Row") \(index + 1), \(text)")
     }
 }
@@ -722,7 +722,7 @@ private struct TrackHandle: View {
                 if drag != next { drag = next; model.resizeTrackLive(columns: columns, index: index, points: points) }
             }
             .onEnded { _ in drag = nil; grab = nil })
-        .help("Drag to resize, double-click to reset")
+        .heraldHelp(.designerTrackHandle)
         .accessibilityLabel("Resize \(columns ? "column" : "row") \(index + 1)")
     }
 }
