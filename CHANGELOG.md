@@ -17,6 +17,29 @@
   `relay_test` leaves no trace. `DELETE /v1/apps/{id}` and `delete_app`; startup removes History of unregistered apps and the known test
   leftovers; the docs example is `example.bidbot`. History > "All Apps" is selectable and the default.
 
+## 1.6.3 (Build 13) - 2026-10-02
+
+### Fixed
+
+- **Relay devices.** Unpair purges the device's mailbox; pairing under the same Mac name replaces the old entry; stale
+  entries (rotated credentials, wiped mailbox, 30 days idle) are pruned on lookup and by a daily alarm; Herald prunes
+  after every pair and Settings → Cloud → Advanced lists "Devices on this relay" with Remove. Approvals go to the
+  connected Mac (else the most recently seen), never simply the first entry; `/device_authorization` and `/authorize`
+  name the Mac that will show the banner (`device_name`, `device_count`, `device_index`, `device_online`).
+- **Relay upgrades keep the pairing** (#79): the signing secret is reused (Herald's copy, or the Worker's own when
+  Herald has none); a deploy that must change it re-pairs automatically and says so; the stale "relay is not
+  answering" message clears once online.
+- **Connector banners no longer repeat**: a client asking again replaces its open request in place; reconnects refresh
+  the Settings list silently; expired requests disappear everywhere; a decision removes the request on every Mac and
+  Deny revokes nothing else; the banner shows the client name and the code the agent printed.
+- **Herald's identity**: one `herald` app named "Herald" with the Herald icon (`herald.connectors` folded in as group
+  "connectors"); the relay round-trip test leaves no key, app, history item or banner behind; `DELETE /v1/apps/{id}`
+  and the `delete_app` MCP tool remove history, templates, manifest and icons together; startup purges history of
+  unregistered apps and the old test/demo leftovers; the example app registers as `example.bidbot`.
+- **History**: "All Apps" is selectable and the default; search and multi-select delete span apps.
+
+1175 tests · 159 relay tests.
+
 ## 1.6.2 (Build 12) - 2026-10-02
 
 ### Added
