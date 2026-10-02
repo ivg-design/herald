@@ -20,7 +20,7 @@ Requires macOS 13 or later.
 - **MCP server.** `herald-mcp` lets an agent author templates, preview them as images, add actions
   and Shortcuts, and send tests.
 
-Docs: [TEMPLATES](docs/TEMPLATES.md), [ACTIONS](docs/ACTIONS.md), [MCP](docs/MCP.md), [AUTHORING](docs/AUTHORING.md), [API](docs/API.md).
+Docs: [TEMPLATES](docs/TEMPLATES.md), [ACTIONS](docs/ACTIONS.md), [MCP](docs/MCP.md), [AUTHORING](docs/AUTHORING.md), [API](docs/API.md). **Full reference (every component, Rive, symbols, API, CLI, MCP):** [docs/reference/](docs/reference/README.md).
 
 ## Install
 
