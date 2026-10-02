@@ -717,7 +717,7 @@ private struct TrackHandle: View {
                 }
                 guard let g = grab else { return }
                 let along = columns ? v.location.x : v.location.y
-                let points = GridEditing.clampedPoints(Double(g.length + (along - g.along)), columns: columns, in: model.grid)
+                let points = GridEditing.clampedPoints(Double(g.length + (along - g.along)), columns: columns, index: index, in: model.grid)
                 let next = TrackDrag(columns: columns, index: index, points: points)
                 if drag != next { drag = next; model.resizeTrackLive(columns: columns, index: index, points: points) }
             }

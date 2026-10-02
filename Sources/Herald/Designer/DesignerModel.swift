@@ -408,10 +408,29 @@ extension GridEditing {
 
     /// A dragged size made usable: whole points, at least `minTrackPoints`, and no wider than the banner (a
     /// column) or 800 pt (a row).
-    static func clampedPoints(_ v: Double, columns: Bool, in g: HeraldGrid) -> Double {
+    static func clampedPoints(_ v: Double, columns: Bool, index: Int? = nil, in g: HeraldGrid) -> Double {
         guard v.isFinite else { return minTrackPoints }
-        let hi = columns ? max(g.width, minTrackPoints) : 800.0
+        let hi = maxPoints(columns: columns, index: index, in: g)
         return min(max(v.rounded(), minTrackPoints), hi)
+    }
+
+    /// The least a `fill` or `auto` column may be squeezed to when another column is sized.
+    static let minFlexibleColumn = 24.0
+
+    /// The most column `index` can take: what is left of the grid's inner width (width minus padding and gaps) after
+    /// the other columns, fixed ones at their size and fill/auto ones at their minimum. A row is capped at 800 pt.
+    /// Without an index, the whole inner width.
+    static func maxPoints(columns: Bool, index: Int?, in g: HeraldGrid) -> Double {
+        guard columns else { return 800.0 }
+        let pad = max(g.padding, 0), gap = max(g.gap, 0)
+        let inner = GridSolver.clampedWidth(g.width) - 2 * pad - gap * Double(max(g.cols - 1, 0))
+        var others = 0.0
+        if let index {
+            for (j, size) in g.colSizes.enumerated() where j != index && j < g.cols {
+                switch size { case .points(let p): others += max(p, 0); case .fill, .auto: others += minFlexibleColumn }
+            }
+        }
+        return max(inner - others, minTrackPoints)
     }
 
     /// Gives column or row `index` a size. A fixed size is clamped (`clampedPoints`). False when there is no such track.
@@ -420,7 +439,7 @@ extension GridEditing {
         guard var g = t.grid, index >= 0, index < (columns ? g.cols : g.rows) else { return false }
         fixSizes(&g)
         var s = size
-        if case .points(let p) = s { s = .points(clampedPoints(p, columns: columns, in: g)) }
+        if case .points(let p) = s { s = .points(clampedPoints(p, columns: columns, index: index, in: g)) }
         if columns { g.colSizes[index] = s } else { g.rowSizes[index] = s }
         t.grid = g
         return true

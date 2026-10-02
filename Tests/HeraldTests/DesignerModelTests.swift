@@ -682,7 +682,7 @@ final class DesignerTrackTests: XCTestCase {
         let g = HeraldGrid.standard   // 400 wide
         XCTAssertEqual(GridEditing.clampedPoints(96.4, columns: true, in: g), 96)
         XCTAssertEqual(GridEditing.clampedPoints(-20, columns: true, in: g), GridEditing.minTrackPoints)
-        XCTAssertEqual(GridEditing.clampedPoints(2000, columns: true, in: g), 400)
+        XCTAssertEqual(GridEditing.clampedPoints(2000, columns: true, in: g), 348, "the inner width: 400 minus padding 14 x 2 and three gaps of 8")
         XCTAssertEqual(GridEditing.clampedPoints(2000, columns: false, in: g), 800)
         XCTAssertEqual(GridEditing.clampedPoints(.nan, columns: false, in: g), GridEditing.minTrackPoints)
     }
@@ -1076,5 +1076,42 @@ final class DesignerSampleFallbackTests: XCTestCase {
         m.absentTokens = ["count"]
         XCTAssertNil(m.previewFields["count"])
         XCTAssertTrue(m.isEmpty(m.draft.cells[0]))
+    }
+}
+
+// Columns cannot be resized beyond the grid's width (issue #47).
+final class GridTrackClampTests: XCTestCase {
+    private func template(_ sizes: [HeraldSize], width: Double = 380) -> HeraldTemplate {
+        HeraldTemplate(name: "t", app: "a", grid: HeraldGrid(rows: 1, cols: sizes.count, rowSizes: [.auto], colSizes: sizes, gap: 8, padding: 14, width: width), cells: [])
+    }
+    private func inner(_ g: HeraldGrid) -> Double { g.width - 2 * g.padding - g.gap * Double(g.cols - 1) }
+
+    func testTheReportedGridCannotBeDraggedPastItsWidth() {
+        // 380 wide, padding 14, gap 8: 328 pt inside. 94 + 171 + 55 + 126 = 446 was reachable before.
+        var t = template([.points(94), .points(80), .points(55), .points(60)])
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 1, size: .points(171), in: &t))
+        XCTAssertTrue(GridEditing.setTrack(columns: true, index: 3, size: .points(126), in: &t))
+        let g = t.grid!
+        let fixed = g.colSizes.reduce(0.0) { if case .points(let p) = $1 { return $0 + p }; return $0 }
+        XCTAssertLessThanOrEqual(fixed, inner(g) + 0.001, "fixed columns \(g.colSizes) fit the \(inner(g)) pt inside")
+        XCTAssertEqual(g.colSizes[1], .points(119), "171 was asked for; 328 - (94 + 55 + 60) is what is left")
+        XCTAssertEqual(g.colSizes[3], .points(60), "and the last one stops where the room ends")
+    }
+
+    func testFillAndAutoColumnsKeepTheirMinimum() {
+        var t = template([.points(60), .fill, .auto, .points(60)])
+        _ = GridEditing.setTrack(columns: true, index: 0, size: .points(5000), in: &t)
+        let g = t.grid!
+        XCTAssertEqual(g.colSizes[0], .points(inner(g) - 60 - 2 * GridEditing.minFlexibleColumn))
+        XCTAssertEqual(GridEditing.maxPoints(columns: true, index: nil, in: g), inner(g), "no index: the whole inner width")
+    }
+
+    func testLiveDragAndNumericEntryUseTheSameClamp() {
+        let g = template([.points(100), .points(100), .points(100)]).grid!
+        XCTAssertEqual(GridEditing.clampedPoints(900, columns: true, index: 2, in: g), inner(g) - 200)
+        XCTAssertEqual(GridEditing.clampedPoints(900, columns: true, in: g), inner(g))
+        XCTAssertEqual(GridEditing.clampedPoints(1, columns: true, index: 2, in: g), GridEditing.minTrackPoints)
+        // Rows are capped at 800 pt.
+        XCTAssertEqual(GridEditing.clampedPoints(5000, columns: false, index: 0, in: g), 800)
     }
 }
