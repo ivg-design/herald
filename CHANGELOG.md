@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.4.0 (Build 7) - 2026-10-02
+
+### Added
+
+- **Designer layout.** Left sidebar, centred column with the live preview above the editor grid on one axis, right
+  inspector; both sidebars full height; the preview/editor divider is a full-width drag (half by default, a quarter to
+  three quarters); sidebar widths drag and persist; both surfaces zoom 50–300 % (⌘+ / ⌘− / ⌘0, pinch, popover) per pane.
+- **SF Symbols browser.** Apple's catalog (7,779 symbols in 25 categories) with All / Recents / Favourites, synonym
+  search ("bin" finds trash), a resizable grid with a size slider, a 96 pt preview in the current weight, mode and
+  colours; opens as a sheet or as a floating, non-activating panel.
+- **Arbitrary button arrangements.** `actions` takes `include`, `align`, `wrap`, `spacing`; `button.actionId` binds one
+  issuer action; an action renders in exactly one cell (first in reading order; duplicates warn and collapse). The
+  Actions tab explains it with the Mark-as-Read-under-the-icon example.
+- **Button style** `normal` / `prominent` / `destructive` / `cancel` (old `destructive: true` still decodes); destructive
+  is a red label plus an inline confirmation before running, for template buttons and issuer actions alike.
+- **Open app** action kind (`openApp`, `bundleId` / `path`, falling back to the manifest's `appBundleId` / `appPath`, the
+  registered bundle id, then `appName`); usable as a rule, an issuer action, the banner's `onClick`, in the Designer
+  (Choose app…) and over MCP.
+- **Image source** From issuer / Fixed image… (copied into the support folder) / Field…; every token picker groups
+  tokens by provenance — issuer manifest field, notification payload field, set here — with sample values.
+- **Tooltips** on every control through one helper; Settings → General → Tooltips: Name only / Name and description.
+- **⌘,** opens the single shared Settings window from any Herald window (the blank SwiftUI settings scene is gone).
+- **⌘-Tab.** While the Designer, Quick send, History, Settings or the template editor is open, Herald appears in the
+  switcher with its icon; back to menu-bar-only when the last window closes. Banners never change the policy.
+- **MCP / API parity.** 28 new tools (49 in all) and 18 new routes so everything the editor and Settings can do is
+  reachable: settings get/set, per-app settings, assets, template duplicate/rename/set-default, bundle import/export,
+  history search/re-show/delete/export, symbol list, designer snapshot, Rive check, snooze, stacks, manifests. Granting
+  approvals is deliberately not exposed. `docs/reference/parity.md` is the audit.
+- **Agents as issuers.** Installing an MCP client registers `agent.claude-code`, `agent.codex`, `agent.claude-desktop` or
+  `agent.<slug>` with a manifest, default template, sound and the real product icon (Claude from Claude.app; Codex asks
+  you to choose one); `herald-mcp --agent` defaults the app for send/speak/dismiss/history; Settings → MCP shows
+  "Design notifications…" per client; reinstall keeps your template.
+
+### Fixed
+
+- Column and row handles, the inspector field and the context menu are clamped so no track can exceed the grid width.
+- Position and Span are separate labelled groups; Span is disabled when a cell cannot grow.
+- `docs/TEMPLATES.md` and `docs/ACTIONS.md` brought level with the 1.3/1.4 schema.
+
+979 tests.
+
 ## 1.3.1 (Build 6) - 2026-10-02
 
 ### Changed
