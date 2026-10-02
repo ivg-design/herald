@@ -1,0 +1,34 @@
+name = "herald-relay"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+workers_dev = true
+preview_urls = false
+
+[vars]
+# How many Macs may pair with this relay (one user, a few machines).
+MAX_DEVICES = "5"
+
+# Secrets (set once, never committed):
+#   wrangler secret put RELAY_SECRET      required. Signs device ids so strangers cannot spawn mailboxes.
+#   wrangler secret put PAIRING_SECRET    optional. When set, POST /v1/pair/start requires it (header X-Pairing-Secret).
+
+[[durable_objects.bindings]]
+name = "MAILBOX"
+class_name = "Mailbox"
+
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "Registry"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Mailbox", "Registry"]
+
+[observability]
+enabled = true
+
+# Voice replies: m4a uploads (<= 1 MB each), kept 7 days by a bucket lifecycle rule
+# (`wrangler r2 bucket lifecycle add herald-relay-audio expire-audio-7d "" --expire-days 7`).
+[[r2_buckets]]
+binding = "AUDIO"
+bucket_name = "herald-relay-audio"

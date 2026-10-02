@@ -1,0 +1,6 @@
+{
+  "bucket": "herald-relay-audio",
+  "rules": [
+    { "id": "expire-audio-7d", "prefix": "", "expireDays": 7 }
+  ]
+}

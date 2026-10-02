@@ -1,0 +1,21 @@
+{
+  "name": "herald-relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloud relay for Herald: an authenticated mailbox that lets a cloud agent notify the user's Mac.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "r2:setup": "./r2-setup.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.65.0"
+  }
+}
