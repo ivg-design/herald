@@ -693,7 +693,9 @@ public enum HeraldComponent: Codable, Equatable, Sendable {
     /// The strings whose `{token}` placeholders decide whether the component has content.
     public var bindingStrings: [String] {
         switch self {
-        case .text(let p): return HeraldRichText.tokens(binding: p.binding, lines: p.lines).map { "{\($0)}" }
+        case .text(let p):
+            guard p.lines != nil else { return [p.binding] }
+            return HeraldRichText.tokens(binding: p.binding, lines: p.lines).map { "{\($0)}" }
         case .image(let p): return [p.binding]
         case .timestamp(let p): return p.binding.map { [$0] } ?? []
         case .badge(let p): return [p.binding]
