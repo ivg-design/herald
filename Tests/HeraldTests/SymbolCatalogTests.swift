@@ -24,7 +24,7 @@ final class SymbolCatalogTests: XCTestCase {
         XCTAssertEqual(c.search("bell"), ["bell", "bell.badge", "bell.fill"])
         XCTAssertEqual(c.search("bell fill"), ["bell.fill"])
         XCTAssertEqual(c.search("mail"), ["envelope"], "found through a search term")
-        XCTAssertEqual(c.search("notification"), ["bell"])
+        XCTAssertEqual(c.search("notification"), ["bell", "bell.badge", "bell.fill"], "a term, plus the synonym bell")
         XCTAssertEqual(c.search("zzz"), [])
         XCTAssertEqual(c.search("").count, 6)
         XCTAssertEqual(c.search("", limit: 2).count, 2)
@@ -38,10 +38,53 @@ final class SymbolCatalogTests: XCTestCase {
         XCTAssertGreaterThan(c.names.count, 1000)
     }
 
+    func testTheRealCatalogHasThousandsOfSymbolsWithApplesCategories() throws {
+        guard let c = SymbolCatalog.load() else { throw XCTSkip("no CoreGlyphs bundle on this machine") }
+        XCTAssertGreaterThanOrEqual(c.names.count, 5000)
+        let titles = Set(c.categories.map(\.title))
+        for want in ["Communication", "Weather", "Objects & Tools", "Devices", "Gaming", "Connectivity", "Transportation", "Automotive", "Accessibility", "Privacy & Security", "Human", "Home", "Fitness", "Nature", "Editing", "Text Formatting", "Media", "Keyboard", "Commerce", "Time", "Health", "Shapes", "Arrows", "Indices", "Math"] {
+            XCTAssertTrue(titles.contains(want), want)
+        }
+        XCTAssertFalse(c.categories.contains { $0.key == "all" })
+        XCTAssertTrue(c.names(in: "weather").contains("cloud.rain"))
+        XCTAssertFalse(c.categoryKeys(of: "trash").isEmpty)
+        XCTAssertGreaterThan(c.names(in: "communication").count, 50)
+    }
+
+    func testSearchFindsTrashForBinAndKnowsAppleKeywords() throws {
+        guard let c = SymbolCatalog.load() else { throw XCTSkip("no CoreGlyphs bundle on this machine") }
+        XCTAssertTrue(c.search("bin").contains("trash"), "everyday synonym")
+        XCTAssertTrue(c.search("mail").contains("envelope"), "Apple's own keyword")
+        XCTAssertTrue(c.search("bin", category: "objectsandtools").allSatisfy { c.names(in: "objectsandtools").contains($0) })
+        XCTAssertGreaterThan(c.search("", limit: .max).count, 5000, "an unlimited empty search lists everything")
+    }
+
+    func testCatalogCacheRoundTripsAndInvalidates() throws {
+        let d = try folder()
+        let cache = d.appendingPathComponent("cache.json")
+        let first = try XCTUnwrap(SymbolCatalog.load(from: d, cache: cache))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cache.path))
+        // Remove the source: a current cache still serves, proving it was read rather than reparsed.
+        let again = try XCTUnwrap(SymbolCatalog.load(from: d, cache: cache))
+        XCTAssertEqual(again.names, first.names)
+        XCTAssertEqual(again.search("mail"), ["envelope"])
+        try Data("{}".utf8).write(to: cache)
+        XCTAssertEqual(SymbolCatalog.load(from: d, cache: cache)?.names, first.names, "a corrupt cache is reparsed")
+    }
+
+    func testFavouritesAndRecentsPersistAcrossInstances() {
+        let suite = "herald-sym-\(UUID().uuidString)"
+        let a = SymbolShortlist(defaults: UserDefaults(suiteName: suite)!)
+        a.toggleFavorite("star"); a.noteUsed("bell")
+        let b = SymbolShortlist(defaults: UserDefaults(suiteName: suite)!)
+        XCTAssertEqual(b.favorites, ["star"])
+        XCTAssertEqual(b.recents, ["bell"])
+    }
+
     func testRecentsAndFavourites() {
         let d = UserDefaults(suiteName: "herald-sym-\(UUID().uuidString)")!
         let s = SymbolShortlist(defaults: d)
-        for i in 0..<20 { s.noteUsed("s\(i)") }
+        for i in 0..<60 { s.noteUsed("s\(i)") }
         s.noteUsed("s5")
         XCTAssertEqual(s.recents.first, "s5")
         XCTAssertEqual(s.recents.count, SymbolShortlist.maxRecents)
