@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.1 (Build 6) - 2026-10-02
+
+### Changed
+
+- Herald has its own app icon (from `public/assets/Raster/Herald-icon.png`) and its own menu-bar glyph
+  (`public/assets/Vector/Herald Statusbar Icon.svg`, a template vector drawn at 18 pt); muted draws the same
+  glyph at 40 % instead of switching to a bell-with-slash symbol.
+
 ## 1.3.0 (Build 5) - 2026-10-01
 
 ### Added

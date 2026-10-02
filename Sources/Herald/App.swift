@@ -39,12 +39,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshStatusItem() {
         guard let button = statusItem.button else { return }
-        let name = controller.muted ? "bell.slash" : "bell"
-        let img = NSImage(systemSymbolName: name, accessibilityDescription: "Herald")
-        img?.isTemplate = true
-        button.image = img
+        button.image = Self.statusBarImage(muted: controller.muted)
         let n = controller.unreadCount
         button.title = n > 0 ? " \(n)" : ""
+    }
+
+
+    /// The menu-bar glyph: the Herald status-bar icon from the asset catalog (a template vector, so it
+    /// follows the menu bar's light/dark appearance), drawn at 18 pt. When Herald is muted the same
+    /// glyph is drawn at reduced opacity instead of swapping to a different symbol.
+    static func statusBarImage(muted: Bool) -> NSImage {
+        let side: CGFloat = 18
+        guard let base = NSImage(named: "StatusBarIcon") else {
+            let img = NSImage(systemSymbolName: muted ? "bell.slash" : "bell", accessibilityDescription: "Herald")
+            img?.isTemplate = true
+            return img ?? NSImage()
+        }
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            base.draw(in: rect, from: .zero, operation: .sourceOver, fraction: muted ? 0.4 : 1)
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = muted ? "Herald (muted)" : "Herald"
+        return image
     }
 
     private func askLaunchAtLoginIfNeeded() {
