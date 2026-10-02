@@ -34,6 +34,11 @@ public struct RelayConnectorsReply: Codable, Equatable, Sendable {
         public var clientName: String
         public var redirectHost: String?
         public var expiresAt: String?
+        /// The device flow's code the agent printed (not the approval code), so a local agent can tell the user which request is which.
+        public var userCode: String?
+        public init(id: String, clientName: String, redirectHost: String? = nil, expiresAt: String? = nil, userCode: String? = nil) {
+            self.id = id; self.clientName = clientName; self.redirectHost = redirectHost; self.expiresAt = expiresAt; self.userCode = userCode
+        }
     }
     public var connectors: [RelayKeyInfo]
     public var pending: [Pending]

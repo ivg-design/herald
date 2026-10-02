@@ -117,7 +117,8 @@ final class RelayController: RelayHost, RelayBackend {
     private func registerIssuer(name: String, client: String) async {
         guard let agent = AgentIdentity(cloudKeyName: name, client: client) else { return }
         let custom = RelayIcon.customFile(slug: agent.slug, folder: AgentIssuer.iconsFolder(in: controller.supportDirectory))
-        let png = (try? Data(contentsOf: custom)) ?? (await AgentInstall.iconPNG(for: agent, picked: nil))
+        var png = try? Data(contentsOf: custom)
+        if png == nil { png = await AgentInstall.iconPNG(for: agent, picked: nil) }
         _ = try? AgentIssuer.register(agent, iconPNG: png, supportDirectory: controller.supportDirectory, registry: controller.registry,
                                       manifests: controller.manifests, templates: controller.templates)
         controller.changed()
@@ -223,7 +224,7 @@ final class RelayController: RelayHost, RelayBackend {
         if isPaired { await refreshKeys(); await refreshConsents() }
         return RelayConnectorsReply(
             connectors: connectors,
-            pending: pendingConsents.map { .init(id: $0.id, clientName: $0.clientName, redirectHost: $0.redirectHost, expiresAt: $0.expiresAt) })
+            pending: pendingConsents.map { .init(id: $0.id, clientName: $0.clientName, redirectHost: $0.redirectHost, expiresAt: $0.expiresAt, userCode: $0.isDevice ? $0.userCode : nil) })
     }
 
     // MARK: Hooks from the rest of the app
