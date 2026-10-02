@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Relay device hygiene and selection**: unpair purges the Mac's mailbox; pairing again under the same device name replaces the old entry;
+  stale entries (rotated credentials, 30 days without a connection) are pruned lazily and by a daily alarm; `POST /v1/device/prune`,
+  `GET /v1/device/devices`, `DELETE /v1/device/devices/{id}` (same-name or stale entries only); Herald prunes after every pairing and lists
+  "Devices on this relay" under Settings > Cloud > Advanced. Without `device=`, `/device_authorization` and `/authorize` target the connected
+  Mac (else the most recently seen), never just the first entry, and say which (`device_name`, `device_count`).
+- **A relay upgrade keeps the pairing** (#79): the signing secret is never rotated by an upgrade; a deploy that did change it pairs this
+  Mac again automatically; the stale "relay is not answering" message clears once online.
+- **Connector approvals are one banner**: one open request per client and Mac, reconnects only refresh the list (`redelivered`), expired
+  requests are removed from the mailbox and Herald, decisions remove the request on every Mac.
+- **Herald's own identity**: one `herald` app named "Herald" with the app icon; `herald.connectors` is folded into it (group "connectors").
+  `relay_test` leaves no trace. `DELETE /v1/apps/{id}` and `delete_app`; startup removes History of unregistered apps and the known test
+  leftovers; the docs example is `example.bidbot`. History > "All Apps" is selectable and the default.
+
 ## 1.6.2 (Build 12) - 2026-10-02
 
 ### Added

@@ -83,10 +83,34 @@ item is never read twice. `herald`, `herald-mcp` and the helpers read only the s
 ### Upgrade, redeploy, delete
 
 - **Upgrade**: Deploy again (the *Update the relay* button, or `relay_deploy`). The Worker is uploaded with the same bindings, the Durable
-  Object classes are not migrated again and the existing secrets are kept.
+  Object classes are not migrated again and the existing secrets are kept: Herald reuses the signing secret (`RELAY_SECRET`) and the pairing
+  secret it holds in its secret store (reading the legacy keychain item first when that is where they still live), and when it holds none
+  the Worker keeps the ones it has. An upgrade never rotates the signing secret, so this Mac's device token and every agent key keep working.
+  Only a *first* deploy, or a deploy over a Worker that was deleted, makes a new signing secret; if this Mac was paired with the old one the
+  relay refuses its token (401), and Herald **pairs again automatically** at the end of the deploy (the step log shows "Pair this Mac again",
+  `relay_deploy` returns a warning): agent keys and connectors made before must be created again. A "relay is not answering" message from an
+  earlier attempt is cleared as soon as the socket is online.
 - **Change a setting** (Advanced): a value that lives in the Worker (limits, retention, worker name, bucket) redeploys it; the rest is Herald's.
 - **Delete relay from Cloudflare** (Advanced, with a confirmation): deletes the Worker with every mailbox, key and queued notification,
   and the bucket when it is empty (Cloudflare refuses to delete a bucket that still holds voice replies; Herald says so).
+
+### Several Macs
+
+One relay can serve several Macs (`maxDevices`, default 5); each has its own mailbox, keys and limits. The relay keeps a list of them and keeps
+it clean:
+
+- A Mac that pairs again **under the same device name** replaces its old entry (the old mailbox is purged: keys, queue, consents and voice
+  replies). Unpairing removes the entry and purges the mailbox too. Herald also calls `POST /v1/device/prune` after every pairing, which
+  drops this Mac's same-name leftovers and any entry that is stale.
+- Stale means: its credentials were rotated (its id no longer verifies against the relay's signing secret), its mailbox is gone, or it has not
+  connected for 30 days. The relay checks lazily whenever it lists devices and once a day (a Durable Object alarm, no cron trigger).
+- An agent that gives no `device=` reaches the Mac that is connected right now, else the most recently seen; `/authorize` does the same and its
+  page names the Mac, with links to the others.
+- Settings > Cloud > Advanced > **Devices on this relay** lists every Mac (name, connected or last seen, "this Mac") and offers **Remove**
+  for an entry this Mac may remove: the same name as this Mac, rotated credentials, or no connection for a week. A different active Mac is
+  never removable from another (`403 not_removable`). `relay_status` carries the same list as `devices`.
+
+The device-token routes: `GET /v1/device/devices`, `POST /v1/device/prune`, `DELETE /v1/device/devices/{id}`.
 
 ### Advanced
 
@@ -220,14 +244,22 @@ revoke itself (`POST /revoke`, RFC 7009).
 | `GET /authorize` | `response_type=code`, `client_id`, exact `redirect_uri`, `state`, `code_challenge` + `code_challenge_method=S256` (required), optional `resource` (must be the `/mcp` URL) and `scope` (`notify`). Serves the consent page. Unknown client or redirect: an error page, never a redirect. |
 | `GET /authorize/status?rid=` | Polled by the consent page; returns the redirect once decided. |
 | `POST /authorize/code`, `POST /authorize/deny` | The page's 6-digit-code form and Deny button. |
-| `POST /device_authorization` | RFC 8628: `client_id`, optional `scope` (`notify`) and `device`. Returns `device_code`, `user_code` (`BDFG-HJKM`), `verification_uri` (`/activate`), `verification_uri_complete`, `expires_in: 600`, `interval: 5`. See [No browser?](#no-browser-use-the-device-flow). |
+| `POST /device_authorization` | RFC 8628: `client_id`, optional `scope` (`notify`) and `device`. Returns `device_code`, `user_code` (`BDFG-HJKM`), `verification_uri` (`/activate`), `verification_uri_complete`, `expires_in: 600`, `interval: 5`, and which Mac gets the banner: `device_name`, `device_count`, `device_index`, `device_online`. See [No browser?](#no-browser-use-the-device-flow). |
 | `GET /activate`, `POST /activate`, `/activate/approve`, `/activate/deny` | The optional page for a person: user code, then the Mac's 6-digit approval code. |
 | `GET /` | A small plain page: what this is, links to the `.well-known` documents and `/activate`. (`/health` is the JSON check.) |
 | `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`), `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code` (+ `device_code`). Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
 | `POST /revoke` | RFC 7009. |
 | `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
 
-With several Macs paired to one relay the consent page first asks which Mac the connector should notify.
+With several Macs paired to one relay (see [Several Macs](#several-macs)) the consent page names the Mac the approval goes to and links the
+others; `device=<n>` (1-based, in pairing order) chooses explicitly.
+
+A connector asks once: the same client asking again (a retry, a second `POST /device_authorization`) replaces its open request instead of
+adding a banner (one open request per client and Mac; the old `device_code` stops working and the banner is updated in place with the new
+code). A request is a banner once; after a reconnect the relay re-sends it flagged `redelivered: true` and Herald only refreshes
+Settings > Connector approvals. An unanswered request is removed from the mailbox after 10 minutes (the relay tells Herald, which drops the
+banner and the list entry), and approving or denying one removes it everywhere, including the same client's open request on another Mac.
+Deny only closes that request; keys that already work are untouched.
 
 ## No browser? Use the device flow
 
@@ -262,7 +294,9 @@ stop), `expired_token` (10 minutes passed: start again at step 2). On approval y
 On the Mac the request arrives the moment step 2 returns: the banner says **"Approve <client> to send you notifications? Code BDFG-HJKM"**
 with Approve and Deny, and Settings > Cloud > Connector approvals lists it with the code in large type (match it with what the agent
 printed) and, small, the 6-digit approval code for the web page. A request nobody answers expires after 10 minutes; at most 3 wait at
-once and 12 an hour. With several Macs paired, `device=<n>` (1-based) on step 2 picks the Mac; the first is the default.
+once and 12 an hour. With several Macs paired, `device=<n>` (1-based) on step 2 picks the Mac; without it the relay targets the Mac that is
+**connected right now** (else the one seen most recently, never simply the first entry) and the reply says which: `device_name`,
+`device_count`, `device_index` and `device_online`. Tell the user which Mac will show the banner. Repeating step 2 replaces the open request.
 
 `/activate` is an optional page for a person with a browser: enter the agent's code, then the 6-digit approval code Herald shows (the
 user code alone is not enough, because the agent knows it), then Approve or Deny. The root `/` is a small information page, not a 404.
@@ -447,6 +481,7 @@ Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST
 | Symptom | Cause |
 |---|---|
 | A cloud agent gets 403 / Error 1010 on the workers.dev address | Cloudflare's Browser Integrity Check blocks it on workers.dev. Set up a [custom domain](#custom-domain-optional). |
+| A connector request never reaches this Mac, or goes to the wrong one | An old entry for this Mac was first in the relay's list (a reinstall, a redeploy that changed the secrets). Current relays pick the connected Mac and prune stale entries; see [Several Macs](#several-macs). Redeploy to get that, then check Advanced > Devices on this relay. |
 | Settings shows "Offline" and keeps retrying | No network; Herald retries 1 s, 2 s, 4 s ... up to 5 minutes and at once on wake or when the network returns. |
 | "the relay rejected this Mac's token" | The pairing was removed (Unpair) or the relay was reset. Pair again. |
 | The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked, or its refresh token was used twice; connect it again. |

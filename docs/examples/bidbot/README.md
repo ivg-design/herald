@@ -231,3 +231,6 @@ Herald the action happened, so the banner goes away.
 
 Run `python3 docs/examples/bidbot/bidbot_demo.py --cleanup` when you are done. (An app cannot be removed through the
 API, so "BidBot" stays in Settings > Apps until you delete it there.)
+
+The example registers as `example.bidbot` and only when you run it; Herald never registers it by itself. Remove it again with
+`DELETE /v1/apps/example.bidbot` (MCP `delete_app`), which takes its History, template and manifest with it.

@@ -105,6 +105,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Per app: sound, stay until dismissed, timeout, corner, display, mute banners, stacking override | `GET`, `PUT /v1/apps/settings` | `apps settings` | `list_apps`, `update_app_settings` | gap | ok |
 | Per app: speak on/off, voice, urgent breaks quiet hours | `PUT /v1/apps/settings` | `apps settings` | `update_app_settings` | gap | ok |
 | Per app: name, icon, bundle id, callback URL, allow-commands request | `POST /v1/register` | `register` | `register_app` | MCP gap | ok |
+| Remove an app with its History, templates, manifest and icon files | `DELETE /v1/apps/{id}` | gap | `delete_app` | gap | ok |
 | Per app: callback host and command approvals, read | `GET /v1/apps/settings` | `apps settings` | `list_apps` | gap | ok |
 | Per app: revoke command or callback approval | `PUT /v1/apps/settings` | `apps settings` | `update_app_settings` | gap | ok |
 | Per app: grant command or callback approval | none | none | none | by design | by design |

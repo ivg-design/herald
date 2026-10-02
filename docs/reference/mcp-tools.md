@@ -294,6 +294,7 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `get_settings` | none | `GET /v1/settings` | Values, `schema`, `options` (sounds, displays, voices, corners, levels). |
 | `set_settings` | `settings` (object) | `PUT /v1/settings` | Keys: `port`, `launchAtLogin`, `muteAllSounds`, `stacking`, `historyCapPerApp`, `tooltipLevel`, `voiceEngine`, `voiceDefault`, `voiceSpeed`, `voiceLang`, `voiceSystem`. All or nothing. |
 | `list_apps` | `app?` | `GET /v1/apps/settings` | Per-app settings, voice, approvals (read only) and the schema. |
+| `delete_app` | `app` | `DELETE /v1/apps/{id}` | Removes an app with ALL its History, templates, manifest and icon files (404 unknown, 409 for `herald`). For test and demo apps registered by mistake. |
 | `update_app_settings` | `app`, `settings` | `PUT /v1/apps/settings` | `sound`, `persistent`, `timeout`, `corner`, `display`, `muteBanners`, `stacking`, `opens`, `speak`, `voice`, `urgentBreaksQuiet`; `revokeCommands: true`, `revokeCallbackHost: true`. Granting an approval is refused (403). |
 | `register_app` | `app`, `appName?`, `icon?`, `bundleId?`, `callbackURL?`, `allowCommands?`, `defaults?` | `POST /v1/register` | `allowCommands` is only a request; the user confirms it in Settings. |
 | `voice_status` | none | `GET /v1/voice` | Engine, Kokoro installed or missing, progress, voices. |
@@ -357,20 +358,20 @@ argument is a tool error before any request is made. Destructive tools carry `de
 
 | Tool | Does |
 |---|---|
-| `relay_status` | Paired or not, online or not, the relay and connector URLs, the agent keys (never a secret) and the last 20 relay items with their receipt states. |
+| `relay_status` | Paired or not, online or not, the relay and connector URLs, the agent keys (never a secret), the Macs on the relay (`devices`: name, online, last seen, this Mac) and the last 20 relay items with their receipt states. |
 | `relay_usage` | Today's relay traffic against the Cloudflare free plan. |
 | `list_connectors` | Connectors that signed in to the relay with OAuth (ChatGPT, clients without custom-key support, and agents with no browser through the device flow, whose pending requests carry the `userCode` the agent printed) and the requests waiting for approval. Approval happens only on the Mac. Revoke a connector with `revoke_agent_key`. |
 | `create_agent_key` | `{name, client?}`: mints a notify-only key. The reply holds the key once and a connector block (URL and Bearer) for Claude, Codex and any remote MCP client. |
 | `revoke_agent_key` | `{id}`: revokes a key or a connector. |
 | `relay_token_url` | The pre-filled Cloudflare token page, the sign-up link and the nine permissions to give the token (Zone ones are for the custom domain). The user creates the token. |
 | `relay_set_cloudflare_token` | `{token}` (sensitive): stores it in the secret store (never the legacy keychain); never returned. |
-| `relay_deploy` | Deploys or upgrades the relay in the user's Cloudflare account, waits until it answers, pairs this Mac; returns the step log. Idempotent. |
+| `relay_deploy` | Deploys or upgrades the relay in the user's Cloudflare account, waits until it answers, pairs this Mac; returns the step log. Idempotent. An upgrade keeps the signing secret, so the pairing survives; if a deploy did change it, this Mac is paired again automatically (step "Pair this Mac again" and a warning: agent keys and connectors must be created again). |
 | `relay_pair` / `relay_unpair` | Pair with the configured relay / turn the relay off (revokes every key and connector; changes nothing if the relay cannot be reached). |
 | `relay_settings` | No arguments: every Advanced setting. `{settings: {...}}`: validate, save, and redeploy when a Worker value changed. `customDomain: {zone, hostname}` (or `null`) puts the relay on a hostname in the user's zone, turns Browser Integrity Check off for it and re-points Herald. Optional: agents with default library User-Agents (Python-urllib gets Error 1010) then work; otherwise they send a custom User-Agent. |
 | `relay_zones` | The Cloudflare zones the token can see, each with a suggested hostname. Needs the token's Zone permissions. |
 | `relay_delete` | `{confirm: true}`: delete the relay from Cloudflare (destructive). |
 | `relay_instructions` | `{client: chatgpt\|claude\|codex}`: the exact text for that agent. |
-| `relay_test` | `/health`, then a test notification through the relay with its receipt; `browserCheckActive` says whether Cloudflare's Browser Integrity Check rejects `Python-urllib/3.x` on the hostname (expected on workers.dev). |
+| `relay_test` | `/health`, then a test notification through the relay with its receipt (a `herald` notification "Relay test"; key, History item and log line are removed afterwards); `browserCheckActive` says whether Cloudflare's Browser Integrity Check rejects `Python-urllib/3.x` on the hostname (expected on workers.dev). |
 
 `relay_status` carries the setup state machine as `setup.state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`).
 Connected agents are `list_connectors` (OAuth) and the keys in `relay_status`; revoke either with `revoke_agent_key`.

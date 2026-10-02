@@ -177,6 +177,13 @@ A dismissed banner stays in History.
   items per app.
 - `DELETE /v1/history?app=` clears one app's history (all apps if `app` is omitted). `{"ok":true}`.
 
+## DELETE /v1/apps/{id}
+
+Removes the app for good: its record, **all** of its History, its templates, its manifest (and the Rive copies) and the icon files Herald
+made for it. `200 {"ok":true,"deleted":"<id>"}`; `404` for an unknown app; `409` for `herald`, Herald's own app. The id is percent-decoded.
+MCP: `delete_app`. Startup also removes History of apps that are not registered any more, and once the known test leftovers
+(`cloud.herald-test-*`, a bare `bidbot` without a manifest); the docs examples use `example.bidbot`, never registered by default.
+
 ## GET /v1/apps
 
 `{"apps":[ {app, appName, icon, bundleId, callbackURL, allowCommands, defaults}, ... ]}`: the registrations.
@@ -408,7 +415,7 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 
 | Route | Does |
 |---|---|
-| `GET /v1/relay/status` | `{paired, state, online, relayURL, mcpURL, deviceId, lastSeenAt, keys, log}`; `log` is the last 20 relay items with `displayed`, `spoken`, `replied`, `suppressed`. |
+| `GET /v1/relay/status` | `{paired, state, online, relayURL, mcpURL, deviceId, lastSeenAt, keys, log, devices}`; `devices` lists the Macs on the relay (`id`, `name`, `online`, `lastSeenAt`, `thisDevice`, `removable`, `removableReason`), so an agent can tell the user which Mac a banner will appear on; `log` is the last 20 relay items with `displayed`, `spoken`, `replied`, `suppressed`. |
 | `POST /v1/relay/pair` | Pairs this Mac with the relay: asks for a one-time code, redeems it, stores the device token in the secret store (data-protection keychain, else a 0600 file). Replies `{paired, code, deviceId}`. |
 | `POST /v1/relay/unpair` | Wipes the mailbox on the relay (keys, queue, audio) and forgets the token. |
 | `GET /v1/relay/keys` | The agent keys: `id`, `name`, `client`, `scope` (always `notify`), `createdAt`, `lastUsedAt`, `revokedAt`. Never a secret. |
@@ -423,7 +430,7 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `GET /v1/relay/settings`, `PUT /v1/relay/settings` | Every Advanced field (`relayURL`, `accountId`, `workerName`, `subdomain`, `bucket`, `audioRetentionDays`, `queueTTLHours`, `notificationsPerDay`, `maxQueue`, `bodyLimitBytes`, `ratePerKey`, `maxDevices`, `deviceName`, `pingSeconds`, `customDomain` `{zone, hostname, attached}` (`null` removes it; setting it redeploys and applies it, see docs/CLOUD.md "Custom domain"), write-only `pairingSecret`). PUT validates (400 names the field) and redeploys when a Worker value or the custom domain changed (`redeployed`, `steps`). |
 | `GET /v1/relay/zones` | `{zones: [{id, name, status, suggestedHostname}]}`: the Cloudflare zones the stored token can see. 403 with "Token is missing Zone permissions ..." when it lacks Zone: Read. |
 | `POST /v1/relay/delete` | `{confirm: true}` deletes the Worker, every mailbox and key, and the bucket when empty, from Cloudflare. |
-| `POST /v1/relay/test` | `/health`, then a notification through the relay with a temporary key and its receipt: `{healthy, paired, online, roundTrip, receipt, detail}`. |
+| `POST /v1/relay/test` | `/health`, then a notification through the relay with a temporary key and its receipt (the notification is a `herald` one titled "Relay test"; the key, the History item and the log line are deleted afterwards, so it leaves no trace): `{healthy, paired, online, roundTrip, receipt, detail}`. |
 | `GET /v1/relay/instructions?client=chatgpt\|claude\|codex\|device` | `{client, text}`: the exact instructions to give that agent. |
 
 Keys carry `kind` (`static`, or `oauth` for a connector approved through the relay's OAuth flow, with `displayName`).
@@ -446,7 +453,7 @@ documented in [../CLOUD.md](../CLOUD.md#connect-chatgpt-oauth); agents with no b
 | `POST /accounts/{id}/r2/buckets` (409 = exists) | the voice-reply bucket |
 | `PUT /accounts/{id}/r2/buckets/{bucket}/lifecycle` | delete objects after the retention days |
 | `GET /accounts/{id}/workers/scripts/{name}/settings` | does the Worker exist (first deploy or upgrade) |
-| `PUT /accounts/{id}/workers/scripts/{name}` (multipart: `metadata` + `worker.js`) | upload the relay: main module, compatibility date, Durable Object bindings + migration (first deploy only), R2 binding, vars, secrets (`RELAY_SECRET` first deploy, `PAIRING_SECRET`), `keep_bindings: ["secret_text"]` on upgrades |
+| `PUT /accounts/{id}/workers/scripts/{name}` (multipart: `metadata` + `worker.js`) | upload the relay: main module, compatibility date, Durable Object bindings + migration (first deploy only), R2 binding, vars, secrets (`RELAY_SECRET` first deploy only, never rotated by an upgrade; `PAIRING_SECRET`), `keep_bindings: ["secret_text"]` on upgrades |
 | `POST /accounts/{id}/workers/scripts/{name}/subdomain` | switch on the workers.dev address |
 | `DELETE /accounts/{id}/workers/scripts/{name}?force=true`, `DELETE /accounts/{id}/r2/buckets/{bucket}` | Delete relay from Cloudflare |
 

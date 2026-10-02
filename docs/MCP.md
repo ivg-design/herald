@@ -120,7 +120,7 @@ is a JSON-RPC error (`-32602`).
 **Parity with the editor and Settings.** Anything a person does in the Designer, Quick send, History or Settings is also a tool
 (see [reference/parity.md](reference/parity.md)): `get_settings` and `set_settings` (general, voice, tooltips, History cap),
 `list_apps` and `update_app_settings` (per-app sound, corner, display, mute, stacking, voice, and the approvals the user gave),
-`register_app`, `voice_status` and `install_voice`, `install_mcp`, `duplicate_template`, `rename_template`,
+`register_app`, `delete_app` (an app with all its History, templates, manifest and icons), `voice_status` and `install_voice`, `install_mcp`, `duplicate_template`, `rename_template`,
 `set_default_template`, `export_template_bundle` and `import_template_bundle`, `list_assets`, `upload_asset` (Rive or an
 image, by path or base64) and `delete_asset`, `list_symbols` (SF Symbol names and categories), `rive_check`,
 `history_search`, `reshow_notification`, `delete_history`, `export_history`, `snooze`, `expand_stack`, `delete_manifest`,
