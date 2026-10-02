@@ -1,0 +1,14 @@
+{
+  "name": "conformance",
+  "private": true,
+  "type": "module",
+  "description": "Black-box protocol conformance suite for the Herald cloud relay. RELAY_URL=... npm test -w conformance",
+  "scripts": { "test": "vitest run" },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0",
+    "ws": "^8.18.0"
+  }
+}

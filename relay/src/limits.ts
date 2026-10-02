@@ -1,0 +1,41 @@
+// Per-device limits. Every paired Mac has its own Durable Object, so every counter below is per device, never global: one noisy or
+// hostile Mac cannot use up another Mac's allowance. The defaults are sized for the shared hosted relay (docs/CLOUD.md,
+// "Free plan budget"); a relay of your own can raise them with Worker vars (wrangler.toml [vars] or `--var NAME:value`).
+
+export interface Limits {
+  notificationsPerDay: number;   // DEVICE_NOTIFICATIONS_PER_DAY
+  queueMax: number;              // DEVICE_QUEUE_MAX: undelivered notifications waiting for the Mac
+  requestsPerDay: number;        // DEVICE_REQUESTS_PER_DAY: requests that reach the device's mailbox (503 after)
+  audioUploadsPerDay: number;    // DEVICE_AUDIO_UPLOADS_PER_DAY
+  audioBytesPerDay: number;      // DEVICE_AUDIO_BYTES_PER_DAY
+  pollSecondsPerDay: number;     // DEVICE_POLL_SECONDS_PER_DAY: the mailbox is awake while a long-poll waits
+}
+
+export const DEFAULT_LIMITS: Limits = {
+  notificationsPerDay: 500,
+  queueMax: 100,
+  requestsPerDay: 5000,
+  audioUploadsPerDay: 40,
+  audioBytesPerDay: 20 * 1024 * 1024,
+  pollSecondsPerDay: 3000,
+};
+
+const VARS: Record<keyof Limits, string> = {
+  notificationsPerDay: "DEVICE_NOTIFICATIONS_PER_DAY",
+  queueMax: "DEVICE_QUEUE_MAX",
+  requestsPerDay: "DEVICE_REQUESTS_PER_DAY",
+  audioUploadsPerDay: "DEVICE_AUDIO_UPLOADS_PER_DAY",
+  audioBytesPerDay: "DEVICE_AUDIO_BYTES_PER_DAY",
+  pollSecondsPerDay: "DEVICE_POLL_SECONDS_PER_DAY",
+};
+
+/** The limits in force: a Worker var when it is a positive number, otherwise the default. */
+export function limitsFor(env: unknown): Limits {
+  const e = (env ?? {}) as Record<string, unknown>;
+  const out = { ...DEFAULT_LIMITS };
+  for (const k of Object.keys(VARS) as (keyof Limits)[]) {
+    const n = Number(e[VARS[k]]);
+    if (Number.isFinite(n) && n > 0) out[k] = Math.floor(n);
+  }
+  return out;
+}

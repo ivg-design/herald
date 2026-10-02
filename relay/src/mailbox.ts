@@ -1,11 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { agentKey, oauthToken, parseOAuthSecret, parseToken, type Principal } from "./ids";
 import { DAY_MS, bearer, err, hmacHex, json, randomHex, safeEqual, sha256Hex } from "./util";
+import { limitsFor } from "./limits";
 import { MAX_BODY_BYTES, validateNotification } from "./validate";
 
 export const RATE_LIMIT = 60;
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
-export const QUEUE_MAX = 200;
 export const TTL_MS = DAY_MS;
 export const MAX_LONG_POLL_S = 60;
 const MAX_KEYS = 20;
@@ -13,12 +13,8 @@ const MAX_KEYS = 20;
 const ONLINE_WINDOW_MS = 11 * 60_000;
 export const MAX_AUDIO_BYTES = 1024 * 1024;
 export const AUDIO_URL_TTL_S = 3600;
-// Free-plan budget guards (docs/CLOUD.md "Free plan budget").
-export const DAILY_NOTIFICATIONS = 2000;
-export const DAILY_AUDIO_UPLOADS = 200;  // 200 x 1 MB x 7 days of retention stays under the free 10 GB-month of R2
+// Per-device daily and queue limits live in ./limits.ts (defaults for the shared hosted relay, Worker vars to change them).
 export const READ_LIMIT = 600;          // receipt / reply reads per 10 min per key
-export const SOFT_REQUEST_LIMIT = 90_000; // of the free plan's 100,000 DO requests per UTC day
-export const DAILY_POLL_SECONDS = 6000;   // long-poll time per day (the DO is awake while it waits)
 
 type KeyRow = {
   id: string; name: string; client: string; scope: string; hash: string; created_at: number; revoked_at: number | null; last_used_at: number | null;
@@ -88,6 +84,9 @@ export class Mailbox extends DurableObject<Env> {
     }
   }
 
+
+  /** This device's limits (per device: each Mac has its own mailbox and its own counters). */
+  private get lim() { return limitsFor(this.env); }
 
   private sql<T extends Record<string, SqlStorageValue>>(q: string, ...b: unknown[]): T[] {
     return this.ctx.storage.sql.exec<T>(q, ...(b as SqlStorageValue[])).toArray();
@@ -298,6 +297,7 @@ export class Mailbox extends DurableObject<Env> {
   private usage() {
     const row = this.loadUsage();
     const requests = row.requests ?? 0;
+    const lim = this.lim;
     return {
       day: this.today(),
       requests,
@@ -309,11 +309,11 @@ export class Mailbox extends DurableObject<Env> {
       queued: this.pending().length,
       storageBytes: this.ctx.storage.sql.databaseSize,
       limits: {
-        audioUploadsPerDay: DAILY_AUDIO_UPLOADS, requestsPerDay: SOFT_REQUEST_LIMIT, freePlanRequestsPerDay: 100_000, notificationsPerDay: DAILY_NOTIFICATIONS,
-        pollSecondsPerDay: DAILY_POLL_SECONDS, queueMax: QUEUE_MAX,
+        audioUploadsPerDay: lim.audioUploadsPerDay, audioBytesPerDay: lim.audioBytesPerDay, requestsPerDay: lim.requestsPerDay, freePlanRequestsPerDay: 100_000,
+        notificationsPerDay: lim.notificationsPerDay, pollSecondsPerDay: lim.pollSecondsPerDay, queueMax: lim.queueMax,
       },
-      requestsPercent: Math.round((requests / SOFT_REQUEST_LIMIT) * 100),
-      budgetExhausted: requests >= SOFT_REQUEST_LIMIT,
+      requestsPercent: Math.round((requests / lim.requestsPerDay) * 100),
+      budgetExhausted: requests >= lim.requestsPerDay,
     };
   }
 
@@ -324,9 +324,9 @@ export class Mailbox extends DurableObject<Env> {
 
   /** The relay's own cap, below the free plan's, so Cloudflare never has to cut the Mac off mid-day. */
   private budgetGuard(): Response | null {
-    if (this.usageField("requests") < SOFT_REQUEST_LIMIT) return null;
+    if (this.usageField("requests") < this.lim.requestsPerDay) return null;
     const retry = this.secondsToMidnight();
-    return json(503, { error: "budget_exhausted", message: "the relay's daily request budget is used up; nothing queued is lost", retryAfterSeconds: retry }, { "retry-after": String(retry) });
+    return json(503, { error: "budget_exhausted", message: "this Mac's daily request budget on the relay is used up; nothing queued is lost", retryAfterSeconds: retry }, { "retry-after": String(retry) });
   }
 
   private readLimit(key: KeyRow, isNotify: boolean): Response | null {
@@ -440,13 +440,13 @@ export class Mailbox extends DurableObject<Env> {
       const retry = Math.max(1, Math.ceil((used.oldest + RATE_WINDOW_MS - now) / 1000));
       return json(429, { error: "rate_limited", message: `at most ${RATE_LIMIT} notifications per 10 minutes per key`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
-    if (this.usageField("notifications") >= DAILY_NOTIFICATIONS) {
+    if (this.usageField("notifications") >= this.lim.notificationsPerDay) {
       const retry = this.secondsToMidnight();
-      return json(429, { error: "daily_cap", message: `at most ${DAILY_NOTIFICATIONS} notifications per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
+      return json(429, { error: "daily_cap", message: `at most ${this.lim.notificationsPerDay} notifications per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
     this.expireSweep(now);
-    if (this.pending().length >= QUEUE_MAX) {
-      return err(429, "queue_full", `the Mac has ${QUEUE_MAX} undelivered notifications waiting; it has been offline too long`);
+    if (this.pending().length >= this.lim.queueMax) {
+      return err(429, "queue_full", `the Mac has ${this.lim.queueMax} undelivered notifications waiting; it has been offline too long`);
     }
 
     const rid = "r_" + randomHex(12);
@@ -844,7 +844,7 @@ export class Mailbox extends DurableObject<Env> {
     const first = this.noteByNid(key.id, nid);
     if (!first || first.created_at < Date.now() - DAY_MS) return err(404, "not_found", "no such notification (ids are kept for 24 hours)");
     let seconds = Math.min(MAX_LONG_POLL_S, Math.max(0, Number(waitParam ?? 0) || 0));
-    if (this.usageField("pollSeconds") >= DAILY_POLL_SECONDS) seconds = 0; // the DO is awake while it waits; stop holding polls when the day's allowance is gone
+    if (this.usageField("pollSeconds") >= this.lim.pollSecondsPerDay) seconds = 0; // the DO is awake while it waits; stop holding polls when the day's allowance is gone
     const started = Date.now();
     const deadline = Date.now() + seconds * 1000;
     let n: NoteRow = first;
@@ -880,13 +880,17 @@ export class Mailbox extends DurableObject<Env> {
     if (!n) return err(404, "not_found", "no such notification");
     const declared = Number(req.headers.get("content-length") ?? 0);
     if (declared > MAX_AUDIO_BYTES) return err(413, "too_large", `audio is larger than ${MAX_AUDIO_BYTES} bytes`);
-    if (this.usageField("audioUploads") >= DAILY_AUDIO_UPLOADS) {
+    if (this.usageField("audioUploads") >= this.lim.audioUploadsPerDay) {
       const retry = this.secondsToMidnight();
-      return json(429, { error: "daily_cap", message: `at most ${DAILY_AUDIO_UPLOADS} voice replies per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
+      return json(429, { error: "daily_cap", message: `at most ${this.lim.audioUploadsPerDay} voice replies per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
     const body = await req.arrayBuffer();
     if (body.byteLength === 0) return err(400, "invalid_request", "empty audio");
     if (body.byteLength > MAX_AUDIO_BYTES) return err(413, "too_large", `audio is larger than ${MAX_AUDIO_BYTES} bytes`);
+    if (this.usageField("audioBytes") + body.byteLength > this.lim.audioBytesPerDay) {
+      const retry = this.secondsToMidnight();
+      return json(429, { error: "daily_cap", message: `at most ${Math.floor(this.lim.audioBytesPerDay / 1048576)} MB of voice replies per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
+    }
     const type = (req.headers.get("content-type") ?? "").split(";")[0].trim();
     if (type !== "audio/mp4" && type !== "audio/x-m4a" && type !== "audio/aac") return err(415, "unsupported_media_type", "audio must be audio/mp4 (m4a)");
     const id = this.getMeta("device_id") ?? "device";

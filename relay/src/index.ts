@@ -22,7 +22,7 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    if (path === "/" || path === "/healthz") return json(200, { service: "herald-relay", ok: true });
+    if (path === "/" || path === "/health" || path === "/healthz") return json(200, { service: "herald-relay", ok: true });
 
     const oauth = await handleOAuth(req, env, url);
     if (oauth) return oauth;
@@ -32,7 +32,8 @@ export default {
       if (!env.RELAY_SECRET) return err(500, "misconfigured", "RELAY_SECRET is not set");
       const reg = env.REGISTRY.get(env.REGISTRY.idFromName("registry"));
       return reg.fetch(new Request("https://registry" + (path === "/v1/pair" ? "/pair" : "/pair/start"), {
-        method: "POST", body: await req.text(), headers: { "x-pairing-secret": req.headers.get("x-pairing-secret") ?? "" },
+        method: "POST", body: await req.text(),
+        headers: { "x-pairing-secret": req.headers.get("x-pairing-secret") ?? "", "x-client-ip": req.headers.get("cf-connecting-ip") ?? "" },
       }));
     }
 

@@ -1,0 +1,5 @@
+{
+  "name": "herald",
+  "private": true,
+  "workspaces": ["conformance"]
+}

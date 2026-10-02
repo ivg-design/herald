@@ -6,3 +6,5 @@ DerivedData/
 Herald.xcodeproj/
 release/
 *.dmg
+
+node_modules/
