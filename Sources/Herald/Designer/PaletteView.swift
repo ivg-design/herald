@@ -263,7 +263,7 @@ struct ActionsPalette: View {
             PaletteHeader(title: "Actions", hint: "Drag an action onto the canvas for a button of its own. An action row component lists them all.")
             ForEach(rows) { row in
                 PaletteChip(model: model, symbol: row.action.kind.designerSymbol, title: row.action.label,
-                            payload: .action(row.id), help: "\(row.action.kind.designerTitle) \u{00B7} \(row.origin == .issuer ? "from the issuer" : "added by you")") {
+                            payload: .action(row.id), help: HelpEntry("designer.paletteAction", row.action.label, "\(row.action.kind.designerTitle), \(row.origin == .issuer ? "from the issuer" : "added by you")")) {
                     model.insertAction(id: row.id)
                 }
                 .overlay(alignment: .trailing) {
