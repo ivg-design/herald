@@ -14,5 +14,5 @@ rm -rf /Applications/Herald.app && ditto "$APP" /Applications/Herald.app && open
 pgrep -x Herald >/dev/null && echo "running $(defaults read /Applications/Herald.app/Contents/Info.plist CFBundleShortVersionString) b$(defaults read /Applications/Herald.app/Contents/Info.plist CFBundleVersion)"
 git add -A; git diff --cached --quiet || git commit -q -m "Release $VER (Build $BUILD): see CHANGELOG.md"
 git tag -a "v$VER" -m "Herald $VER (Build $BUILD)" && git push -q origin main "v$VER"
-[ "$(git rev-parse "v$VER")" = "$(git rev-parse HEAD)" ] || { echo "tag is not at HEAD"; exit 1; }
+[ "$(git rev-parse "v$VER^{commit}")" = "$(git rev-parse HEAD)" ] || { echo "tag is not at HEAD"; exit 1; }
 gh release create "v$VER" "release/Herald-$VER-build$BUILD-macOS.dmg" "release/Herald-$VER-build$BUILD-macOS.dmg.sha256" --repo ivg-design/herald --title "Herald $VER (Build $BUILD)" --notes-file <(awk -v v="$VER" '$0 ~ "^## "v{p=1;print;next} /^## /{if(p)exit} p' CHANGELOG.md) 2>&1 | tail -1
