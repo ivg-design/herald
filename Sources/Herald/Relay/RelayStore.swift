@@ -51,7 +51,7 @@ public final class KeychainTokenStore: RelayTokenStore, @unchecked Sendable {
 /// What Herald remembers about the relay between launches (not the token): which relay, which device, and the log of
 /// the last items. One small JSON file in the support folder.
 public struct RelayState: Codable, Equatable, Sendable {
-    public var relayURL: String = RelayDefaults.url
+    public var relayURL: String = ""
     public var deviceId: String?
     public var pairedAt: Date?
     public var lastSeenAt: Date?

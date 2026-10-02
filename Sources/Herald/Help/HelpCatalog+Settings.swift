@@ -58,6 +58,22 @@ extension HelpEntry {
     static let cloudCopyConfig = HelpEntry("settings.cloudCopyConfig", "Copy connector config", "Copies the URL and Bearer block to paste into the agent's connector settings")
     static let cloudUsage = HelpEntry("settings.cloudUsage", "Usage today", "What today's relay traffic has used of the Cloudflare free plan")
     static let cloudDesign = HelpEntry("settings.cloudDesign", "Design notifications", "Opens the Designer on this agent's banner")
+    static let cloudEnable = HelpEntry("settings.cloudEnable", "Enable relay", "Sets up your own relay in your Cloudflare account and pairs this Mac with it; off unpairs it and revokes every agent and connector")
+    static let cloudToken = HelpEntry("settings.cloudToken", "Cloudflare API token", "The token Herald deploys the relay with; it is kept in the Keychain and only sent to Cloudflare")
+    static let cloudOpenToken = HelpEntry("settings.cloudOpenToken", "Create the token", "Opens Cloudflare's token page with the three permissions already filled in")
+    static let cloudSignUp = HelpEntry("settings.cloudSignUp", "Free Cloudflare account", "Opens Cloudflare's sign-up page; a free account is enough")
+    static let cloudDeploy = HelpEntry("settings.cloudDeploy", "Deploy", "Uploads the relay to your Cloudflare account, waits until it answers, then pairs this Mac")
+    static let cloudUpdate = HelpEntry("settings.cloudUpdate", "Update the relay", "Deploys the relay bundled with this Herald over the one running, keeping its data and keys")
+    static let cloudCopyURL = HelpEntry("settings.cloudCopyURL", "Copy connector URL", "The address cloud agents add as a remote MCP connector")
+    static let cloudCopyInstructions = HelpEntry("settings.cloudCopyInstructions", "Copy instructions", "The exact steps for this kind of agent, ready to paste")
+    static let cloudAdvanced = HelpEntry("settings.cloudAdvanced", "Advanced", "Every setting of the relay, for another relay or a different Cloudflare setup")
+    static let cloudApply = HelpEntry("settings.cloudApply", "Apply settings", "Checks the values and saves them; a value that lives in the relay deploys it again")
+    static let cloudRedeploy = HelpEntry("settings.cloudRedeploy", "Redeploy", "Deploys the bundled relay again with the current settings")
+    static let cloudTest = HelpEntry("settings.cloudTest", "Test connection", "Checks the relay answers, then sends a notification through it and waits for the receipt")
+    static let cloudDelete = HelpEntry("settings.cloudDelete", "Delete relay from Cloudflare", "Removes the relay, every mailbox and key from your Cloudflare account")
+    static let cloudPairingSecret = HelpEntry("settings.cloudPairingSecret", "Pairing secret", "Demanded by the relay when a Mac pairs; Herald made it at the first deploy")
+    static let cloudForgetToken = HelpEntry("settings.cloudForgetToken", "Forget the token", "Removes the Cloudflare API token from the Keychain")
+    static let cloudPairCode = HelpEntry("settings.cloudPairCode", "Pair with a code", "Pairs with the relay at the URL above, for a relay that was not deployed by Herald")
     static let mcpReveal = HelpEntry("settings.mcpReveal", "Reveal server file", "The MCP server executable that AI clients launch, shown in Finder")
     static let mcpTest = HelpEntry("settings.mcpTest", "Test connection", "Starts the MCP server and checks that it answers")
     static let mcpInstallCLI = HelpEntry("settings.mcpInstallCLI", "Install command line tool", "Installs the herald command into your shell path")
@@ -114,6 +130,8 @@ extension HeraldHelpCatalog {
         .quietSummary,
         .cloudRelayURL, .cloudPair, .cloudUnpair, .cloudReconnect, .cloudNewKey, .cloudKeyName, .cloudKeyClient,
         .cloudRevoke, .cloudCopyConfig, .cloudUsage, .cloudDesign,
+        .cloudEnable, .cloudToken, .cloudOpenToken, .cloudSignUp, .cloudDeploy, .cloudUpdate, .cloudCopyURL, .cloudCopyInstructions, .cloudAdvanced,
+        .cloudApply, .cloudRedeploy, .cloudTest, .cloudDelete, .cloudPairingSecret, .cloudForgetToken, .cloudPairCode,
         .mcpReveal,
         .mcpTest,
         .mcpInstallCLI,

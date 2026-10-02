@@ -11,7 +11,7 @@ public enum RelayInstructions {
         2. Name: Herald
            MCP server URL: \(mcpURL)
            Authentication: OAuth (leave the client ID and secret empty)
-        3. Press Connect. A banner appears on this Mac: press Approve. If you miss it, type the 6-digit code from Settings > Cloud on the page that opened in your browser.
+        3. Press Connect. A page opens in your browser and a banner appears on this Mac: press Approve on the banner. If you miss it, type the 6-digit code from Settings > Cloud > Connector approvals on the browser page.
         4. Ask the agent to use Herald, for example: "Send me a Herald notification when you are done."
 
         The connector can send notifications and read their receipts, nothing else. Revoke it any time in Settings > Cloud.

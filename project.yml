@@ -26,6 +26,9 @@ targets:
       # The Kokoro speech worker (DESIGN section 7.9) ships as a bundle resource, run by the venv's python.
       - path: Resources/tts_worker.py
         buildPhase: resources
+      - path: Resources/relay
+        type: folder
+        buildPhase: resources
       - path: Resources/Assets.xcassets
     dependencies:
       - package: Rive

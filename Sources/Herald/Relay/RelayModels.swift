@@ -5,7 +5,8 @@ import HeraldClient
 
 public enum RelayDefaults {
     /// The relay deployed for this repo. Settings > Cloud can point Herald at another one.
-    public static let url = "https://herald-relay.ivg-design.workers.dev"
+    /// The maintainer's own relay. Not a default: Herald pairs with a relay in the user's own Cloudflare account. Only used to forget it.
+    public static let legacyHostedURL = "https://herald-relay.ivg-design.workers.dev"
     public static let dedupeHours = 24.0
     public static let logLimit = 20
     /// Keepalive: a text "ping" the relay answers itself ("pong", without waking its Durable Object). Every 5 minutes at most

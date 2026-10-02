@@ -11,6 +11,8 @@ public struct RelayStatusReply: Codable, Equatable, Sendable {
     public var lastSeenAt: Date?
     public var keys: [RelayKeyInfo]
     public var log: [RelayLogEntry]
+    /// The setup state machine (token-needed ... online), present when Herald serves the setup routes.
+    public var setup: RelaySetupStatus?
 }
 
 public struct RelayKeyCreated: Codable, Equatable, Sendable {
@@ -63,24 +65,36 @@ struct RevokedReply: Encodable { var revoked: Bool; var id: String }
 struct KeysReply: Encodable { var keys: [RelayKeyInfo] }
 struct PairReply: Encodable { var paired: Bool; var code: String; var deviceId: String }
 
+///   GET  /v1/relay/setup           the setup state machine: token-needed / ready / deploying / connecting / online / offline / error
+///   GET  /v1/relay/token-url       the pre-filled Cloudflare token page and the permissions to give it
+///   POST /v1/relay/token           {token} stores the API token in the Keychain (never read back)
+///   POST /v1/relay/deploy          deploys or upgrades the Worker in the user's Cloudflare account, pairs; returns the step log
+///   GET|PUT /v1/relay/settings     every Advanced field; a change to a Worker value redeploys
+///   POST /v1/relay/delete          {confirm: true} deletes the Worker (and every mailbox) from Cloudflare
+///   POST /v1/relay/test            health, then a notification through the relay and its receipt
+///   GET  /v1/relay/instructions?client=chatgpt|claude|codex   the exact text to give that agent
 public enum RelayRoutes {
     public static let prefix = "/v1/relay/"
 
-    public static func handler(token: String, backend: RelayBackend,
+    public static func handler(token: String, backend: RelayBackend, setup: RelaySetupBackend? = nil,
                                fallback: @escaping HTTPLoopbackListener.Handler) -> HTTPLoopbackListener.Handler {
         return { req in
-            if let r = await handle(req, token: token, backend: backend) { return r }
+            if let r = await handle(req, token: token, backend: backend, setup: setup) { return r }
             return await fallback(req)
         }
     }
 
-    public static func handle(_ req: HTTPRequest, token: String, backend: RelayBackend) async -> HTTPResponse? {
+    public static func handle(_ req: HTTPRequest, token: String, backend: RelayBackend, setup: RelaySetupBackend? = nil) async -> HTTPResponse? {
         guard req.path.hasPrefix(prefix) else { return nil }
         guard BearerAuth.isAuthorized(req, token: token) else { return HTTPResponse.error(401, "unauthorized") }
         let sub = String(req.path.dropFirst(prefix.count))
         do {
+            if let setup, let r = try await handleSetup(req, sub: sub, setup: setup) { return r }
             switch (req.method, sub) {
-            case ("GET", "status"): return HTTPResponse.json(200, await backend.relayStatus())
+            case ("GET", "status"):
+                var st = await backend.relayStatus()
+                st.setup = await setup?.setupStatus()
+                return HTTPResponse.json(200, st)
             case ("POST", "pair"):
                 let r = try await backend.relayPair()
                 return HTTPResponse.json(200, PairReply(paired: true, code: r.code, deviceId: r.deviceId))
@@ -115,6 +129,37 @@ public enum RelayRoutes {
             }
         } catch {
             return HTTPResponse.error(500, "\(error)")
+        }
+    }
+}
+
+extension RelayRoutes {
+    static func handleSetup(_ req: HTTPRequest, sub: String, setup: RelaySetupBackend) async throws -> HTTPResponse? {
+        switch (req.method, sub) {
+        case ("GET", "setup"): return HTTPResponse.json(200, await setup.setupStatus())
+        case ("GET", "token-url"): return HTTPResponse.json(200, RelayTokenLink.make())
+        case ("POST", "token"):
+            struct Body: Decodable { var token: String? }
+            let b = (try? HeraldJSON.decoder().decode(Body.self, from: req.body)) ?? Body()
+            guard let t = b.token?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { throw BackendError(400, "token is required") }
+            try await setup.setCloudflareToken(t)
+            return HTTPResponse.json(200, ["stored": true])
+        case ("POST", "deploy"): return HTTPResponse.json(200, try await setup.deployRelay())
+        case ("GET", "settings"): return HTTPResponse.json(200, await setup.relaySettings())
+        case ("PUT", "settings"):
+            guard case .object(let o)? = try? HeraldJSON.decoder().decode(JSONValue.self, from: req.body) else { throw BackendError(400, "body must be a JSON object of settings") }
+            return HTTPResponse.json(200, try await setup.updateRelaySettings(o))
+        case ("POST", "delete"):
+            struct Body: Decodable { var confirm: Bool? }
+            guard ((try? HeraldJSON.decoder().decode(Body.self, from: req.body)) ?? Body()).confirm == true else {
+                throw BackendError(400, "this deletes the relay and every mailbox from Cloudflare: send {\"confirm\": true}")
+            }
+            return HTTPResponse.json(200, try await setup.deleteRelay())
+        case ("POST", "test"): return HTTPResponse.json(200, try await setup.testRelay())
+        case ("GET", "instructions"):
+            let client = req.query["client"] ?? ""
+            return HTTPResponse.json(200, ["client": client, "text": try await setup.relayInstructions(client: client)])
+        default: return nil
         }
     }
 }

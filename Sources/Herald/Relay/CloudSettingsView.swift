@@ -6,7 +6,8 @@ import AppKit
 struct CloudSettingsView: View {
     let controller: AppController
     @StateObject private var ticker = ChangeTicker()
-    @State private var urlText = ""
+    @State private var showDeploy = false
+    @State private var confirmOff = false
     @State private var busy = false
     @State private var message: String?
     @State private var newName = ""
@@ -22,25 +23,20 @@ struct CloudSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Relay") {
-                HStack {
-                    TextField("Relay URL", text: $urlText).textFieldStyle(.roundedBorder)
-                        .onSubmit { relay.relayURL = urlText } .heraldHelp(.cloudRelayURL)
-                    Button("Save") { relay.relayURL = urlText; relay.client.start() } .heraldHelp(name: "Save relay URL", detail: "use this relay and reconnect")
-                }
+                Toggle("Enable relay", isOn: enableBinding).toggleStyle(.switch)
+                    .disabled(relay.deployRunning || relay.relaySwitch.isBusy) .heraldHelp(.cloudEnable)
                 statusRow
-                HStack {
-                    if relay.isPaired {
-                        Button("Reconnect") { relay.client.reconnectNow() } .heraldHelp(.cloudReconnect)
-                        Button("Unpair\u{2026}", role: .destructive) { run { try await relay.relayUnpair() } } .heraldHelp(.cloudUnpair)
-                    } else {
-                        Button("Pair\u{2026}") { run { _ = try await relay.relayPair() } }.disabled(busy) .heraldHelp(.cloudPair)
-                    }
-                    if let code = relay.pairingCode {
-                        Text("Pairing code \(code)").font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                if !relay.relayURL.isEmpty { connectorURLRow }
+                if relay.isPaired, relay.updateAvailable {
+                    HStack {
+                        Text("A newer relay is bundled with this Herald (running \(relay.deployedVersion ?? "unknown"), new \(relay.bundledVersion)).").font(.caption)
+                        Spacer()
+                        Button("Update the relay") { run { _ = try await relay.deployRelay() } }.disabled(busy || !relay.hasCloudflareToken) .heraldHelp(.cloudUpdate)
                     }
                 }
                 if let e = relay.lastError ?? message { Text(e).font(.caption).foregroundStyle(.red) }
             }
+            if relay.isPaired { instructionsSection }
             if relay.isPaired {
                 connectorSection
                 Section("Agent keys") {
@@ -74,23 +70,98 @@ struct CloudSettingsView: View {
                     }
                 }
             }
+            Section { CloudAdvancedView(controller: controller) }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showDeploy) { DeployRelaySheet(controller: controller, isPresented: $showDeploy) }
+        .alert("Turn the relay off?", isPresented: $confirmOff) {
+            Button("Turn off", role: .destructive) { Task { await relay.relaySwitch.turnOff() } }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("This unpairs this Mac and revokes every agent key and connector. The relay itself stays in your Cloudflare account.") }
         .onAppear {
-            urlText = relay.relayURL
-            if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); _ = try? await relay.relayUsage() } }
+            if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); await relay.refreshHealth(); _ = try? await relay.relayUsage() } }
         }
+    }
+
+    private var enableBinding: Binding<Bool> {
+        Binding(get: { relay.relaySwitch.isOn }, set: { on in
+            if on {
+                if relay.relayURL.isEmpty { showDeploy = true } else { Task { await relay.relaySwitch.turnOn() } }
+            } else { confirmOff = true }
+        })
     }
 
     private var statusRow: some View {
         let _ = ticker.tick
-        let st = relay.client.state
+        let sw = relay.relaySwitch.state
+        let online = relay.client.state == .online
         let seen = relay.store.value.lastSeenAt
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Circle().fill(online ? Color.green : (relay.isPaired || sw == .pairing || sw == .connecting ? Color.orange : Color.gray)).frame(width: 8, height: 8)
+                Text(relay.isPaired ? relay.client.state.label : sw.label)
+                if let seen, relay.isPaired { Text("last seen \(seen.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
+                if sw == .pairing || sw == .connecting { ProgressView().controlSize(.small) }
+                Spacer()
+                if relay.isPaired { Button("Reconnect") { relay.client.reconnectNow() } .heraldHelp(.cloudReconnect) }
+            }
+            if case .failed(let m) = sw {
+                Text(m).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Try again") { Task { await relay.relaySwitch.turnOn() } }
+                    if relay.isPaired { Button("Turn off anyway") { run { try await relay.relayUnpair(force: true); relay.relaySwitch.sync() } } }
+                }
+            }
+        }
+    }
+
+    private var connectorURLRow: some View {
+        let url = ConnectorConfig.mcpURL(relay: relay.relayURL)
         return HStack {
-            Circle().fill(st == .online ? Color.green : (relay.isPaired ? Color.orange : Color.gray)).frame(width: 8, height: 8)
-            Text(st.label)
-            if let seen, relay.isPaired { Text("last seen \(seen.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Connector URL").font(.caption).foregroundStyle(.secondary)
+                Text(url).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+            }
             Spacer()
+            Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(url, forType: .string) } .heraldHelp(.cloudCopyURL)
+        }
+    }
+
+    /// The two ready-made blocks: OAuth connectors (ChatGPT / OpenAI cloud agents) and a static key (Claude Code / Codex CLI).
+    @ViewBuilder private var instructionsSection: some View {
+        let url = ConnectorConfig.mcpURL(relay: relay.relayURL)
+        Section("Connect an agent") {
+            instructionBlock(RelayInstructions.oauth(mcpURL: url))
+            instructionBlock(RelayInstructions.staticKey(mcpURL: url), extra: AnyView(
+                Button("Create a key and copy the config") { makeStaticKey() }.disabled(busy)
+                    .heraldHelp(name: "Create a key and copy the config", detail: "Makes a notify-only key named after the agent and copies the ready-to-paste connector block")))
+        }
+    }
+
+    private func instructionBlock(_ text: String, extra: AnyView? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Button("Copy instructions") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) } .heraldHelp(.cloudCopyInstructions)
+                if let extra { extra }
+            }
+        }
+        .padding(8).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func makeStaticKey() {
+        busy = true
+        Task {
+            defer { busy = false }
+            let taken = Set(relay.keys.filter(\.isActive).map(\.name))
+            var name = "claude-code", n = 2
+            while taken.contains(name) { name = "claude-code-\(n)"; n += 1 }
+            do {
+                let k = try await relay.relayCreateKey(name: name, client: "claude")
+                shown = k
+                NSPasteboard.general.clearContents(); NSPasteboard.general.setString(k.connectorConfig, forType: .string)
+                message = nil
+            } catch { message = error.localizedDescription }
         }
     }
 

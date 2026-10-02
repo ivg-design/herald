@@ -125,7 +125,7 @@ final class AppController {
         let router = Router(token: token, backend: BackendAdapter(self, parity: parityService), version: Self.version)
         // /v1/snooze and /v1/unsnooze are answered ahead of the router (see SnoozeRoutes); everything else falls through to it.
         let snoozing = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self, parity: parityService)) { await router.handle($0) }
-        let handler = RelayRoutes.handler(token: token, backend: relay, fallback: snoozing)
+        let handler = RelayRoutes.handler(token: token, backend: relay, setup: relay, fallback: snoozing)
         // The token is checked on the request head too, so an unauthenticated caller is turned away before
         // any of its body is buffered (the router still checks it again).
         let l = HTTPLoopbackListener(port: settings.effectivePort, headCheck: BearerAuth.headCheck(token: token), handler: handler)

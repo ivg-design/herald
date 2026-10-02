@@ -25,7 +25,7 @@ let package = Package(
         .target(name: "HeraldCore", dependencies: ["HeraldClient"],
                 path: "Sources/Herald", exclude: ["Help/HeraldHelp.swift"], sources: ["Core", "Help", "Authoring/CodeExport.swift", "Authoring/ComposerModel.swift",
                          "Designer/DesignerModel.swift", "Designer/SymbolBrowser.swift", "Voice/TTSWorker.swift", "Voice/KokoroInstaller.swift", "Voice/SpeechQueue.swift", "Voice/AudioCache.swift", "Voice/KokoroLayout.swift", "Voice/QuietHours.swift", "MCP/MCPInstaller.swift", "MCP/AgentIdentity.swift", "MCP/AgentIssuer.swift", "MCP/AgentIconSources.swift",
-                         "Relay/RelaySwitch.swift", "Relay/RelayCloudConfig.swift", "Relay/CloudflareDeployer.swift", "Relay/RelayInstructions.swift", "Relay/RelayModels.swift", "Relay/RelayStore.swift", "Relay/RelayAPI.swift", "Relay/RelayPolicy.swift", "Relay/RelayClient.swift", "Relay/VoiceReply.swift", "Relay/RelayRoutes.swift"]),
+                         "Relay/RelaySwitch.swift", "Relay/RelaySetup.swift", "Relay/RelayCloudConfig.swift", "Relay/CloudflareDeployer.swift", "Relay/RelayInstructions.swift", "Relay/RelayModels.swift", "Relay/RelayStore.swift", "Relay/RelayAPI.swift", "Relay/RelayPolicy.swift", "Relay/RelayClient.swift", "Relay/VoiceReply.swift", "Relay/RelayRoutes.swift"]),
         .testTarget(name: "HeraldTests", dependencies: ["HeraldClient", "HeraldCore", "herald-mcp"],
                     path: "Tests/HeraldTests"),
     ]

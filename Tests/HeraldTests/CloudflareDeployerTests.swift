@@ -297,3 +297,188 @@ final class RelayBundleTests: XCTestCase {
         XCTAssertFalse(u.absoluteString.contains("{"))   // fully percent-encoded
     }
 }
+
+// MARK: - The enable switch
+
+@MainActor
+final class FakeSwitchBackend: RelaySwitchBackend {
+    var isPaired = false
+    var isOnline = false
+    var pairError: Error?
+    var unpairError: Error?
+    var connects = true
+    var pairCalls = 0, unpairCalls = 0, connectCalls = 0
+    func pair() async throws { pairCalls += 1; if let e = pairError { throw e }; isPaired = true }
+    func unpair() async throws { unpairCalls += 1; if let e = unpairError { throw e }; isPaired = false; isOnline = false }
+    func connect(timeout seconds: Double) async -> Bool { connectCalls += 1; isOnline = connects; return connects }
+}
+
+@MainActor
+final class RelaySwitchTests: XCTestCase {
+    func testOffToPairingToOnlineToOff() async {
+        let b = FakeSwitchBackend(); let sw = RelaySwitch(backend: b)
+        var seen: [RelaySwitchState] = []
+        sw.onChange = { seen.append(sw.state) }
+        XCTAssertEqual(sw.state, .off); XCTAssertFalse(sw.isOn)
+        await sw.toggle(true)
+        XCTAssertEqual(seen, [.pairing, .connecting, .online])
+        XCTAssertTrue(sw.isOn); XCTAssertEqual(b.pairCalls, 1)
+        await sw.toggle(false)
+        XCTAssertEqual(sw.state, .off); XCTAssertFalse(sw.isOn); XCTAssertEqual(b.unpairCalls, 1)
+    }
+
+    func testPairingFailureLeavesTheSwitchOffWithAReadableMessage() async {
+        let b = FakeSwitchBackend(); b.pairError = RelayError.transport("offline"); let sw = RelaySwitch(backend: b)
+        await sw.turnOn()
+        guard case .failed(let m) = sw.state else { return XCTFail("\(sw.state)") }
+        XCTAssertTrue(m.contains("Check your internet connection")); XCTAssertFalse(sw.isOn)
+        // after the network is back, turning on again pairs and connects
+        b.pairError = nil
+        await sw.turnOn()
+        XCTAssertEqual(sw.state, .online); XCTAssertEqual(b.pairCalls, 2)
+    }
+
+    func testPairedButSilentKeepsThePairingAndRetryDoesNotPairAgain() async {
+        let b = FakeSwitchBackend(); b.connects = false; let sw = RelaySwitch(backend: b); sw.connectTimeout = 0
+        await sw.turnOn()
+        XCTAssertEqual(sw.state, .failed(RelaySwitchMessages.paired_but_silent)); XCTAssertTrue(sw.isOn)   // paired: the switch stays on
+        b.connects = true
+        await sw.turnOn()
+        XCTAssertEqual(sw.state, .online); XCTAssertEqual(b.pairCalls, 1)
+    }
+
+    func testTurningOffWhenTheRelayCannotBeReachedChangesNothing() async {
+        let b = FakeSwitchBackend(); let sw = RelaySwitch(backend: b)
+        await sw.turnOn()
+        b.unpairError = RelayError.transport("no route")
+        await sw.turnOff()
+        guard case .failed(let m) = sw.state else { return XCTFail() }
+        XCTAssertTrue(m.contains("still on")); XCTAssertTrue(b.isPaired); XCTAssertTrue(sw.isOn)
+    }
+
+    func testLimitsAndFullRelaysAreExplained() {
+        XCTAssertTrue(RelaySwitchMessages.friendly(RelayError.limited("x", retryAfter: 3600)).contains("1 hour"))
+        XCTAssertTrue(RelaySwitchMessages.friendly(RelayError.http(403, "this relay already has 5 paired Macs")).contains("no room"))
+        XCTAssertTrue(RelaySwitchMessages.friendly(RelayError.http(401, "pairing secret")).contains("pairing secret"))
+    }
+
+    func testSyncFollowsTheConnectionButNeverInterruptsAnAttempt() async {
+        let b = FakeSwitchBackend(); b.isPaired = true; b.isOnline = true
+        let sw = RelaySwitch(backend: b)
+        XCTAssertEqual(sw.state, .online)          // launched already paired and connected
+        b.isOnline = false; sw.sync()
+        XCTAssertEqual(sw.state, .connecting)      // the connection dropped
+        b.isOnline = true; sw.sync()
+        XCTAssertEqual(sw.state, .online)
+        b.isPaired = false; b.isOnline = false; sw.sync()
+        XCTAssertEqual(sw.state, .off)             // unpaired elsewhere (the API)
+    }
+}
+
+final class RelayInstructionsTests: XCTestCase {
+    private let url = "https://herald-relay.acme.workers.dev/mcp"
+
+    func testOAuthBlockIsForChatGPTAndNeedsNoKey() {
+        let t = RelayInstructions.oauth(mcpURL: url)
+        for needle in ["ChatGPT", "OpenAI", "Authentication: OAuth", url, "Approve", "Connector approvals", "6-digit", "Revoke"] {
+            XCTAssertTrue(t.contains(needle), needle)
+        }
+        XCTAssertFalse(t.contains("hrk_")); XCTAssertFalse(t.contains("Bearer"))
+    }
+
+    func testStaticBlockHasClaudeCodeAndCodexAndHidesNothingBehindAPlaceholder() {
+        let none = RelayInstructions.staticKey(mcpURL: url)
+        XCTAssertTrue(none.contains("claude mcp add --transport http herald \(url)")); XCTAssertTrue(none.contains("<your key>"))
+        XCTAssertTrue(none.contains("[mcp_servers.herald]")); XCTAssertTrue(none.contains("bearer_token_env_var = \"HERALD_RELAY_KEY\""))
+        XCTAssertTrue(none.contains("Create a key below"))
+        let with = RelayInstructions.staticKey(mcpURL: url, key: "hrk_abc")
+        XCTAssertTrue(with.contains("Bearer hrk_abc")); XCTAssertFalse(with.contains("<your key>")); XCTAssertFalse(with.contains("Create a key below"))
+    }
+}
+
+// MARK: - The setup routes
+
+final class RelaySetupRoutesTests: XCTestCase {
+    final class FakeSetup: RelaySetupBackend, @unchecked Sendable {
+        var token: String?; var deployed = 0; var deleted = 0; var patches: [[String: JSONValue]] = []
+        func setupStatus() async -> RelaySetupStatus {
+            RelaySetupStatus(state: token == nil ? "token-needed" : "ready", hasToken: token != nil, paired: false, online: false, relayURL: "", mcpURL: "",
+                             bundledVersion: "abc", deployedVersion: nil, updateAvailable: false, message: nil, steps: [], usage: nil)
+        }
+        func setCloudflareToken(_ t: String) async throws { token = t }
+        func deployRelay() async throws -> RelayDeployReply {
+            deployed += 1
+            return RelayDeployReply(deployed: true, upgraded: deployed > 1, relayURL: "https://r.acme.workers.dev", paired: true, online: true,
+                                    steps: [RelayStepReport(DeployEvent(step: .upload, phase: .done, detail: "created"))])
+        }
+        func relaySettings() async -> RelaySettingsReply { RelaySettingsReply(settings: RelayCloudConfig(), pairingSecretSet: true, errors: [:], redeployed: false, steps: []) }
+        func updateRelaySettings(_ p: [String: JSONValue]) async throws -> RelaySettingsReply {
+            patches.append(p)
+            if p["maxQueue"] == .number(0) { throw BackendError(400, "maxQueue: Between 1 and 1000.") }
+            return RelaySettingsReply(settings: RelayCloudConfig(), pairingSecretSet: true, errors: [:], redeployed: true, steps: [])
+        }
+        func deleteRelay() async throws -> RelayDeleteReply { deleted += 1; return RelayDeleteReply(deleted: true, note: nil) }
+        func testRelay() async throws -> RelayTestReply { RelayTestReply(healthy: true, paired: true, online: true, roundTrip: true, receipt: "displayed", detail: "ok") }
+        func relayInstructions(client: String) async throws -> String {
+            guard ["chatgpt", "claude", "codex"].contains(client) else { throw BackendError(400, "client must be chatgpt, claude or codex") }
+            return "instructions for \(client)"
+        }
+    }
+
+    private func call(_ m: String, _ p: String, body: String = "", query: [String: String] = [:], token: String? = "tok", setup: FakeSetup) async -> HTTPResponse? {
+        let r = HTTPRequest(method: m, path: p, query: query, headers: token.map { ["authorization": "Bearer \($0)"] } ?? [:], body: Data(body.utf8))
+        return await RelayRoutes.handle(r, token: "tok", backend: RelayRoutesTests.FakeBackend(), setup: setup)
+    }
+    private func obj(_ r: HTTPResponse?) -> [String: Any] { (try? JSONSerialization.jsonObject(with: r!.body)) as? [String: Any] ?? [:] }
+
+    func testSetupRoutesNeedTheTokenAndAreAbsentWithoutABackend() async {
+        let s = FakeSetup()
+        let denied = await call("GET", "/v1/relay/setup", token: nil, setup: s)
+        XCTAssertEqual(denied?.status, 401)
+        let none = await RelayRoutes.handle(HTTPRequest(method: "GET", path: "/v1/relay/setup", headers: ["authorization": "Bearer tok"], body: Data()), token: "tok", backend: RelayRoutesTests.FakeBackend())
+        XCTAssertEqual(none?.status, 404)
+    }
+
+    func testWalkthroughTokenDeployUpgradeSettingsTestInstructionsDelete() async {
+        let s = FakeSetup()
+        var r = await call("GET", "/v1/relay/setup", setup: s)
+        XCTAssertEqual(obj(r)["state"] as? String, "token-needed")
+        r = await call("GET", "/v1/relay/token-url", setup: s)
+        XCTAssertTrue((obj(r)["url"] as? String ?? "").hasPrefix("https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys="))
+        XCTAssertEqual((obj(r)["permissions"] as? [[String: Any]])?.count, 3)
+        r = await call("POST", "/v1/relay/token", body: #"{"token":"cf-secret-token-123456"}"#, setup: s)
+        XCTAssertEqual(r?.status, 200); XCTAssertEqual(s.token, "cf-secret-token-123456")
+        XCTAssertFalse(String(decoding: r!.body, as: UTF8.self).contains("cf-secret"))   // never echoed
+        let state = await call("GET", "/v1/relay/setup", setup: s)
+        XCTAssertFalse(String(decoding: state!.body, as: UTF8.self).contains("cf-secret"))
+        r = await call("POST", "/v1/relay/token", body: "{}", setup: s); XCTAssertEqual(r?.status, 400)
+        r = await call("POST", "/v1/relay/deploy", setup: s)
+        XCTAssertEqual(obj(r)["upgraded"] as? Bool, false); XCTAssertEqual((obj(r)["steps"] as? [[String: Any]])?.first?["title"] as? String, "Upload the relay")
+        r = await call("POST", "/v1/relay/deploy", setup: s); XCTAssertEqual(obj(r)["upgraded"] as? Bool, true)
+        r = await call("PUT", "/v1/relay/settings", body: #"{"maxQueue":50}"#, setup: s)
+        XCTAssertEqual(obj(r)["redeployed"] as? Bool, true); XCTAssertEqual(s.patches.last?["maxQueue"], .number(50))
+        r = await call("PUT", "/v1/relay/settings", body: #"{"maxQueue":0}"#, setup: s); XCTAssertEqual(r?.status, 400)
+        r = await call("GET", "/v1/relay/settings", setup: s)
+        XCTAssertEqual(obj(r)["pairingSecretSet"] as? Bool, true); XCTAssertNil(obj(r)["pairingSecret"])
+        r = await call("POST", "/v1/relay/test", setup: s); XCTAssertEqual(obj(r)["roundTrip"] as? Bool, true)
+        r = await call("GET", "/v1/relay/instructions", query: ["client": "chatgpt"], setup: s); XCTAssertEqual(obj(r)["text"] as? String, "instructions for chatgpt")
+        r = await call("GET", "/v1/relay/instructions", query: ["client": "bing"], setup: s); XCTAssertEqual(r?.status, 400)
+        // delete needs an explicit confirmation
+        r = await call("POST", "/v1/relay/delete", body: "{}", setup: s); XCTAssertEqual(r?.status, 400); XCTAssertEqual(s.deleted, 0)
+        r = await call("POST", "/v1/relay/delete", body: #"{"confirm":true}"#, setup: s); XCTAssertEqual(r?.status, 200); XCTAssertEqual(s.deleted, 1)
+    }
+
+    func testStatusCarriesTheSetupStateMachine() async {
+        let s = FakeSetup()
+        let r = await call("GET", "/v1/relay/status", setup: s)
+        XCTAssertEqual((obj(r)["setup"] as? [String: Any])?["state"] as? String, "token-needed")
+    }
+
+    func testApplyingSettingsValidatesNamesAndTypes() throws {
+        let c = try RelayCloudConfig().applying(["maxQueue": .number(7), "workerName": .string(" my-relay ")])
+        XCTAssertEqual(c.maxQueue, 7); XCTAssertEqual(c.workerName, "my-relay")
+        XCTAssertThrowsError(try RelayCloudConfig().applying(["nope": .number(1)]))
+        XCTAssertThrowsError(try RelayCloudConfig().applying(["maxQueue": .string("7")]))
+        XCTAssertThrowsError(try RelayCloudConfig().applying(["maxQueue": .number(7.5)]))
+    }
+}

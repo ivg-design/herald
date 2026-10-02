@@ -202,7 +202,7 @@ enum ParityTools {
         // MARK: Cloud relay (docs/CLOUD.md)
         ParityTool(definition: MCPToolDefinition(
             name: "relay_status", title: "Cloud relay status",
-            description: "The cloud relay this Mac is paired with: whether it is paired and online, the relay URL, the MCP connector URL for cloud agents, the agent keys (name, client, scope, last used; never a secret) and the last 20 relay items with their receipt states (displayed, spoken, replied, suppressed and why).",
+            description: "The cloud relay this Mac is paired with, and the setup state machine (`setup.state`: token-needed, ready, deploying, connecting, online, offline, error; with the version, update-available and last message): whether it is paired and online, the relay URL, the MCP connector URL for cloud agents, the agent keys (name, client, scope, last used; never a secret) and the last 20 relay items with their receipt states (displayed, spoken, replied, suppressed and why).",
             inputSchema: Schema.input(), readOnly: true, idempotent: true),
             route: { _ in RouteCall(method: "GET", path: "/v1/relay/status") }),
 
@@ -238,6 +238,79 @@ enum ParityTools {
                 guard let id = try text(a, "id") else { throw ToolFailure("id is required") }
                 return RouteCall(method: "DELETE", path: "/v1/relay/keys/\(id)")
             }),
+
+        // MARK: Relay setup (Settings > Cloud > Enable relay; docs/CLOUD.md, docs/AGENT-QUICKSTART.md "Set up the cloud relay")
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_token_url", title: "Cloudflare token page for the relay",
+            description: "The pre-filled Cloudflare page where the USER creates the API token Herald deploys the relay with (permissions Workers Scripts: Edit, Workers R2 Storage: Edit, Account Settings: Read; token name \"Herald relay\"), the sign-up link for a free Cloudflare account, and the permission list with the reason for each. Tell the user to open it, create the token and give it to you; then call relay_set_cloudflare_token.",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/token-url") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_set_cloudflare_token", title: "Store the Cloudflare API token",
+            description: "SENSITIVE. Stores the user's Cloudflare API token in the macOS Keychain on this Mac. It is used only to call api.cloudflare.com for the relay deploy and is never returned by any tool or route. Do not repeat it in messages or logs.",
+            inputSchema: Schema.input(["token": Schema.string("The API token the user created on the page from relay_token_url.")], required: ["token"]),
+            idempotent: true),
+            route: { a in
+                guard let t = try text(a, "token") else { throw ToolFailure("token is required") }
+                return RouteCall(method: "POST", path: "/v1/relay/token", body: .object(["token": .string(t)]))
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_deploy", title: "Deploy or upgrade the relay on Cloudflare",
+            description: "Deploys the relay Worker to the user's own Cloudflare account through the Cloudflare API (needs relay_set_cloudflare_token first), waits until it answers on its workers.dev address, then pairs this Mac with it. Returns the step log. Running it again upgrades the Worker in place (same name, secrets and data). Takes up to about a minute.",
+            inputSchema: Schema.input(), idempotent: true),
+            route: { _ in RouteCall(method: "POST", path: "/v1/relay/deploy", timeout: 180) }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_pair", title: "Pair this Mac with the relay",
+            description: "Pairs this Mac with the configured relay (the code is handled internally; the pairing secret is sent when the relay needs one). relay_deploy does this itself; use it for a relay that already exists (set relayURL with relay_settings).",
+            inputSchema: Schema.input(), idempotent: true),
+            route: { _ in RouteCall(method: "POST", path: "/v1/relay/pair") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_unpair", title: "Turn the relay off (unpair)",
+            description: "Unpairs this Mac, which revokes every agent key and connector. The Worker stays in the user's Cloudflare account (relay_delete removes it). Fails, changing nothing, when the relay cannot be reached to revoke.",
+            inputSchema: Schema.input(), destructive: true, idempotent: true),
+            route: { _ in RouteCall(method: "POST", path: "/v1/relay/unpair") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_settings", title: "Read or change the relay's Advanced settings",
+            description: """
+            Without arguments: every Advanced setting (relayURL, accountId, workerName, subdomain, bucket, audioRetentionDays, queueTTLHours, notificationsPerDay, maxQueue, \
+            bodyLimitBytes, ratePerKey, maxDevices, deviceName, pingSeconds), whether a pairing secret is set, and the deployed state. With `settings`: validate and \
+            save the listed ones; a change to a value that lives in the Worker redeploys it, and the reply says so with the step log. \
+            Never returns the Cloudflare token.
+            """,
+            inputSchema: Schema.input(["settings": Schema.object("Settings to change, by name, for example {\"maxQueue\": 50}.")]),
+            idempotent: true),
+            route: { a in
+                if case .object(let o)? = a.value("settings"), !o.isEmpty { return RouteCall(method: "PUT", path: "/v1/relay/settings", body: .object(o), timeout: 180) }
+                return RouteCall(method: "GET", path: "/v1/relay/settings")
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_delete", title: "Delete the relay from Cloudflare",
+            description: "DESTRUCTIVE. Deletes the relay Worker from the user's Cloudflare account, with every mailbox, key and queued notification, and its voice-reply bucket when empty. Requires confirm: true; ask the user first. Cloud agents lose access for good.",
+            inputSchema: Schema.input(["confirm": Schema.boolean("Must be true.")], required: ["confirm"]),
+            destructive: true, idempotent: true),
+            route: { a in
+                guard (try? a.bool("confirm")) == true else { throw ToolFailure("relay_delete needs confirm: true") }
+                return RouteCall(method: "POST", path: "/v1/relay/delete", body: .object(["confirm": .bool(true)]), timeout: 60)
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_instructions", title: "Instructions for connecting an agent",
+            description: "The exact text to give an agent: chatgpt (ChatGPT and OpenAI cloud agents: add the URL as a connector, choose OAuth, approve on the Mac) or claude / codex (a static key: create one with create_agent_key and paste the connector block).",
+            inputSchema: Schema.input(["client": Schema.string("chatgpt, claude or codex.")], required: ["client"]),
+            readOnly: true, idempotent: true),
+            route: { a in RouteCall(method: "GET", path: "/v1/relay/instructions", query: query(a, ["client"])) }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_test", title: "Test the relay end to end",
+            description: "Checks the relay's /health, then sends a test notification through it with a temporary key (a banner appears on this Mac), waits for its receipt and revokes the key.",
+            inputSchema: Schema.input(), idempotent: false),
+            route: { _ in RouteCall(method: "POST", path: "/v1/relay/test", timeout: 60) }),
 
         ParityTool(definition: MCPToolDefinition(
             name: "list_approvals", title: "List template command approvals",

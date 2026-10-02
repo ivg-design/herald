@@ -7,7 +7,7 @@ import HeraldClient
 /// (`cloud.<key name>`) per agent key, and wires speech, replies and voice replies to the relay's receipts.
 @MainActor
 final class RelayController: RelayHost, RelayBackend {
-    private unowned let controller: AppController
+    unowned let controller: AppController
     let store: RelayStateStore
     let dedupe: RelayDedupe
     let tokens: RelayTokenStore
@@ -19,6 +19,14 @@ final class RelayController: RelayHost, RelayBackend {
     /// Connector requests the relay has pushed (the OAuth flow): pending ones show a banner and a code in Settings > Cloud.
     private(set) var consents: [RelayConsent] = []
     static let consentApp = "herald.connectors"
+    // Relay setup (Cloudflare deploy): see RelayController+Setup.swift.
+    let cloudConfig: RelayCloudConfigStore
+    let cloudSecrets: CloudflareSecrets
+    var relaySwitch: RelaySwitch!
+    var deployRunning = false
+    var deployLog = DeployLog()
+    var deployFailure: String?
+    var healthBundle: String?
     private var issuerKeys = Set<String>()
     private var monitor: NWPathMonitor?
     private var observers: [NSObjectProtocol] = []
@@ -31,8 +39,15 @@ final class RelayController: RelayHost, RelayBackend {
         // A throwaway support folder (tests, HERALD_SUPPORT_DIR) gets its own Keychain item, never the real token's.
         let isDefault = dir.standardizedFileURL == HeraldPaths.defaultSupportDirectory.standardizedFileURL
         tokens = KeychainTokenStore(service: isDefault ? "com.ivg.herald.relay" : "com.ivg.herald.relay.\(Self.stableHash(dir.path))")
+        cloudConfig = RelayCloudConfigStore(file: dir.appendingPathComponent("relay-cloudflare.json"))
+        cloudSecrets = KeychainCloudflareSecrets(service: isDefault ? "com.ivg.herald.cloudflare" : "com.ivg.herald.cloudflare.\(Self.stableHash(dir.path))")
         client = RelayClient(host: self, store: store, dedupe: dedupe, tokens: tokens)
-        client.onChange = { [weak self] in self?.controller.changed() }
+        client.pingSeconds = TimeInterval(cloudConfig.value.pingSeconds)
+        // No relay is shared by default. An earlier build pointed unpaired installs at the maintainer's own instance: forget that.
+        if tokens.load() == nil, store.value.relayURL == RelayDefaults.legacyHostedURL { store.update { $0.relayURL = "" } }
+        client.onChange = { [weak self] in self?.controller.changed(); self?.relaySwitch?.sync() }
+        relaySwitch = RelaySwitch(backend: self)
+        relaySwitch.onChange = { [weak self] in self?.controller.changed() }
     }
 
     /// A hash that is the same on every launch (`hashValue` is not).
@@ -196,10 +211,11 @@ final class RelayController: RelayHost, RelayBackend {
 
     func relayPair() async throws -> (code: String, deviceId: String) {
         guard let api = client.api else { throw RelayError.transport("the relay URL is not valid") }
-        let name = Host.current().localizedName ?? "Mac"
+        let custom = cloudConfig.value.deviceName
+        let name = custom.isEmpty ? (Host.current().localizedName ?? "Mac") : custom
         lastError = nil
         do {
-            let started = try await api.startPairing(deviceName: name)
+            let started = try await api.startPairing(deviceName: name, pairingSecret: cloudSecrets.get(.pairingSecret))
             pairingCode = started.code
             controller.changed()
             let paired = try await api.pair(code: started.code, deviceName: name)
@@ -218,8 +234,16 @@ final class RelayController: RelayHost, RelayBackend {
         }
     }
 
-    func relayUnpair() async throws {
-        if let api = client.api { try? await api.unpair() }
+    /// Tells the relay to forget this Mac (revoking every key and connector), then forgets the pairing here. When the relay cannot
+    /// be reached nothing is forgotten (so nothing stays valid unseen) unless `force`.
+    func relayUnpair() async throws { try await relayUnpair(force: false) }
+
+    func relayUnpair(force: Bool) async throws {
+        if let api = client.api {
+            do { try await api.unpair() }
+            catch RelayError.http(let code, _) where code == 401 || code == 404 { /* already gone */ }
+            catch { if !force { throw error } }
+        }
         client.stop()
         tokens.delete()
         store.update { $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil }

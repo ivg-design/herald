@@ -316,7 +316,7 @@ final class RelayStoreTests: XCTestCase {
         let file = tmp("state.json")
         defer { try? FileManager.default.removeItem(at: file) }
         let a = RelayStateStore(file: file)
-        XCTAssertEqual(a.value.relayURL, RelayDefaults.url)
+        XCTAssertEqual(a.value.relayURL, "")
         a.update { $0.relayURL = "https://other.example"; $0.deviceId = "dev1"; $0.pairedAt = Date(timeIntervalSince1970: 1_000_000) }
         for i in 0..<25 {
             a.logEntry("r\(i)", create: RelayLogEntry(id: "r\(i)", key: "k", title: "t\(i)", receivedAt: Date())) { $0.displayed = true }
