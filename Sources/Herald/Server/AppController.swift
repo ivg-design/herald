@@ -27,6 +27,7 @@ final class BackendAdapter: HeraldBackend, @unchecked Sendable {
     func deleteManifest(app: String) async throws { try await controller.deleteManifest(app: app) }
     func shortcuts() async throws -> [String] { try await controller.shortcutNames() }
     func preview(_ request: PreviewSpec) async throws -> Data { try await controller.previewPNG(request) }
+    func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { await controller.riveCheck(request) }
     func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
         try await MainActor.run { try QuietHoursCoordinator.shared.apply(update) }
@@ -345,6 +346,38 @@ final class AppController {
         } catch {
             throw BackendError(500, error.localizedDescription)
         }
+    }
+
+    // MARK: Rive check
+
+    /// `POST /v1/rive/check`: the live `RiveHostView` (the one a banner uses) created without a window, so what a
+    /// banner would do with this component is observable through the API and no UI is involved.
+    func riveCheck(_ request: RiveCheckRequest) -> RiveCheckReply {
+        let manifest = manifests.get(app: request.app)
+        let host = RiveHostView(frame: NSRect(x: 0, y: 0, width: 320, height: 160))
+        host.apply(.init(component: request.component, app: request.app, manifest: manifest,
+                         fields: request.fields ?? [:], assets: .shared))
+        defer { host.tearDown() }
+        func text(_ v: HeraldFieldValue) -> String {
+            switch v {
+            case .text(let s): return s
+            case .number(let n): return String(n)
+            case .bool(let b): return String(b)
+            case .list(let l): return l.joined(separator: ",")
+            }
+        }
+        var artboards: [RiveCheckReply.Artboard] = []
+        if let url = try? AssetStore.shared.resolve(request.component, app: request.app, manifest: manifest),
+           let info = RiveFileInspector.read(url) {
+            artboards = info.artboards.map { a in
+                .init(name: a.name, width: a.width, height: a.height, defaultMachine: a.defaultMachine,
+                      machines: a.machines.map { m in .init(name: m.name, inputs: m.inputs.map { .init(name: $0.name, kind: $0.kind.rawValue) }) },
+                      animations: a.animations)
+            }
+        }
+        return RiveCheckReply(loaded: host.loadError == nil && host.viewModel != nil, error: host.loadError,
+                              inputs: host.inputKinds.mapValues(\.rawValue), applied: host.applied.mapValues(text),
+                              artboards: artboards)
     }
 
     // MARK: User actions (from banners)

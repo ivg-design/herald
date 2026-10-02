@@ -239,9 +239,24 @@ struct EmptySlotView: View {
     let slotAt: (CGPoint) -> GridSlot
 
     var body: some View {
-        Color.clear.frame(width: 34, height: 34)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay { SlotChrome(model: model, rect: SlotRect(slot), cellID: nil, label: "", slotAt: slotAt) }
+        EmptySlotLayout {
+            SlotChrome(model: model, rect: SlotRect(slot), cellID: nil, label: "", slotAt: slotAt)
+        }
+    }
+}
+
+/// Sizes the placeholder with `EmptySlotSizing`: the ideal drop target when nothing is proposed, otherwise exactly
+/// the track's size (a fixed 16 pt row must not get a 34 pt placeholder that overlaps the row below).
+private struct EmptySlotLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let s = EmptySlotSizing.size(width: proposal.width.map(Double.init), height: proposal.height.map(Double.init))
+        return CGSize(width: s.width, height: s.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for sub in subviews {
+            sub.place(at: bounds.origin, anchor: .topLeading, proposal: ProposedViewSize(bounds.size))
+        }
     }
 }
 

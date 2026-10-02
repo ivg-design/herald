@@ -34,6 +34,8 @@ public protocol HeraldBackend: AnyObject, Sendable {
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply
     /// `POST /v1/dismissAll {app, group}`: every banner of `app` sent with this `group` (DESIGN section 9).
     func dismissGroup(app: String, group: String) async throws
+    /// `POST /v1/rive/check`: loads a `rive` component in a window-less host view and reports what it found (test hook).
+    func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply
     /// `GET /v1/stacks?app=`: the stacks that are up (DESIGN section 9).
     func stacks(app: String?) async throws -> [HeraldStackInfo]
     /// `POST /v1/stacks/expand {app, group, expanded}`: open or close a stack in place.
@@ -102,6 +104,7 @@ public extension HeraldBackend {
     func quietHours() async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply { throw BackendError(501, "quiet hours are not supported") }
     func dismissGroup(app: String, group: String) async throws { throw BackendError(501, "stacks are not supported") }
+    func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { throw BackendError(501, "rive checks are not supported") }
     func stacks(app: String?) async throws -> [HeraldStackInfo] { throw BackendError(501, "stacks are not supported") }
     func expandStack(app: String, group: String, expanded: Bool) async throws { throw BackendError(501, "stacks are not supported") }
     func stackingLevel() async throws -> StackingLevel { throw BackendError(501, "stacking is not supported") }
@@ -185,6 +188,10 @@ public final class Router: @unchecked Sendable {
                 // The group of a notification that sent none is its issuer id, so that is the default here too.
                 try await backend.expandStack(app: app, group: b.group.flatMap { $0.isEmpty ? nil : $0 } ?? app, expanded: b.expanded ?? true)
                 return .json(200, ["ok": true])
+            case ("POST", "/v1/rive/check"):
+                let b = try decode(RiveCheckRequest.self, req)
+                guard !b.app.isEmpty else { throw BackendError(400, "app is required") }
+                return .json(200, try await backend.riveCheck(b))
             case ("GET", "/v1/history"):
                 let limit = req.query["limit"].flatMap(Int.init) ?? 50
                 guard limit >= 0 else { throw BackendError(400, "invalid limit") }
@@ -247,7 +254,7 @@ public final class Router: @unchecked Sendable {
                 return .png(try await backend.preview(try decodePreview(req)))
             case ("GET", "/v1/preview"):
                 return .png(try await backend.preview(try previewRequest(query: req.query)))
-            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/settings/stacking"),
+            case (_, "/v1/compose"), (_, "/v1/register"), (_, "/v1/notify"), (_, "/v1/speak"), (_, "/v1/settings/quiet-hours"), (_, "/v1/dismiss"), (_, "/v1/dismissAll"), (_, "/v1/stacks"), (_, "/v1/stacks/expand"), (_, "/v1/rive/check"), (_, "/v1/settings/stacking"),
                  (_, "/v1/history"), (_, "/v1/apps"), (_, "/v1/templates"),
                  (_, "/v1/manifests"), (_, "/v1/manifest"), (_, "/v1/components"), (_, "/v1/shortcuts"),
                  (_, "/v1/preview"):
@@ -559,5 +566,41 @@ public final class Router: @unchecked Sendable {
             default: throw BackendError(400, "invalid JSON")
             }
         } catch { throw BackendError(400, "invalid JSON") }
+    }
+}
+
+
+/// `POST /v1/rive/check`: a headless way to see whether a `rive` component loads, which state machine and inputs it
+/// found, and which input values the notification's fields would write. Nothing is shown or stored.
+public struct RiveCheckRequest: Decodable, Sendable {
+    public var app: String
+    public var component: HeraldRiveComponent
+    public var fields: [String: HeraldFieldValue]?
+}
+
+public struct RiveCheckReply: Codable, Equatable, Sendable {
+    public struct Input: Codable, Equatable, Sendable { public var name: String; public var kind: String
+        public init(name: String, kind: String) { self.name = name; self.kind = kind } }
+    public struct Machine: Codable, Equatable, Sendable { public var name: String; public var inputs: [Input]
+        public init(name: String, inputs: [Input]) { self.name = name; self.inputs = inputs } }
+    public struct Artboard: Codable, Equatable, Sendable {
+        public var name: String; public var width: Double; public var height: Double
+        public var defaultMachine: String?; public var machines: [Machine]; public var animations: [String]
+        public init(name: String, width: Double, height: Double, defaultMachine: String?, machines: [Machine], animations: [String]) {
+            self.name = name; self.width = width; self.height = height; self.defaultMachine = defaultMachine
+            self.machines = machines; self.animations = animations
+        }
+    }
+    /// True when the animation loaded and plays (no placeholder).
+    public var loaded: Bool
+    /// Why it did not, exactly as the banner's placeholder says.
+    public var error: String?
+    /// The state machine's inputs by name -> number | bool | trigger.
+    public var inputs: [String: String]
+    /// The values written to inputs from the fields, as text.
+    public var applied: [String: String]
+    public var artboards: [Artboard]
+    public init(loaded: Bool, error: String? = nil, inputs: [String: String] = [:], applied: [String: String] = [:], artboards: [Artboard] = []) {
+        self.loaded = loaded; self.error = error; self.inputs = inputs; self.applied = applied; self.artboards = artboards
     }
 }

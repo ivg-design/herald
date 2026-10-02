@@ -304,3 +304,20 @@ public enum GridFormat {
         return f.localizedString(for: date, relativeTo: now)
     }
 }
+
+
+/// How big the Designer canvas's empty-slot placeholder (the dashed "+" cell) is for a proposal. Unspecified, it asks
+/// for a comfortable drop target (`ideal`) so an auto row with nothing in it is still usable; given a size, it takes
+/// exactly that and never more, so a row set to 16 pt draws its placeholders 16 pt tall and they cannot spill into
+/// the next row. `EmptySlotView` sizes itself with this, and `EmptySlotSizingTests` check it against the solver.
+public enum EmptySlotSizing {
+    public static let ideal: Double = 34
+
+    public static func size(width: Double?, height: Double?) -> (width: Double, height: Double) {
+        func axis(_ proposed: Double?) -> Double {
+            guard let p = proposed, p.isFinite else { return ideal }
+            return max(p, 0)
+        }
+        return (axis(width), axis(height))
+    }
+}

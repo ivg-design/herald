@@ -533,3 +533,67 @@ final class GridLayoutTests: XCTestCase {
         XCTAssertTrue(ago.contains("5") && ago.contains("ago"), ago)
     }
 }
+
+// MARK: Designer empty-slot placeholders (they must follow the resolved track size)
+
+final class EmptySlotSizingTests: XCTestCase {
+    /// The user's grid: 4 x 3, 400 wide, columns 69 / fill / fill / 56, row 1 fixed at 16 pt, rows 2 and 3 auto.
+    private func grid() -> HeraldGrid {
+        HeraldGrid(rows: 3, cols: 4, rowSizes: [.points(16), .auto, .auto],
+                   colSizes: [.points(69), .fill, .fill, .points(56)], gap: 8, padding: 14, width: 400)
+    }
+    private func emptyCells(_ g: HeraldGrid) -> [HeraldCell] {
+        (0..<g.rows).flatMap { r in (0..<g.cols).map { HeraldCell(id: "e\(r)\($0)", row: r, col: $0, component: .spacer) } }
+    }
+
+    /// What `EmptySlotLayout` reports: the ideal for an unspecified proposal while measuring, the placed size after.
+    private func solve(_ g: HeraldGrid) -> (GridSolution, [HeraldCell]) {
+        let cells = emptyCells(g)
+        let measure = GridMeasure(
+            idealWidth: { _ in EmptySlotSizing.size(width: nil, height: nil).width },
+            height: { _, w in EmptySlotSizing.size(width: w, height: nil).height })
+        return (GridSolver.solve(grid: g, cells: cells, plan: HeraldGridPlan(), width: g.width, measure: measure), cells)
+    }
+
+    func testAShortFixedRowKeepsItsHeightAndAutoRowsKeepTheIdealDropTarget() {
+        let (s, _) = solve(grid())
+        XCTAssertEqual(s.rowHeights[0], 16)
+        XCTAssertEqual(s.rowHeights[1], EmptySlotSizing.ideal)
+        XCTAssertEqual(s.rowHeights[2], EmptySlotSizing.ideal)
+    }
+
+    func testPlaceholderFramesNeverIntersectTheNextRowOrColumn() {
+        let g = grid()
+        let (s, cells) = solve(g)
+        // What the canvas draws: each placeholder proposed its track's size, and EmptySlotSizing answers with that size.
+        var drawn: [(row: Int, col: Int, x: Double, y: Double, w: Double, h: Double)] = []
+        for (i, c) in cells.enumerated() {
+            guard let f = s.frames[i] else { continue }
+            let size = EmptySlotSizing.size(width: f.width, height: f.height)
+            XCTAssertLessThanOrEqual(size.height, f.height + 0.001, "cell \(c.id) taller than its row")
+            XCTAssertLessThanOrEqual(size.width, f.width + 0.001, "cell \(c.id) wider than its column")
+            drawn.append((c.row, c.col, f.x, f.y, size.width, size.height))
+        }
+        for a in drawn { for b in drawn where (a.row, a.col) < (b.row, b.col) {
+            let overlapX = a.x < b.x + b.w && b.x < a.x + a.w
+            let overlapY = a.y < b.y + b.h && b.y < a.y + a.h
+            XCTAssertFalse(overlapX && overlapY, "placeholders (\(a.row),\(a.col)) and (\(b.row),\(b.col)) overlap")
+        } }
+        // Row 1's placeholders end 16 pt below their top, i.e. before row 2 starts.
+        let row0 = drawn.filter { $0.row == 0 }, row1 = drawn.filter { $0.row == 1 }
+        XCTAssertLessThanOrEqual(row0.map { $0.y + $0.h }.max() ?? 0, row1.map(\.y).min() ?? .infinity)
+    }
+
+    func testTheOldFixedSizeWouldHaveOverlapped() {
+        // Regression guard for the bug itself: a 34 pt placeholder in a 16 pt row reaches into the next row.
+        let (s, _) = solve(grid())
+        XCTAssertGreaterThan(s.rowOrigins[0] + EmptySlotSizing.ideal, s.rowOrigins[1])
+    }
+
+    func testSizingRules() {
+        XCTAssertEqual(EmptySlotSizing.size(width: nil, height: nil).height, 34)
+        XCTAssertEqual(EmptySlotSizing.size(width: .infinity, height: .nan).width, 34)
+        XCTAssertEqual(EmptySlotSizing.size(width: 10, height: 16).height, 16)
+        XCTAssertEqual(EmptySlotSizing.size(width: -5, height: 0).width, 0)
+    }
+}
