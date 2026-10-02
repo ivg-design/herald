@@ -312,10 +312,12 @@ describe("remote MCP", () => {
   });
 });
 
+// The counters live in the Durable Object's memory (a request costs no row write), so the tests set them there.
 async function setUsage(deviceId: string, usage: Record<string, number>) {
-  const stub = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
-  await runInDurableObject(stub, async (_i, state) => {
-    state.storage.sql.exec("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", "usage:" + new Date().toISOString().slice(0, 10), JSON.stringify(usage));
+  const stub: any = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
+  await (runInDurableObject as any)(stub, async (inst: any) => {
+    inst.loadUsage();
+    Object.assign(inst.usageRow, usage);
   });
 }
 
@@ -344,14 +346,25 @@ describe("free-plan guards", () => {
     expect((await j(r)).error).toBe("daily_cap");
     expect(r.headers.get("retry-after")).toBeTruthy();
   });
+  it("caps voice replies per day so R2 stays inside its free tier", async () => {
+    const { token, deviceId } = await pair();
+    const { key } = await mintKey(token);
+    const c = await connect(token);
+    await notify(key, { title: "q", notificationId: "a" });
+    const n = await c.next();
+    await setUsage(deviceId, { audioUploads: 200 });
+    const r = await f(`/v1/device/reply/${n.id}/audio`, { method: "PUT", headers: { authorization: "Bearer " + token, "content-type": "audio/mp4" }, body: new Uint8Array(10) });
+    expect(r.status).toBe(429);
+    expect(r.headers.get("retry-after")).toBeTruthy();
+  });
   it("rate-limits receipt reads per key", async () => {
     const { token, deviceId } = await pair();
     const { key, id } = await mintKey(token);
     await notify(key, { title: "x", notificationId: "n" });
     expect((await f("/v1/receipts/n", { headers: auth(key) })).status).toBe(200);
-    const stub = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
-    await runInDurableObject(stub, async (_i, state) => {
-      for (let i = 0; i < 600; i++) state.storage.sql.exec("INSERT INTO rate (key_id, at) VALUES (?, ?)", "r:" + id, Date.now());
+    const stub: any = env.MAILBOX.get(env.MAILBOX.idFromName(deviceId));
+    await (runInDurableObject as any)(stub, async (inst: any) => {
+      inst.readHits.set(id, Array(600).fill(Date.now()));
     });
     const r = await f("/v1/receipts/n", { headers: auth(key) });
     expect(r.status).toBe(429);

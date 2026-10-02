@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Cloud relay.** A Cloudflare Worker (`relay/`, deployed at https://herald-relay.ivg-design.workers.dev) and Herald's outbound
+  `RelayClient` let a cloud agent notify this Mac through a notify-only key and a remote MCP connector (`send_notification`,
+  `get_receipt`, `wait_for_reply`, `herald_status`). Mute and quiet hours are enforced on the Mac; receipts are separate for
+  received, displayed, spoken, replied and suppressed. Settings > Cloud pairs the Mac, mints and revokes keys and shows usage.
+  Cloud banners have Reply and a Record button (on-device transcript, m4a to the agent). See docs/CLOUD.md.
+
 ## 1.4.1 (Build 8) - 2026-10-02
 
 ### Added

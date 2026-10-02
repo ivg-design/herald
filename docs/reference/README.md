@@ -18,7 +18,7 @@ If you are designing a banner:
 5. [actions.md](actions.md): buttons, rules, confirmation gates.
 6. [rive.md](rive.md) and [symbols.md](symbols.md) when you want motion.
 
-If you are integrating an app or an agent: [api.md](api.md), [cli.md](cli.md), [mcp-tools.md](mcp-tools.md).
+If you are integrating an app or an agent: [api.md](api.md), [cli.md](cli.md), [mcp-tools.md](mcp-tools.md). For an agent in the cloud: [../CLOUD.md](../CLOUD.md).
 
 ## Contents
 

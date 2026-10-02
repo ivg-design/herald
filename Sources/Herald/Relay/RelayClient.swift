@@ -97,6 +97,7 @@ public final class RelayClient {
     private var wake: CheckedContinuation<Void, Never>?
     private var pendingReceipts: [RelayReceipt] = []
     private var attempt = 0
+    private var lastStatusSignature = ""
     public var pingSeconds: TimeInterval = RelayDefaults.pingSeconds
     /// Test hook: replaces the sleep between reconnect attempts.
     var sleep: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
@@ -214,6 +215,7 @@ public final class RelayClient {
 
     private func sendHello(_ s: RelaySocket) async {
         let st = host?.relayStatusNow() ?? (muted: false, quiet: HeraldQuietStatus())
+        lastStatusSignature = "\(st.quiet.active)|\(st.quiet.until.map { Int($0.timeIntervalSince1970) } ?? 0)|\(st.muted)"
         var o: [String: Any] = ["type": "hello", "quietActive": st.quiet.active, "muted": st.muted]
         if let u = st.quiet.until { o["quietUntil"] = ISO8601DateFormatter().string(from: u) }
         try? await s.send(Self.json(o))
@@ -222,6 +224,10 @@ public final class RelayClient {
     /// Tells the relay the quiet-hours state changed (the menu, Settings or the clock).
     public func publishStatus() {
         guard let s = socket, let st = host?.relayStatusNow() else { return }
+        // Only a change is worth a message: every one counts against the relay's free-plan budget.
+        let signature = "\(st.quiet.active)|\(st.quiet.until.map { Int($0.timeIntervalSince1970) } ?? 0)|\(st.muted)"
+        guard signature != lastStatusSignature else { return }
+        lastStatusSignature = signature
         var o: [String: Any] = ["type": "status", "quietActive": st.quiet.active, "muted": st.muted]
         if let u = st.quiet.until { o["quietUntil"] = ISO8601DateFormatter().string(from: u) }
         Task { try? await s.send(Self.json(o)) }

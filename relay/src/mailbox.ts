@@ -15,6 +15,7 @@ export const MAX_AUDIO_BYTES = 1024 * 1024;
 export const AUDIO_URL_TTL_S = 3600;
 // Free-plan budget guards (docs/CLOUD.md "Free plan budget").
 export const DAILY_NOTIFICATIONS = 2000;
+export const DAILY_AUDIO_UPLOADS = 200;  // 200 x 1 MB x 7 days of retention stays under the free 10 GB-month of R2
 export const READ_LIMIT = 600;          // receipt / reply reads per 10 min per key
 export const SOFT_REQUEST_LIMIT = 90_000; // of the free plan's 100,000 DO requests per UTC day
 export const DAILY_POLL_SECONDS = 6000;   // long-poll time per day (the DO is awake while it waits)
@@ -92,7 +93,7 @@ export class Mailbox extends DurableObject<Env> {
     const good = row && !row.revoked_at && safeEqual(row.hash, await sha256Hex(p.secret));
     if (!good) return err(401, "unauthorized", "invalid or revoked agent key");
     if (row.scope !== "notify") return err(403, "scope", "this key has no notify scope");
-    this.sql("UPDATE keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
+    if (!row.last_used_at || Date.now() - row.last_used_at > 10 * 60_000) this.sql("UPDATE keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
     return { p, key: row };
   }
 
@@ -218,17 +219,39 @@ export class Mailbox extends DurableObject<Env> {
 
   private today(): string { return new Date().toISOString().slice(0, 10); }
 
-  private bump(field: string, n = 1) {
-    const k = "usage:" + this.today();
-    let row: Record<string, number> = {};
-    try { row = JSON.parse(this.getMeta(k) ?? "{}"); } catch { /* reset */ }
-    row[field] = (row[field] ?? 0) + n;
-    this.setMeta(k, JSON.stringify(row));
+  // Free-plan budget: the daily counters live in memory and are written at most once a minute (and by the hourly alarm), so a
+  // request does not cost a row write. An eviction loses at most a minute of counting.
+  private usageDay = "";
+  private usageRow: Record<string, number> = {};
+  private usagePersistedAt = 0;
+  private lastSeenMem = 0;
+  private readHits = new Map<string, number[]>();
+
+  private loadUsage(): Record<string, number> {
+    const day = this.today();
+    if (this.usageDay !== day) {
+      this.usageDay = day;
+      try { this.usageRow = JSON.parse(this.getMeta("usage:" + day) ?? "{}"); } catch { this.usageRow = {}; }
+    }
+    return this.usageRow;
   }
 
+  private bump(field: string, n = 1) {
+    const row = this.loadUsage();
+    row[field] = (row[field] ?? 0) + n;
+    if (Date.now() - this.usagePersistedAt > 60_000) this.persistUsage();
+  }
+
+  private persistUsage() {
+    this.setMeta("usage:" + this.usageDay, JSON.stringify(this.usageRow));
+    this.usagePersistedAt = Date.now();
+  }
+
+  /** Notifications and long-poll seconds are persisted when they change the budget decisions that matter. */
+  private usageField(field: string): number { return this.loadUsage()[field] ?? 0; }
+
   private usage() {
-    let row: Record<string, number> = {};
-    try { row = JSON.parse(this.getMeta("usage:" + this.today()) ?? "{}"); } catch { /* none */ }
+    const row = this.loadUsage();
     const requests = row.requests ?? 0;
     return {
       day: this.today(),
@@ -241,7 +264,7 @@ export class Mailbox extends DurableObject<Env> {
       queued: this.pending().length,
       storageBytes: this.ctx.storage.sql.databaseSize,
       limits: {
-        requestsPerDay: SOFT_REQUEST_LIMIT, freePlanRequestsPerDay: 100_000, notificationsPerDay: DAILY_NOTIFICATIONS,
+        audioUploadsPerDay: DAILY_AUDIO_UPLOADS, requestsPerDay: SOFT_REQUEST_LIMIT, freePlanRequestsPerDay: 100_000, notificationsPerDay: DAILY_NOTIFICATIONS,
         pollSecondsPerDay: DAILY_POLL_SECONDS, queueMax: QUEUE_MAX,
       },
       requestsPercent: Math.round((requests / SOFT_REQUEST_LIMIT) * 100),
@@ -256,20 +279,22 @@ export class Mailbox extends DurableObject<Env> {
 
   /** The relay's own cap, below the free plan's, so Cloudflare never has to cut the Mac off mid-day. */
   private budgetGuard(): Response | null {
-    const u = JSON.parse(this.getMeta("usage:" + this.today()) ?? "{}") as Record<string, number>;
-    if ((u.requests ?? 0) < SOFT_REQUEST_LIMIT) return null;
+    if (this.usageField("requests") < SOFT_REQUEST_LIMIT) return null;
     const retry = this.secondsToMidnight();
     return json(503, { error: "budget_exhausted", message: "the relay's daily request budget is used up; nothing queued is lost", retryAfterSeconds: retry }, { "retry-after": String(retry) });
   }
 
   private readLimit(key: KeyRow, isNotify: boolean): Response | null {
     if (isNotify) return null; // notify has its own, tighter limit
-    const now = Date.now(), id = "r:" + key.id;
-    const n = this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM rate WHERE key_id = ? AND at > ?", id, now - RATE_WINDOW_MS)[0].n;
-    if (n >= READ_LIMIT) {
+    // Reads are counted in memory: no row write per poll. (A restart forgives a window; the request budget still holds.)
+    const now = Date.now();
+    const hits = (this.readHits.get(key.id) ?? []).filter((t) => t > now - RATE_WINDOW_MS);
+    if (hits.length >= READ_LIMIT) {
+      this.readHits.set(key.id, hits);
       return json(429, { error: "rate_limited", message: `at most ${READ_LIMIT} receipt/reply reads per 10 minutes per key`, retryAfterSeconds: 60 }, { "retry-after": "60" });
     }
-    this.sql("INSERT INTO rate (key_id, at) VALUES (?, ?)", id, now);
+    hits.push(now);
+    this.readHits.set(key.id, hits);
     return null;
   }
 
@@ -277,8 +302,10 @@ export class Mailbox extends DurableObject<Env> {
 
   private sockets(): WebSocket[] { return this.ctx.getWebSockets(); }
 
+  private touch() { this.lastSeenMem = Date.now(); }
+
   private lastSeenMs(): number {
-    let t = Number(this.getMeta("last_seen") ?? 0);
+    let t = Math.max(this.lastSeenMem, Number(this.getMeta("last_seen") ?? 0));
     for (const ws of this.sockets()) {
       const a = this.ctx.getWebSocketAutoResponseTimestamp(ws);
       if (a) t = Math.max(t, a.getTime());
@@ -316,14 +343,15 @@ export class Mailbox extends DurableObject<Env> {
       quietUntil: typeof s.quietUntil === "string" ? s.quietUntil.slice(0, 40) : undefined,
       muted: s.muted === true,
     };
-    this.setMeta("status", JSON.stringify(clean));
+    const next = JSON.stringify(clean);
+    if (this.getMeta("status") !== next) this.setMeta("status", next);
   }
 
   private async httpStatus(req: Request): Promise<Response> {
     let b: Record<string, unknown>;
     try { b = (await req.json()) as Record<string, unknown>; } catch { return err(400, "invalid_request", "body must be JSON"); }
     this.applyStatus(b);
-    this.setMeta("last_seen", String(Date.now()));
+    this.touch();
     return json(200, { ok: true });
   }
 
@@ -367,8 +395,7 @@ export class Mailbox extends DurableObject<Env> {
       const retry = Math.max(1, Math.ceil((used.oldest + RATE_WINDOW_MS - now) / 1000));
       return json(429, { error: "rate_limited", message: `at most ${RATE_LIMIT} notifications per 10 minutes per key`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
-    const today = JSON.parse(this.getMeta("usage:" + this.today()) ?? "{}") as Record<string, number>;
-    if ((today.notifications ?? 0) >= DAILY_NOTIFICATIONS) {
+    if (this.usageField("notifications") >= DAILY_NOTIFICATIONS) {
       const retry = this.secondsToMidnight();
       return json(429, { error: "daily_cap", message: `at most ${DAILY_NOTIFICATIONS} notifications per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
     }
@@ -431,7 +458,7 @@ export class Mailbox extends DurableObject<Env> {
     if (typeof message !== "string" || message.length > 16 * 1024) return;
     let m: Record<string, unknown>;
     try { m = JSON.parse(message); } catch { return; }
-    this.setMeta("last_seen", String(Date.now()));
+    this.touch();
     this.bump("wsMessages");
     switch (m.type) {
       case "hello":
@@ -460,7 +487,7 @@ export class Mailbox extends DurableObject<Env> {
   private async httpReceipt(req: Request, forceKind?: string): Promise<Response> {
     let b: Record<string, unknown>;
     try { b = (await req.json()) as Record<string, unknown>; } catch { return err(400, "invalid_request", "body must be JSON"); }
-    this.setMeta("last_seen", String(Date.now()));
+    this.touch();
     if (forceKind) b = { ...b, kind: forceKind };
     const r = this.applyReceipt(b);
     return r === "ok" ? json(200, { ok: true }) : err(r === "unknown" ? 404 : 400, r === "unknown" ? "not_found" : "invalid_request", r === "unknown" ? "no such notification" : "invalid receipt");
@@ -557,8 +584,7 @@ export class Mailbox extends DurableObject<Env> {
     const first = this.noteByNid(key.id, nid);
     if (!first || first.created_at < Date.now() - DAY_MS) return err(404, "not_found", "no such notification (ids are kept for 24 hours)");
     let seconds = Math.min(MAX_LONG_POLL_S, Math.max(0, Number(waitParam ?? 0) || 0));
-    const spent = (JSON.parse(this.getMeta("usage:" + this.today()) ?? "{}") as Record<string, number>).pollSeconds ?? 0;
-    if (spent >= DAILY_POLL_SECONDS) seconds = 0; // the DO is awake while it waits; stop holding polls when the day's allowance is gone
+    if (this.usageField("pollSeconds") >= DAILY_POLL_SECONDS) seconds = 0; // the DO is awake while it waits; stop holding polls when the day's allowance is gone
     const started = Date.now();
     const deadline = Date.now() + seconds * 1000;
     let n: NoteRow = first;
@@ -594,6 +620,10 @@ export class Mailbox extends DurableObject<Env> {
     if (!n) return err(404, "not_found", "no such notification");
     const declared = Number(req.headers.get("content-length") ?? 0);
     if (declared > MAX_AUDIO_BYTES) return err(413, "too_large", `audio is larger than ${MAX_AUDIO_BYTES} bytes`);
+    if (this.usageField("audioUploads") >= DAILY_AUDIO_UPLOADS) {
+      const retry = this.secondsToMidnight();
+      return json(429, { error: "daily_cap", message: `at most ${DAILY_AUDIO_UPLOADS} voice replies per day`, retryAfterSeconds: retry }, { "retry-after": String(retry) });
+    }
     const body = await req.arrayBuffer();
     if (body.byteLength === 0) return err(400, "invalid_request", "empty audio");
     if (body.byteLength > MAX_AUDIO_BYTES) return err(413, "too_large", `audio is larger than ${MAX_AUDIO_BYTES} bytes`);
@@ -616,6 +646,7 @@ export class Mailbox extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     const now = Date.now();
+    this.persistUsage();
     this.expireSweep(now);
     this.sql("DELETE FROM notes WHERE created_at < ?", now - TTL_MS - 60 * 60 * 1000);
     this.sql("DELETE FROM rate WHERE at < ?", now - RATE_WINDOW_MS);

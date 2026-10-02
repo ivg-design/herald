@@ -154,3 +154,23 @@ Settings → Voice → **Quiet hours**: a list of windows `{days: [Mon…Sun], s
 Automated and delegated verification must never take focus from the user: no window activation, no Accessibility presses on live UI, no screenshots that need a window in front, no UI scripting. Verify through the HTTP/MCP API (`/v1/preview` returns rendered PNGs; `/v1/history`, `/v1/stacks`, `/v1/apps`), unit and snapshot tests (offscreen ImageRenderer), and headless Debug instances that only answer API calls. Where a UI path has no API, add a test hook or an endpoint rather than driving the UI.
 Rive without a window: `POST /v1/rive/check {app, component, fields?, simulate?}` loads a `rive` component in the same `RiveHostView` a banner uses, with no window, and reports `loaded`/`error` (the placeholder's text), the state machine's `inputs` by kind, the `applied` values the fields write, the file's `artboards`, whether the view `takesClicks`, and what the simulated pointer steps (`hoverIn`, `hoverOut`, `pressDown`, `pressUp`) wrote to inputs (`pointerWrites`) and which click actions ran (`clickedActions`). Offscreen `/v1/preview` draws a placeholder for Rive by design.
 Designer layout without a window: `GET|POST /v1/designer/snapshot?app=&width=&height=` draws the Designer's content offscreen (no window) as PNG. The live preview is a pane of its own, never below half the design area (`Core/DesignerSplit.swift`): on top of the editor below 1700 pt width, beside it above; the divider is draggable and remembered.
+
+## 11. Cloud relay (2026-10-02, user request: a cloud agent must be able to notify this Mac)
+Full description: [docs/CLOUD.md](docs/CLOUD.md). Source: `relay/` (Cloudflare Worker + Durable Object) and `Sources/Herald/Relay/`.
+- **Shape**: a Worker `herald-relay` with one Durable Object ("mailbox") per paired Mac. Herald keeps one **outbound** WebSocket (URLSessionWebSocketTask,
+  hibernation API on the relay side) and there is no inbound port. Agents reach the mailbox over HTTPS or remote MCP (`/mcp`, Streamable HTTP,
+  protocol 2025-06-18, four tools: `send_notification`, `get_receipt`, `wait_for_reply`, `herald_status`).
+- **Auth**: pairing with a one-time code returns a device token (Keychain); agent keys are minted only with it, scope `notify` only, stored hashed, revocable,
+  bound to their own device. Agent keys never reach `/v1/device/*`; there is no endpoint that changes permissions or settings.
+- **Text only**: the relay accepts a whitelist of fields (no command, callback, script, shortcut, buttons, url, image, audio, template); Herald rebuilds the
+  notification from a whitelist again and runs it through the normal notify path as app `cloud.<key name>` (manifest with Reply, Record and Open link; the real
+  Claude/Codex icon for those keys). Mute and quiet hours are enforced on the Mac (`RelayPolicy`); a held-back item sends a `suppressed` receipt with the reason.
+- **Receipts** are separate: `received` (relay, on enqueue), `displayed` (banner up), `spoken` (speech queue job finished, `SpeechQueue.Job.finished`), `replied`,
+  `suppressed`. Dedupe by the relay's delivery id, persisted 24 h on both sides.
+- **Replies**: Reply (text, the existing reply queue and `ReplyRecorder`) and Record (a `reply` action with `voice: true`): an inline record strip like the
+  reply and confirmation strips (focus invariant, section 8, holds; recording only starts on the button), AAC m4a 32 kbps mono, 60 s, on-device transcript,
+  upload to R2 (7-day lifecycle), signed one-hour `audioUrl` for the agent; History keeps the m4a and transcript (`replyAudioPath`, `replyTranscript`).
+- **Free plan**: designed to its limits (hibernation, auto-response pings every 5 minutes, no polling, 24 h TTL, per-key and daily caps, in-memory counters);
+  the budget table is in docs/CLOUD.md. Hitting a limit shows "Relay offline - limit reached" and loses nothing.
+- **Testing**: relay: vitest + miniflare (`relay/test`); Herald: `RelayTests.swift` with a fake socket, fake HTTP and fake recorder; live checks through a headless
+  Debug instance against `wrangler dev` (section 10: no UI is driven).

@@ -9,16 +9,23 @@ final class FakeRelaySocket: RelaySocket, @unchecked Sendable {
     private let lock = NSLock()
     private var incoming: [String]
     private(set) var sent: [String] = []
+    /// True: after the script, `receive` waits (a quiet connection) until `close()`.
+    var hold = false
+    private var closed = false
     init(incoming: [String]) { self.incoming = incoming }
 
     func send(_ text: String) async throws { record(text) }
     func receive() async throws -> String {
-        guard let next = pop() else { throw RelayError.transport("closed") }
-        return next
+        while true {
+            if let next = pop() { return next }
+            if !hold || isClosed { throw RelayError.transport("closed") }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
     private func record(_ t: String) { lock.lock(); sent.append(t); lock.unlock() }
     private func pop() -> String? { lock.lock(); defer { lock.unlock() }; return incoming.isEmpty ? nil : incoming.removeFirst() }
-    func close() {}
+    func close() { lock.lock(); closed = true; lock.unlock() }
+    private var isClosed: Bool { lock.lock(); defer { lock.unlock() }; return closed }
 
     var frames: [[String: Any]] {
         lock.lock(); defer { lock.unlock() }
@@ -192,6 +199,30 @@ final class RelayClientTests: XCTestCase {
         let (c, _) = make(host: host)
         await run(c, FakeRelaySocket(incoming: [welcome, "pong", "not json", #"{"type":"unknown"}"#]))
         XCTAssertTrue(host.delivered.isEmpty)
+    }
+
+    /// Every message costs budget on the relay's free plan: a status goes up only when it changed.
+    func testStatusIsPublishedOnlyWhenItChanges() async throws {
+        let host = FakeRelayHost()
+        let (c, _) = make(host: host)
+        let socket = FakeRelaySocket(incoming: [welcome])
+        socket.hold = true
+        let t = Task { await run(c, socket) }
+        try await Task.sleep(nanoseconds: 150_000_000)
+        func statusFrames() -> Int { socket.frames.filter { $0["type"] as? String == "status" }.count }
+        c.publishStatus(); c.publishStatus(); c.publishStatus()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(statusFrames(), 0, "nothing changed since the hello")
+        host.quiet = HeraldQuietStatus(active: true, speech: true, sounds: true, banners: false, until: Date().addingTimeInterval(600), source: "adhoc")
+        c.publishStatus(); c.publishStatus()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(statusFrames(), 1)
+        host.muted = true
+        c.publishStatus()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(statusFrames(), 2)
+        socket.close()
+        await t.value
     }
 
     func testBackoffGrowsAndCapsAtFiveMinutes() {

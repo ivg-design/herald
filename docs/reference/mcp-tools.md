@@ -352,3 +352,15 @@ argument is a tool error before any request is made. Destructive tools carry `de
 4. `list_shortcuts` and `add_action_rule` for buttons of your own.
 5. `put_template` with `setAsDefault: true`.
 6. `send_test` to see the real banner.
+
+## Cloud relay tools
+
+| Tool | Does |
+|---|---|
+| `relay_status` | Paired or not, online or not, the relay and connector URLs, the agent keys (never a secret) and the last 20 relay items with their receipt states. |
+| `relay_usage` | Today's relay traffic against the Cloudflare free plan. |
+| `create_agent_key` | `{name, client?}`: mints a notify-only key. The reply holds the key once and a connector block (URL and Bearer) for Claude, Codex and any remote MCP client. |
+| `revoke_agent_key` | `{id}`: revokes a key. |
+
+These manage the keys on this Mac's side. The cloud agent uses the relay's own remote MCP endpoint, which has exactly four tools
+(`send_notification`, `get_receipt`, `wait_for_reply`, `herald_status`): [../CLOUD.md](../CLOUD.md).

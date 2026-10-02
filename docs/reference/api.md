@@ -400,3 +400,24 @@ See [actions.md](actions.md#callbacks).
 
 [../../clients/README.md](../../clients/README.md): Python (`herald.py`) and Node (`herald.js`), stdlib only; the
 Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-tools.md](mcp-tools.md)).
+
+## Cloud relay
+
+`/v1/relay/*` on the loopback API (same bearer token) pairs this Mac with the cloud relay and manages agent keys; see
+[../CLOUD.md](../CLOUD.md). The relay itself is a separate, remote API (`relay/`).
+
+| Route | Does |
+|---|---|
+| `GET /v1/relay/status` | `{paired, state, online, relayURL, mcpURL, deviceId, lastSeenAt, keys, log}`; `log` is the last 20 relay items with `displayed`, `spoken`, `replied`, `suppressed`. |
+| `POST /v1/relay/pair` | Pairs this Mac with the relay: asks for a one-time code, redeems it, stores the device token in the Keychain. Replies `{paired, code, deviceId}`. |
+| `POST /v1/relay/unpair` | Wipes the mailbox on the relay (keys, queue, audio) and forgets the token. |
+| `GET /v1/relay/keys` | The agent keys: `id`, `name`, `client`, `scope` (always `notify`), `createdAt`, `lastUsedAt`, `revokedAt`. Never a secret. |
+| `POST /v1/relay/keys` | `{name, client?}` (`client`: `claude`, `codex`, `other`) mints a notify-only key. The reply has `key` (shown once), `mcpURL` and `connectorConfig`, the block to paste into the agent. 409 when the name is taken. |
+| `DELETE /v1/relay/keys/{id}` | Revokes the key at once. |
+| `GET /v1/relay/usage` | Today's relay traffic against the free plan: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
+
+Errors: 409 when not paired, 429 when the relay reports a limit, 502 when the relay cannot be reached.
+
+A notification from the cloud arrives as an ordinary notification of the app `cloud.<key name>` with `id` = the relay's delivery id, so it
+appears in `/v1/history` and `/v1/apps` like any other. A `reply` action may carry `voice: true` (the Record button): the banner shows the
+inline record strip instead of a text field.
