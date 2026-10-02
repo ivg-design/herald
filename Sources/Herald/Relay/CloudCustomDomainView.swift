@@ -27,7 +27,7 @@ struct CloudCustomDomainView: View {
                     Text(zones.isEmpty ? "Load your zones\u{2026}" : "Choose a zone").tag("")
                     ForEach(zones, id: \.name) { Text($0.name).tag($0.name) }
                 }
-                .onChange(of: zone) { _, z in if !z.isEmpty, hostname.isEmpty || !hostname.hasSuffix(z) { hostname = RelayCloudConfig.CustomDomain.suggestedHostname(zone: z) } }
+                .onChange(of: zone) { z in if !z.isEmpty, hostname.isEmpty || !hostname.hasSuffix(z) { hostname = RelayCloudConfig.CustomDomain.suggestedHostname(zone: z) } }
                 Button("Load zones") { run { zones = try await relay.relayZones().zones; if zones.isEmpty { message = "The token sees no zones." } } }
                     .disabled(busy || !relay.hasCloudflareToken)
             }

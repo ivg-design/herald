@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.1 (Build 11) - 2026-10-02
+
+### Added
+
+- **Custom domain for the relay (optional).** Settings → Cloud → Advanced → Custom domain: load the account's zones,
+  pick one, accept the suggested `herald.<zone>`, and Herald attaches a Workers Custom Domain, adds a configuration
+  rule that switches Cloudflare's Browser Integrity Check off for that hostname only, adds a narrow WAF skip, warns
+  about Bot Fight Mode (free-plan zones must turn it off by hand), waits for the address and re-points itself,
+  keeping the pairing. Needs a token with the zone permissions (Zone Read, DNS Edit, Workers Routes Edit, Zone Settings
+  Edit, Config Settings Edit, Zone WAF Edit); a token without them stops with a clear message. `relay_zones` and
+  `relay_settings.customDomain` over MCP/API. OAuth connectors are bound to the URL they were approved on and must be
+  re-added after a hostname change.
+- `relay_test` probes the hostname with Python's default `Python-urllib/3.12` user agent and reports whether the
+  Browser Integrity Check is active.
+
+### Changed
+
+- Cloud-agent instructions (Settings, `relay_instructions`, docs/CLOUD.md, the agent quickstart) now say: send a
+  custom User-Agent. Cloudflare rejects Python's default `Python-urllib/3.x` with Error 1010 on every workers.dev
+  hostname before the request reaches the relay; any other value works, so a custom domain is not required.
+
+1123 tests · 92 relay tests.
+
 ## 1.6.0 (Build 10) - 2026-10-02
 
 ### Added
