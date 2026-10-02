@@ -187,17 +187,18 @@ struct CloudSettingsView: View {
     @ViewBuilder private var connectorSection: some View {
         let _ = ticker.tick
         Section("Connector approvals") {
-            Text("A connector such as ChatGPT asks to connect from its own settings; the request shows up here and as a banner. Approve it there, or type the code on the page that opened in your browser.")
+            Text("A connector such as ChatGPT asks to connect from its own settings; the request shows up here and as a banner. Approve it there, or type the code on the page that opened in your browser. An agent with no browser prints a code like BDFG-HJKM: approve only if it matches what the agent showed you.")
                 .font(.caption).foregroundStyle(.secondary)
             ForEach(relay.pendingConsents) { c in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(c.clientName) wants to connect")
-                        Text("returns to \(c.redirectHost ?? "its own site")").font(.caption).foregroundStyle(.secondary)
+                        Text(c.isDevice ? "\(c.clientName) wants to send you notifications" : "\(c.clientName) wants to connect")
+                        Text(c.isDevice ? "agent without a browser \u{00B7} approval code \(c.spacedCode) for the /activate page"
+                                        : "returns to \(c.redirectHost ?? "its own site")").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(c.spacedCode).font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled)
-                        .accessibilityLabel("Approval code \(c.code)")
+                    Text(c.isDevice ? (c.userCode ?? c.code) : c.spacedCode).font(.system(size: 22, weight: .semibold, design: .monospaced)).textSelection(.enabled)
+                        .accessibilityLabel(c.isDevice ? "Code the agent printed \(c.userCode ?? "")" : "Approval code \(c.code)")
                     Button("Approve") { Task { await relay.decideConsent(id: c.id, approve: true) } }
                         .heraldHelp(name: "Approve connector", detail: "lets this connector send notifications to this Mac")
                     Button("Deny", role: .destructive) { Task { await relay.decideConsent(id: c.id, approve: false) } }

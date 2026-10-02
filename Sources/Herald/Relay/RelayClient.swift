@@ -69,9 +69,12 @@ public protocol RelayHost: AnyObject {
     func relayConsentRequested(_ consent: RelayConsent)
     /// The request was settled somewhere else (the 6-digit code on the consent page, the page's Deny, a timeout).
     func relayConsentResolved(id: String, status: String)
+    /// The notification carried an acceptable `icon` (an https URL or a small data: image): make it the sender's icon.
+    func relayApplyIcon(_ source: String, for key: RelayKeyRef) async
 }
 
 public extension RelayHost {
+    func relayApplyIcon(_ source: String, for key: RelayKeyRef) async {}
     func relayConsentRequested(_ consent: RelayConsent) {}
     func relayConsentResolved(id: String, status: String) {}
 }
@@ -286,6 +289,7 @@ public final class RelayClient {
         }
         store.logEntry(env.id, create: RelayLogEntry(id: env.id, key: env.key.name, title: env.payload.title, receivedAt: Date())) { _ in }
         await host.relayEnsureIssuer(env.key)
+        if let icon = RelayPolicy.iconSource(for: env) { await host.relayApplyIcon(icon, for: env.key) }
         let inputs = host.relayInputs(for: env)
         switch RelayPolicy.decide(muted: inputs.muted, quiet: inputs.quiet) {
         case .suppress(let reason):

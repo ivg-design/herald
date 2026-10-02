@@ -116,11 +116,27 @@ final class RelayController: RelayHost, RelayBackend {
 
     private func registerIssuer(name: String, client: String) async {
         guard let agent = AgentIdentity(cloudKeyName: name, client: client) else { return }
-        let png = await AgentInstall.iconPNG(for: agent, picked: nil)
+        let custom = RelayIcon.customFile(slug: agent.slug, folder: AgentIssuer.iconsFolder(in: controller.supportDirectory))
+        let png = (try? Data(contentsOf: custom)) ?? (await AgentInstall.iconPNG(for: agent, picked: nil))
         _ = try? AgentIssuer.register(agent, iconPNG: png, supportDirectory: controller.supportDirectory, registry: controller.registry,
                                       manifests: controller.manifests, templates: controller.templates)
         controller.changed()
     }
+
+    /// The icon a notification brought, applied once per distinct value for this key. The user's own icon (set in Settings) wins:
+    /// `AgentIssuer.register` leaves one that does not live in Herald's icon folder alone.
+    func relayApplyIcon(_ source: String, for key: RelayKeyRef) async {
+        guard appliedIcons[key.id] != source, let agent = AgentIdentity(cloudKeyName: key.name, client: key.client) else { return }
+        appliedIcons[key.id] = source
+        guard let data = await RelayIcon.bytes(from: source), let png = RelayIcon.png(from: data) else { return }
+        let folder = AgentIssuer.iconsFolder(in: controller.supportDirectory)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? png.write(to: RelayIcon.customFile(slug: agent.slug, folder: folder), options: .atomic)
+        _ = try? AgentIssuer.register(agent, iconPNG: png, supportDirectory: controller.supportDirectory, registry: controller.registry,
+                                      manifests: controller.manifests, templates: controller.templates)
+        controller.changed()
+    }
+    private var appliedIcons: [String: String] = [:]
 
     func relayDeliver(_ notification: HeraldNotification) async throws { _ = try await controller.notify(notification) }
 
@@ -154,12 +170,18 @@ final class RelayController: RelayHost, RelayBackend {
     /// banner without answering leaves the request pending; its code is still in Settings > Cloud.
     private func presentConsentBanner(_ c: RelayConsent) async {
         _ = try? controller.register(HeraldAppRegistration(app: Self.consentApp, appName: "Herald connectors"))
-        var n = HeraldNotification(app: Self.consentApp, id: c.id, title: "Connector request", body: "\(c.clientName) is asking to connect to Herald.")
+        let body = c.isDevice
+            ? "Approve \(c.clientName) to send you notifications? Code \(c.userCode ?? "")"
+            : "\(c.clientName) is asking to connect to Herald."
+        var n = HeraldNotification(app: Self.consentApp, id: c.id, title: "Connector request", body: body)
         n.persistent = true
         n.metadata = .object(["source": .string("connector-approval")])
         guard (try? await controller.notify(n)) != nil else { return }
         let host = c.redirectHost ?? "its own site"
-        controller.confirmations.ask(.connectorConsent(name: c.clientName, host: host), app: Self.consentApp, id: c.id) { [weak self] choice in
+        let question: BannerConfirmation = c.isDevice
+            ? .connectorConsent(name: c.clientName, host: host, code: c.userCode)
+            : .connectorConsent(name: c.clientName, host: host)
+        controller.confirmations.ask(question, app: Self.consentApp, id: c.id) { [weak self] choice in
             switch choice {
             case .approve: Task { await self?.decideConsent(id: c.id, approve: true) }
             case .deny: Task { await self?.decideConsent(id: c.id, approve: false) }

@@ -290,10 +290,101 @@ final class RelayPolicyTests: XCTestCase {
         XCTAssertNil(n.speak)
     }
 
-    func testExpectReplyMakesItPersistentWithAQuestionStatus() {
-        let n = RelayPolicy.notification(for: env(["title": "T", "expectReply": true]), silenceSpeech: false)
+    func testExpectReplyOnlyAddsReplyAndRecord() {
+        let plain = RelayPolicy.notification(for: env(["title": "T", "status": "done"]), silenceSpeech: false)
+        let ask = RelayPolicy.notification(for: env(["title": "T", "status": "done", "expectReply": true]), silenceSpeech: false)
+        XCTAssertEqual(ask.title, plain.title)
+        XCTAssertEqual(ask.persistent, plain.persistent, "persistence is the same with and without expectReply")
+        XCTAssertEqual(ask.presentation, plain.presentation)
+        XCTAssertEqual(ask.template, plain.template)
+        XCTAssertEqual(metaString(ask, "status"), "done", "the badge is the sender's own")
+        XCTAssertEqual(ask.actionIds, ["reply", "record"])
+        // No status of its own either: it must not become a question.
+        XCTAssertNil(metaString(RelayPolicy.notification(for: env(["title": "T", "expectReply": true]), silenceSpeech: false), "status"))
+    }
+
+    func testARelayNotificationStaysUntilDismissedByDefault() {
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T"]), silenceSpeech: false).persistent, true)
+        let n = RelayPolicy.notification(for: env(["title": "T", "speak": true, "persistent": true]), silenceSpeech: false)
         XCTAssertEqual(n.persistent, true)
-        XCTAssertEqual(metaString(n, "status"), "question")
+        XCTAssertNotNil(n.speak)
+        XCTAssertNil(n.timeout)
+    }
+
+    func testPersistentFalseAndTimeoutSecondsReachHerald() {
+        let off = RelayPolicy.notification(for: env(["title": "T", "persistent": false]), silenceSpeech: false)
+        XCTAssertEqual(off.persistent, false)
+        let t = RelayPolicy.notification(for: env(["title": "T", "timeoutSeconds": 20]), silenceSpeech: false)
+        XCTAssertNil(t.persistent, "a timeout without persistent: Herald's own default applies, not forever")
+        XCTAssertEqual(t.timeout, 20)
+        let both = RelayPolicy.notification(for: env(["title": "T", "timeoutSeconds": 20, "persistent": true]), silenceSpeech: false)
+        XCTAssertEqual(both.persistent, true)
+        XCTAssertNil(both.timeout, "persistent wins over a timeout")
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "timeoutSeconds": 99999, "persistent": false]), silenceSpeech: false).timeout, 3600)
+    }
+
+    func testSoundIsANameNeverAPath() {
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "sound": "Glass"]), silenceSpeech: false).sound, "Glass")
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "sound": "none"]), silenceSpeech: false).sound, "none")
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "sound": "default"]), silenceSpeech: false).sound, "default")
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "sound": "/System/Library/Sounds/Glass.aiff"]), silenceSpeech: false).sound)
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "sound": "../../etc/passwd"]), silenceSpeech: false).sound)
+    }
+
+    func testSpeakAsTextAndVoiceAndSpeedBesideIt() {
+        let t = RelayPolicy.notification(for: env(["title": "T", "speak": "Build finished"]), silenceSpeech: false)
+        XCTAssertEqual(t.speak?.text, "Build finished")
+        let v = RelayPolicy.notification(for: env(["title": "T", "speak": true, "voice": "bf_emma", "speed": 1.3]), silenceSpeech: false)
+        XCTAssertEqual(v.speak?.voice, "bf_emma")
+        XCTAssertEqual(v.speak?.speed, 1.3)
+        let alone = RelayPolicy.notification(for: env(["title": "T", "voice": "am_michael"]), silenceSpeech: false)
+        XCTAssertEqual(alone.speak?.voice, "am_michael", "a voice alone turns speaking on")
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "speak": true, "voice": "x y; rm"]), silenceSpeech: false).speak?.voice)
+    }
+
+    func testPresentationVoiceAndBothImplySpeech() {
+        let v = RelayPolicy.notification(for: env(["title": "T", "presentation": "voice"]), silenceSpeech: false)
+        XCTAssertEqual(v.presentation, .voice)
+        XCTAssertNotNil(v.speak)
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "presentation": "both", "speak": "hi"]), silenceSpeech: false).presentation, .both)
+        XCTAssertEqual(RelayPolicy.notification(for: env(["title": "T", "presentation": "banner"]), silenceSpeech: false).presentation, .banner)
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "presentation": "popup"]), silenceSpeech: false).presentation)
+        // quiet hours that silence speech never leave a voice-only notification with nothing: the banner shows
+        let q = RelayPolicy.notification(for: env(["title": "T", "presentation": "voice", "speak": true]), silenceSpeech: true)
+        XCTAssertNil(q.speak)
+        XCTAssertNil(q.presentation)
+    }
+
+    func testPriorityGroupSubtitleImageAndTags() {
+        let n = RelayPolicy.notification(for: env(["title": "T", "priority": "high", "group": "ci", "subtitle": "main", "imageURL": "https://example.com/a.png", "tags": ["ci", " main ", ""]]), silenceSpeech: false)
+        XCTAssertEqual(n.priority, "high")
+        XCTAssertEqual(n.group, "ci")
+        XCTAssertEqual(n.subtitle, "main")
+        XCTAssertEqual(n.image, "https://example.com/a.png")
+        if case .object(let o)? = n.metadata { XCTAssertEqual(o["tags"], .array([.string("ci"), .string("main")])) } else { XCTFail("no metadata") }
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "imageURL": "http://example.com/a.png"]), silenceSpeech: false).image)
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "imageURL": "file:///etc/passwd"]), silenceSpeech: false).image)
+        XCTAssertNil(RelayPolicy.notification(for: env(["title": "T", "priority": "normal"]), silenceSpeech: false).priority)
+    }
+
+    func testIconSourceAcceptsOnlyHttpsAndSmallDataImages() {
+        XCTAssertEqual(RelayPolicy.iconSource(for: env(["title": "T", "icon": "https://example.com/i.png"])), "https://example.com/i.png")
+        XCTAssertNotNil(RelayPolicy.iconSource(for: env(["title": "T", "icon": "data:image/png;base64,iVBORw0KGgo="])))
+        XCTAssertNil(RelayPolicy.iconSource(for: env(["title": "T", "icon": "http://example.com/i.png"])))
+        XCTAssertNil(RelayPolicy.iconSource(for: env(["title": "T", "icon": "/Users/me/i.png"])))
+        XCTAssertNil(RelayPolicy.iconSource(for: env(["title": "T", "icon": "file:///etc/passwd"])))
+        XCTAssertNil(RelayPolicy.iconSource(for: env(["title": "T"])))
+    }
+
+    func testTheRelayDropsEveryExecutableFieldEvenIfAHostileRelaySendsIt() {
+        let n = RelayPolicy.notification(for: env(["title": "T", "command": "rm -rf /", "buttons": [["label": "x", "command": "ls"]], "callback": ["url": "https://evil.example"],
+                                                    "script": "a.sh", "shortcut": "Run", "audio": "/tmp/a.wav", "url": "https://evil.example", "template": "x"]), silenceSpeech: false)
+        XCTAssertNil(n.buttons)
+        XCTAssertNil(n.url)
+        XCTAssertNil(n.template)
+        XCTAssertNil(n.reminder)
+        let json = String(data: try! JSONEncoder().encode(n), encoding: .utf8)!
+        for bad in ["rm -rf", "evil.example", "a.sh", "Run", "a.wav"] { XCTAssertFalse(json.contains(bad), bad) }
     }
 }
 
@@ -772,6 +863,37 @@ final class RelayConsentTests: XCTestCase {
         XCTAssertFalse(c.offers(.always), "no lasting approval for a connector")
         let p = try? BannerConfirmation.fromPreview("connectorConsent", defaultName: "ChatGPT")
         XCTAssertEqual(p?.kind, .connectorConsent)
+    }
+
+    func testADeviceConsentCarriesTheUserCodeToTheHostAndTheList() async {
+        let host = ConnectorConsentHost()
+        let frame = #"{"type":"consent","id":"d1","clientId":"hc_1","clientName":"Cloud agent","redirectHost":"","scope":"notify","code":"042917","status":"pending","flow":"device","userCode":"BDFG-HJKM","createdAt":"2026-10-02T10:00:00.000Z","expiresAt":"2099-10-02T10:10:00.000Z"}"#
+        try? await make(host).session(FakeRelaySocket(incoming: [welcome, frame]))
+        XCTAssertEqual(host.requested.count, 1)
+        let c = host.requested[0]
+        XCTAssertTrue(c.isDevice)
+        XCTAssertEqual(c.userCode, "BDFG-HJKM")
+        XCTAssertEqual(c.code, "042917", "the 6-digit approval code stays for the /activate page")
+        XCTAssertEqual(c.clientName, "Cloud agent")
+        XCTAssertTrue(c.isPending())
+        // the Settings list (GET /v1/device/consents) decodes the same fields
+        struct R: Decodable { var consents: [RelayConsent] }
+        let list = try? JSONDecoder().decode(R.self, from: Data(#"{"consents":[\#(frame)]}"#.utf8))
+        XCTAssertEqual(list?.consents.first?.userCode, "BDFG-HJKM")
+        // a browser-flow consent from the same relay has no user code
+        XCTAssertFalse(RelayConsent(id: "i", clientName: "X", code: "123456", flow: "code").isDevice)
+        XCTAssertFalse(RelayConsent(id: "i", clientName: "X", code: "123456").isDevice, "an older relay sends neither flow nor userCode")
+    }
+
+    func testTheDeviceBannerAsksToApproveWithTheCode() {
+        let c = BannerConfirmation.connectorConsent(name: "Cloud agent", host: "its own site", code: "BDFG-HJKM")
+        XCTAssertEqual(c.kind, .connectorConsent)
+        XCTAssertEqual(c.title, "Approve Cloud agent to send you notifications? Code BDFG-HJKM")
+        XCTAssertEqual(c.buttons.map(\.title), ["Approve", "Deny"])
+        XCTAssertTrue(c.detail.contains("BDFG-HJKM"))
+        XCTAssertTrue(c.detail.contains("Nothing else"))
+        let p = try? BannerConfirmation.fromPreview(["kind": "connectorConsent", "code": "BDFG-HJKM"], defaultName: "Cloud agent")
+        XCTAssertEqual(p?.title, c.title)
     }
 
     func testTheConsentStripResolvesOnTheBannerAndCancelLeavesItPending() {

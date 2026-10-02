@@ -165,8 +165,17 @@ public extension BannerConfirmation {
 
     /// A cloud connector (ChatGPT, Claude, ...) asks to connect through the relay's OAuth flow. Approving mints a notify-only
     /// key for it. Not answering leaves the request pending (its 6-digit code is in Settings > Cloud).
-    static func connectorConsent(name: String, host: String) -> BannerConfirmation {
-        BannerConfirmation(
+    /// With `code`, the request comes from an agent that has no browser (the device flow): the agent printed that code, and the
+    /// question shows it so the user can match the two before approving.
+    static func connectorConsent(name: String, host: String, code: String? = nil) -> BannerConfirmation {
+        if let code, !code.isEmpty {
+            return BannerConfirmation(
+                kind: .connectorConsent,
+                title: "Approve \(short(name, limit: 40)) to send you notifications? Code \(code)",
+                detail: "\(name) can send notifications to this Mac and read their receipts and your replies. Nothing else: no commands, files or settings. The agent should have shown you the code \(code). Approve only if it matches and you just started this connection.",
+                buttons: [.init(.approve, "Approve", .primary), .init(.deny, "Deny", .cancel)])
+        }
+        return BannerConfirmation(
             kind: .connectorConsent,
             title: "Let \(short(name, limit: 40)) send you notifications?",
             detail: "\(name) can send notifications to this Mac and read their receipts and your replies. Nothing else: no commands, files or settings. It returns to \(host). Approve only if you just started this connection.",
@@ -237,7 +246,7 @@ public extension BannerConfirmation {
         case .destructiveAction:
             return .destructiveAction(label: try text("label") ?? "Delete", name: name)
         case .connectorConsent:
-            return .connectorConsent(name: name, host: host)
+            return .connectorConsent(name: name, host: host, code: try text("code"))
         case .remindersError, .remindersDenied:
             return .remindersError(message: try text("message") ?? "Herald does not have permission to use Reminders.",
                                    canOpenSettings: kind == .remindersDenied)

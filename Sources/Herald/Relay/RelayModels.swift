@@ -39,6 +39,16 @@ public struct RelayEnvelope: Codable, Equatable, Sendable {
         public var speak: JSONValue?
         public var expectReply: Bool?
         public var allowVoiceReply: Bool?
+        // Presentation (non-executable; docs/CLOUD.md "Presentation fields"). Every one is optional.
+        public var persistent: Bool?
+        public var timeoutSeconds: Double?
+        public var sound: String?
+        public var voice: String?
+        public var speed: Double?
+        public var presentation: String?
+        public var icon: String?
+        public var imageURL: String?
+        public var tags: [String]?
     }
     public var type: String
     /// The relay's id for this delivery (`r_<hex>`): the Herald notification id, the receipt key and the dedupe key.
@@ -107,12 +117,21 @@ public struct RelayConsent: Codable, Equatable, Sendable, Identifiable {
     public var status: String
     public var createdAt: String?
     public var expiresAt: String?
+    /// `device` for an agent with no browser (RFC 8628), `code` for the browser flow. Absent from an older relay.
+    public var flow: String?
+    /// Device flow only: the code the agent printed (`BDFG-HJKM`), shown so the user can match it. `code` stays the 6-digit
+    /// approval code for the relay's /activate page.
+    public var userCode: String?
 
     public init(id: String, clientId: String? = nil, clientName: String, redirectHost: String? = nil, scope: String? = "notify",
-                code: String, status: String = "pending", createdAt: String? = nil, expiresAt: String? = nil) {
+                code: String, status: String = "pending", createdAt: String? = nil, expiresAt: String? = nil,
+                flow: String? = nil, userCode: String? = nil) {
         self.id = id; self.clientId = clientId; self.clientName = clientName; self.redirectHost = redirectHost; self.scope = scope
         self.code = code; self.status = status; self.createdAt = createdAt; self.expiresAt = expiresAt
+        self.flow = flow; self.userCode = userCode
     }
+
+    public var isDevice: Bool { flow == "device" && userCode?.isEmpty == false }
 
     public var expiresDate: Date? {
         guard let expiresAt else { return nil }
