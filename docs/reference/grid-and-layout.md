@@ -28,6 +28,7 @@ and how empty rows and columns collapse. Per-component sizing is on each compone
 | `grid` | object | required for v2 | See below. |
 | `cells` | array | `[]` | At most 100. |
 | `collapseEmpty` | boolean | `true` | Template default for components without their own `emptyBehavior`. |
+| `onClick` | string | `url` | What clicking the banner does: `url` opens the notification's link, `openApp` brings the issuing application to the front (see [actions.md](actions.md#open-app)). |
 | `actionRules` | array | `[]` | Rules over the issuer's actions: [actions.md](actions.md). |
 | `extra` | object of strings | `{}` | Your own key/values. Bindings read them as `{extra.key}`; every action receives them as `extra`. Keys are letters, digits, `_`, `.`, `-`. |
 | `accentColor` | string | system accent | Hex colour. Tints `accent`-coloured components and default buttons. Hex only here. |

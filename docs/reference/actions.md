@@ -16,7 +16,7 @@ merged payload. The short guide is [../ACTIONS.md](../ACTIONS.md); this page is 
 |---|---|---|---|
 | `id` | string | all | Stable name. Rules (`match`) and components (`actionRef`) refer to it. Defaults to a slug of the label (`"Mark as Read"` becomes `mark-as-read`). |
 | `label` | string | all | Button text; `{tokens}` are filled; falls back to the `id` if that leaves nothing. Required (defaults to `id` if omitted). |
-| `kind` | string | all | `url`, `callback`, `command`, `script`, `shortcut`, `dismiss`, `snooze`. May be omitted when exactly one of `shortcut`, `script`, `command`, `callback`, `url` is present (checked in that order). |
+| `kind` | string | all | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `dismiss`, `snooze`. May be omitted when exactly one of `shortcut`, `script`, `command`, `callback`, `url`, `bundleId`/`path` is present (checked in that order). |
 | `style` | string | all | `normal`, `prominent`, `destructive` (asks for confirmation before running), `cancel`; `default` means `normal`. |
 | `url` | string | `url` | An http, https or mailto URL; may contain `{tokens}` in a template action. |
 | `callback` | object | `callback` | `{url?, payload?}`; `url` defaults to the app's registered `callbackURL`. |
@@ -25,6 +25,8 @@ merged payload. The short guide is [../ACTIONS.md](../ACTIONS.md); this page is 
 | `shortcut` | string | `shortcut` | Name of an installed Apple Shortcut. |
 | `input` | string | `shortcut` | Text with `{tokens}` handed to the Shortcut. Omit to hand it the full merged payload as JSON. |
 | `snoozeMinutes` | integer 1 to 10080 | `snooze` | Minutes; omitted means the built-in snooze **menu** (5 min, 15 min, 1 h, Tomorrow 9:00). |
+| `bundleId` | string | `openApp` | Bundle identifier of the application to bring to the front (`com.ivg.webwatcher`). Tried first. |
+| `path` | string | `openApp` | Path of the application (`/Applications/WebWatcher.app`; `~` is expanded; must end in `.app`). Tried after `bundleId`. |
 | `symbol` | name or object | all | **Available from 1.3.** An SF Symbol on this action's button. See [symbols.md](symbols.md). |
 
 v1 buttons (`label` plus one of `url`, `command`, `callback`) are accepted everywhere an action is.
@@ -38,8 +40,39 @@ v1 buttons (`label` plus one of `url`, `command`, `callback`) are accepted every
 | `command` | Runs `/bin/zsh -lc "<command>"` in your home folder. The command text is **never interpolated**; the data arrives on stdin and in `HERALD_*` variables. |
 | `script` | Runs a file from the scripts folder with the merged payload JSON on stdin. `.sh`/`.zsh` run through zsh, `.bash` bash, `.py` python3, `.rb` ruby, `.pl` perl, `.scpt`/`.applescript` osascript; otherwise the file must be executable. |
 | `shortcut` | `/usr/bin/shortcuts run "<name>" --input-path <temp file>`; the file holds `input` (filled with fields, `.txt`) or the merged payload JSON (`.json`). |
+| `openApp` | Brings an application to the front. See [Open app](#open-app). |
 | `dismiss` | Closes the banner; the notification stays in History. |
 | `snooze` | Hides the banner and brings it back after `snoozeMinutes`, or opens the menu when there are none. |
+
+### Open app
+
+`openApp` activates an application: a click on the button is the user's own, so the application it opens comes to
+the front, while Herald itself stays in the background (nothing here activates Herald). It runs no code, so it
+needs no confirmation, from the issuer or from a template. Which application is opened, the first of these that
+exists on this Mac:
+
+1. the action's own `bundleId`;
+2. the action's own `path`;
+3. the manifest's `appBundleId`;
+4. the manifest's `appPath`;
+5. the bundle id the issuer registered with (`POST /v1/register`, `bundleId`);
+6. the application named like the manifest's `appName` (looked for as `<appName>.app` in `/Applications`,
+   `/Applications/Utilities`, `/System/Applications` and `~/Applications`).
+
+An action with neither `bundleId` nor `path` therefore opens the **issuing application**. If none of them
+resolves, nothing happens: the banner stays, shows "Action failed - no installed application found", and History
+keeps the note "<label>: no installed application found" next to the item. `validate_template` reports the same
+case as a **warning** (it is not an error: the template may be written for another Mac).
+
+Where it can be written:
+
+| Place | Form |
+|---|---|
+| Template rule | `{"add":{"id":"open-ww","label":"Open WebWatcher","kind":"openApp"}}` (MCP: `add_action_rule`) |
+| Manifest action (issuer) | `{"id":"open","label":"Open WebWatcher","kind":"openApp"}` with optional `bundleId` / `path`; the manifest also takes `appBundleId` and `appPath` |
+| Payload button (issuer) | `{"label":"Open","openApp":{"bundleId":"com.apple.mail"}}` |
+| Banner click | template option `"onClick": "openApp"` (default `"url"`: open the notification's link) |
+| Designer | Actions tab > Add action > Open app (bundle id and path fields, "Choose app..." picker); the action editor offers it for any action |
 
 Every process action gets a 30 second timeout (SIGTERM, then SIGKILL two seconds later) and its output goes to
 `~/Library/Logs/Herald/actions.log` (one backup generation). A second click on a banner whose action is still
@@ -48,7 +81,7 @@ running is ignored. A failure shows "Action failed" in the banner with a short r
 ## Issuer actions and template actions
 
 - **Issuer actions** come from the notification (`actions`, alias `buttons`) or from the manifest by id
-  (`actionIds`). They can only be `url`, `callback`, `command` or `dismiss`.
+  (`actionIds`). They can only be `url`, `callback`, `command`, `openApp` or `dismiss`.
 - **Template actions** are yours: `script`, `shortcut`, `snooze`, and `command`/`url`/`dismiss` too. They come
   from `actionRules[].add`, from an inline `action` on a `button`, `iconButton` or `rive` component, and from
   the template's legacy `buttons`.

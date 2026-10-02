@@ -106,6 +106,7 @@ public enum ComponentSchema {
             "cells": prop("array", "The cells, each holding one component. Cells must not overlap and must fit the grid.", items: ref("cell")),
             "collapseEmpty": prop("boolean", "Default for components without their own emptyBehavior. true: an empty component disappears and an all-empty row/column collapses to zero. false: empty components keep their space.", def: b(true)),
             "actionRules": prop("array", "Rules applied in order to the issuer's actions: hide, relabel, restyle, reorder, add.", items: ref("actionRule")),
+            "onClick": prop("string", "What clicking the banner does: url (default: open the notification's link) or openApp (bring the issuing application to the front).", values: HeraldBannerClick.allCases.map(\.rawValue)),
             "extra": prop("object", "Your own key/values (strings). Every action receives them as `extra`; bindings read them as {extra.key}."),
             "accentColor": prop("string", "Hex colour (#RRGGBB) for tint and `accent`-coloured components. Optional."),
             "sound": prop("string", "Default sound: a system sound name, a file path or \"none\". Payload overrides."),
@@ -211,6 +212,8 @@ public enum ComponentSchema {
                 "shortcut": prop("string", "kind shortcut: name of an installed Apple Shortcut (see list_shortcuts)."),
                 "input": prop("string", "kind shortcut: text passed as the Shortcut's input, with {tokens} filled. Omit to pass the full merged payload as JSON."),
                 "snoozeMinutes": prop("integer", "kind snooze: minutes (1-10080), default \(HeraldAction.defaultSnoozeMinutes).", min: 1, max: 10080),
+                "bundleId": prop("string", "kind openApp: bundle identifier of the application to bring to the front (com.example.App). Tried first."),
+                "path": prop("string", "kind openApp: path of the application (/Applications/Example.app; ~ is expanded). Tried after bundleId. With neither, the issuing application is opened: the manifest's appBundleId, appPath, the bundle id it registered with, then the app named appName."),
                 "symbol": ref("symbol"),
             ]),
         ])
@@ -225,12 +228,13 @@ public enum ComponentSchema {
             (HeraldActionKind.shortcut.rawValue, "run the Apple Shortcut named `shortcut`; input is the `input` text, or the full payload JSON."),
             (HeraldActionKind.dismiss.rawValue, "close the banner."),
             (HeraldActionKind.snooze.rawValue, "hide the banner and bring it back after `snoozeMinutes`."),
+            (HeraldActionKind.openApp.rawValue, "bring an application to the front: `bundleId`, else `path`, else the issuing application (manifest appBundleId / appPath, registered bundle id, or the app named appName). The app is activated; Herald stays in the background. An application that cannot be found does nothing but leave a note in History."),
         ]
     }
 
     private static func actions() -> JSONValue {
         o([
-            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. Issuer actions can only be url, callback, command or dismiss; script, shortcut and snooze come from the template (they are yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
+            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. Issuer actions can only be url, callback, command, openApp or dismiss; script, shortcut and snooze come from the template (they are yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
             "kinds": .object(Dictionary(uniqueKeysWithValues: actionKindDocs().map { ($0.0, s($0.1)) })),
             "payload": s("Every action receives {app, id, action:{id,label,kind}, fields:{token: value}, extra:{key: value}, notification:{...}} - the merged payload."),
         ])

@@ -104,6 +104,9 @@ public enum ActionPlan: Equatable, Sendable {
     case process(ActionProcessSpec)
     case dismiss
     case snooze(minutes: Double)
+    /// Bring an application to the front. `bundleId` and `path` are the action's own, already checked for shape; the
+    /// controller adds the manifest, the registration and the app name behind them (`HeraldOpenAppResolver`).
+    case openApp(bundleId: String?, path: String?)
 }
 
 // MARK: - Launching processes
@@ -301,6 +304,7 @@ public final class ActionRunner: Sendable {
         case .callback: return "callback"
         case .dismiss: return "dismiss"
         case .snooze: return "snooze \(action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes) min"
+        case .openApp: return "open app: " + (action.bundleId ?? action.path ?? "the issuing application")
         }
     }
 
@@ -331,7 +335,7 @@ public final class ActionRunner: Sendable {
             guard !n.isEmpty else { return nil }
             let input = (action.input ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             return "shortcut: \(n) input: " + (input.isEmpty ? "<full notification JSON>" : input)
-        case .url, .callback, .dismiss, .snooze:
+        case .url, .callback, .dismiss, .snooze, .openApp:
             return nil
         }
     }
@@ -451,6 +455,7 @@ public final class ActionRunner: Sendable {
         case .script: return planScript(action, origin: origin, inv)
         case .shortcut: return planShortcut(action, inv)
         case .dismiss: return .success(.dismiss)
+        case .openApp: return planOpenApp(action)
         case .snooze:
             let minutes = Double(action.snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes)
             guard Snooze.isValid(minutes: minutes) else { return .failure(ActionError("invalid snooze time")) }
@@ -520,6 +525,16 @@ public final class ActionRunner: Sendable {
             stdin: inv.payloadJSON(action: a), environment: Self.environment(a, origin: origin, inv),
             workingDirectory: scriptsDirectory,
             display: ([executable] + arguments).joined(separator: " "), timeout: timeout)))
+    }
+
+    /// An application to bring to the front: the action's own `bundleId` / `path` (checked for shape), else nothing,
+    /// which the controller reads as "the issuing application".
+    private func planOpenApp(_ a: HeraldAction) -> Result<ActionPlan, ActionError> {
+        let bundle = a.bundleId?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        let path = a.path?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        if let bundle, !HeraldManifest.isBundleId(bundle) { return .failure(ActionError("invalid bundle id")) }
+        if let path, !path.lowercased().hasSuffix(".app") { return .failure(ActionError("path is not an application")) }
+        return .success(.openApp(bundleId: bundle, path: path))
     }
 
     private func planShortcut(_ a: HeraldAction, _ inv: ActionInvocation) -> Result<ActionPlan, ActionError> {
@@ -788,4 +803,8 @@ public final class TemplateCommandApprovals: @unchecked Sendable {
         let list = entries.values.sorted { ($0.app, $0.template) < ($1.app, $1.template) }
         if let data = try? HeraldJSON.encoder().encode(list) { try? data.write(to: file, options: .atomic) }
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

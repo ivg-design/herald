@@ -460,6 +460,13 @@ final class AppController {
 
     func userOpened(app: String, id: String) {
         guard let item = history.item(app: app, id: id) else { return }
+        // A template can make the banner's click bring the issuing application forward instead of opening a link.
+        let template = templates.template(for: item.notification)
+        if template?.onClick == .openApp {
+            perform(HeraldAction(id: "open-app", label: "Open app", kind: .openApp), origin: .template, item: item,
+                    template: template, manifest: manifests.get(app: app))
+            return
+        }
         if let u = item.notification.url, let url = URL(string: u) {
             let outcome = Self.openLink(url)
             guard outcome == .opened else {
@@ -571,11 +578,52 @@ final class AppController {
             runCallbackButton(item: item, label: label, callback: callback)
         case .process(let spec):
             runProcess(spec, action: action, origin: origin, item: item)
+        case .openApp(let bundleId, let path):
+            openApplication(bundleId: bundleId, path: path, action: action, item: item, manifest: manifest)
         case .dismiss:
             dismissItem(app: app, id: id, action: action.label)
         case .snooze(let minutes):
             do { _ = try snoozeItem(app: app, id: id, minutes: minutes) }
             catch { flashFailure(app: app, id: id, reason: "could not snooze") }
+        }
+    }
+
+    // MARK: Open app
+
+    /// Brings an application to the front: the action's own bundle id or path, else the issuing application
+    /// (manifest `appBundleId` / `appPath`, the bundle id it registered with, the app named `appName`).
+    /// This is a user's click on a button, so activating the application it opens is the point; Herald itself
+    /// stays in the background (DESIGN 8). An application that cannot be found is not an error that stops
+    /// anything: the banner stays, shows the failure line and History keeps a note.
+    private func openApplication(bundleId: String?, path: String?, action: HeraldAction, item: HeraldHistoryItem,
+                                 manifest: HeraldManifest?) {
+        let app = item.app, id = item.id
+        let record = registry.record(for: app)
+        let candidates = HeraldOpenAppResolver.candidates(
+            bundleId: bundleId, path: path, manifest: manifest, registeredBundleId: record?.registration.bundleId,
+            appName: manifest?.appName ?? record?.displayName)
+        guard let found = HeraldOpenAppResolver.resolve(candidates) else {
+            log("open-app action \(action.label) of \(app): no installed application found (tried \(candidates))")
+            history.update(app: app, id: id) { $0.actionNote = HeraldOpenAppResolver.notFoundNote(label: action.label) }
+            changed()
+            flashFailure(app: app, id: id, reason: "no installed application found")
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        let name = found.url.deletingPathExtension().lastPathComponent
+        NSWorkspace.shared.openApplication(at: found.url, configuration: configuration) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if let error {
+                    self.log("open-app action \(action.label) of \(app): \(name) did not open: \(error.localizedDescription)")
+                    self.history.update(app: app, id: id) { $0.actionNote = "\(action.label): could not open \(name)" }
+                    self.changed()
+                    self.flashFailure(app: app, id: id, reason: "could not open \(name)")
+                } else {
+                    self.dismissItem(app: app, id: id, action: action.label)
+                }
+            }
         }
     }
 

@@ -72,11 +72,11 @@ enum MCPToolCatalog {
             marker that get_manifest wrote for a long string is swapped back for the stored value; one that matches nothing \
             stored is refused (use get_manifest with full: true). Issuing apps \
             normally register their own; use this to describe an app that does not, to add sample values for the designer, or \
-            to set defaultTemplate. Issuer actions are url, callback, command or dismiss; shortcut and script actions are \
-            authored in templates (add_action_rule). Invalid manifests are rejected with the field path.
+            to set defaultTemplate. Issuer actions are url, callback, command, openApp (bring an app to the front; optional bundleId or path, else the app \
+            named by appBundleId / appPath) or dismiss; shortcut and script actions are authored in templates (add_action_rule). Invalid manifests are rejected with the field path.
             """,
             inputSchema: Schema.input(["manifest": Schema.object(
-                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], actions: [{id?, label, kind: url|callback|command|dismiss, style?, url?, command?, callback?}], assets?, defaultTemplate?, family?: the product family byApp stacking groups issuers by, e.g. \"webwatcher\"}")],
+                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], appBundleId?, appPath?, actions: [{id?, label, kind: url|callback|command|openApp|dismiss, style?, url?, command?, callback?, bundleId?, path?}], assets?, defaultTemplate?, family?: the product family byApp stacking groups issuers by, e.g. \"webwatcher\"}")],
                                       required: ["manifest"]),
             destructive: true, idempotent: true),
 
@@ -243,7 +243,8 @@ enum MCPToolCatalog {
             {match: "<id|label|*>", hide?, relabel?, style?, symbol?, position?} or adds one of your own {add: {id, label, kind, ...}} \
             with kind url, command (shell), script (a file in Application Support/Herald/scripts, which herald_status lists: write \
             the file there first; it gets the notification JSON on stdin), shortcut (an Apple Shortcut from list_shortcuts; \
-            input is text with {tokens}, or omitted for the full JSON), dismiss or snooze. A command, script or shortcut you add \
+            input is text with {tokens}, or omitted for the full JSON), openApp (bring an application to the front: bundleId, \
+            else path, else the issuing app; the app is activated, Herald stays in the background), dismiss or snooze. A command, script or shortcut you add \
             is confirmed by the user in Herald the first time its button is pressed (with the script's hash, or the \
             shortcut's name and input), and again whenever it changes. An add with the id of one of the issuer's own \
             actions replaces that button, and the prompt says so. Example: \
@@ -258,7 +259,7 @@ enum MCPToolCatalog {
             inputSchema: Schema.input([
                 "app": Schema.string("The app id."),
                 "template": Schema.string("The saved template's name (built-ins are read-only: copy one with put_template first)."),
-                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: normal|prominent|destructive|cancel, symbol?: <SF Symbol name or object>, position?, add?: {id, label, kind, url?|command?|script?|shortcut?, input?, snoozeMinutes?, style?, symbol?}}."),
+                "rule": Schema.object("The rule: {match?, hide?, relabel?, style?: normal|prominent|destructive|cancel, symbol?: <SF Symbol name or object>, position?, add?: {id, label, kind, url?|command?|script?|shortcut?|bundleId?|path?, input?, snoozeMinutes?, style?, symbol?}}."),
             ], required: ["app", "template", "rule"]),
             destructive: true, idempotent: false),
 

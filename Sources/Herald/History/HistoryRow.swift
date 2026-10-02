@@ -97,6 +97,7 @@ struct HistoryStatusLine: View {
         } else {
             parts.append("Dismissed")
         }
+        if let note = item.actionNote { parts.append(note) }
         return parts.joined(separator: " \u{00B7} ")
     }
 }

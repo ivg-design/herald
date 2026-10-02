@@ -18,6 +18,7 @@ extension HeraldActionKind {
         case .shortcut: return "Run Apple Shortcut"
         case .dismiss: return "Dismiss"
         case .snooze: return "Snooze"
+        case .openApp: return "Open app"
         }
     }
 
@@ -30,6 +31,7 @@ extension HeraldActionKind {
         case .shortcut: return "wand.and.stars"
         case .dismiss: return "xmark.circle"
         case .snooze: return "moon.zzz"
+        case .openApp: return "arrow.up.forward.app"
         }
     }
 }
@@ -46,6 +48,7 @@ extension HeraldAction {
         case .shortcut: return shortcut.map { "Shortcut \u{201C}\($0)\u{201D}" } ?? "Shortcut"
         case .dismiss: return "Closes the banner"
         case .snooze: return "Snoozes for \(snoozeMinutes ?? HeraldAction.defaultSnoozeMinutes) min"
+        case .openApp: return "Brings \(bundleId ?? path.map { ($0 as NSString).lastPathComponent } ?? "the issuing app") to the front"
         }
     }
 }
@@ -309,6 +312,7 @@ struct ActionFormView: View {
             if k == .url { a.url = "{url}" }
             if k == .snooze { a.snoozeMinutes = HeraldAction.defaultSnoozeMinutes }
             if k == .callback { a.callback = HeraldCallback() }
+            if k == .openApp { a.label = old.label.isEmpty ? "Open app" : old.label }
             request.action = a
             payloadText = ""
         })
@@ -340,6 +344,9 @@ struct ActionFormView: View {
         case .callback: if payloadError { return "The payload is not valid JSON." }
         case .snooze: break
         case .dismiss: break
+        case .openApp:
+            if let b = a.bundleId?.trimmingCharacters(in: .whitespaces), !b.isEmpty, !HeraldManifest.isBundleId(b) { return "That is not a bundle identifier (for example com.example.App)." }
+            if let p = a.path?.trimmingCharacters(in: .whitespaces), !p.isEmpty, !p.lowercased().hasSuffix(".app") { return "The path must be an application, ending in .app." }
         }
         return nil
     }
@@ -387,7 +394,41 @@ struct ActionFormView: View {
             }
         case .dismiss:
             Section { note("Closes the banner.") }
+        case .openApp: openAppSection
         }
+    }
+
+    // MARK: Open app
+
+    private var openAppSection: some View {
+        Section("Application") {
+            TextField("Bundle id, e.g. com.example.App", text: optional(action.bundleId)).font(.system(size: 12, design: .monospaced))
+            HStack {
+                TextField("Path, e.g. /Applications/Example.app", text: optional(action.path)).font(.system(size: 12, design: .monospaced))
+                Button("Choose app\u{2026}") { chooseApp() }
+            }
+            let found = HeraldOpenAppResolver.resolve(HeraldOpenAppResolver.candidates(
+                bundleId: request.action.bundleId, path: request.action.path, manifest: model.manifest))
+            if let found {
+                Label(found.url.deletingPathExtension().lastPathComponent, systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(.green)
+            } else {
+                Label("No installed application found", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            note("Leave both empty to open the issuing application: the manifest\u{2019}s appBundleId or appPath, the bundle id it registered with, or the app named \(model.issuerName). The app you open comes to the front; Herald itself stays in the background.")
+        }
+    }
+
+    private func chooseApp() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose Application"
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        request.action.path = url.path
+        request.action.bundleId = Bundle(url: url)?.bundleIdentifier
     }
 
     private func note(_ s: String) -> some View {

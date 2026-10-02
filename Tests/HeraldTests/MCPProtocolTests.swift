@@ -1093,6 +1093,31 @@ final class MCPProtocolTests: XCTestCase {
         XCTAssertEqual(again["actionRules"]?.numberValue, 4)
     }
 
+    /// Issue #63: `add_action_rule` and `validate_template` accept the `openApp` kind; an application nobody has is a
+    /// warning, never an error, and component_schema documents the kind.
+    func testAddActionRuleAndValidateAcceptOpenApp() async throws {
+        let saved = HeraldAppLookup.current
+        HeraldAppLookup.current = HeraldAppLookup(bundleURL: { _ in nil }, named: { _ in nil }, pathExists: { _ in nil })
+        defer { HeraldAppLookup.current = saved }
+        let rule: JSONValue = MCPFixtures.json(#"{"add":{"id":"open-ww","label":"Open WebWatcher","kind":"openApp","bundleId":"com.ivg.webwatcher"}}"#)
+        let r = try await call("add_action_rule", .object(["app": .string("webwatcher.email"), "template": .string("email-accumulated"), "rule": rule]))
+        XCTAssertFalse(isError(r), (try? text(r)) ?? "")
+        let warnings = try XCTUnwrap(try payload(r)["warnings"]?.arrayValue).compactMap { $0["message"]?.stringValue }
+        XCTAssertTrue(warnings.contains { $0.contains("no installed application") }, "\(warnings)")
+        let savedTemplate = try HeraldJSON.decoder().decode(HeraldTemplate.self, from: try XCTUnwrap(fake.calls("PUT", "/v1/templates").last).body)
+        XCTAssertEqual(savedTemplate.actionRules.last?.add?.kind, .openApp)
+        XCTAssertEqual(savedTemplate.actionRules.last?.add?.bundleId, "com.ivg.webwatcher")
+
+        let draft = MCPFixtures.json(MCPFixtures.template(name: "open", cells: """
+        {"id":"a","row":0,"col":0,"component":{"type":"button","action":{"id":"o","label":"Open","kind":"openApp","bundleId":"com.ivg.webwatcher"}}}
+        """))
+        let v = try payload(try await call("validate_template", .object(["template": draft])))
+        XCTAssertEqual(v["valid"]?.boolValue, true, "an unknown application is a warning: \(v)")
+
+        let schema = try text(try await call("component_schema"))
+        XCTAssertTrue(schema.contains("openApp") && schema.contains("onClick"))
+    }
+
     func testAddActionRuleWarnsAboutMissingShortcutsAndUnmatchedRules() async throws {
         let r = try payload(try await call("add_action_rule", .object([
             "app": .string("webwatcher.email"), "template": .string("email-accumulated"),

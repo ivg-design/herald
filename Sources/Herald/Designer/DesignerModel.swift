@@ -1853,6 +1853,7 @@ final class DesignerModel: ObservableObject {
         case .shortcut: return "Run shortcut"
         case .dismiss: return "Dismiss"
         case .snooze: return "Snooze"
+        case .openApp: return "Open app"
         }
     }
 

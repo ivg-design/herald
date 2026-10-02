@@ -43,6 +43,8 @@ Only `app` is required: `{"app":"x"}` is a valid, empty manifest.
 | `actions` | array | `[]` | The issuer's own buttons (below). At most 32. |
 | `assets` | array | `[]` | Files the issuer ships: Rive animations. At most 32. See [rive.md](rive.md). |
 | `defaultTemplate` | string | none | Name of the template (of this app) used when a notification names none. |
+| `appBundleId` | string | none | The issuing application's bundle identifier (`com.ivg.webwatcher`), so an `openApp` action and a template's `onClick: openApp` can bring it to the front. See [actions.md](actions.md#open-app). |
+| `appPath` | string | none | The issuing application's path (`/Applications/WebWatcher.app`, must end in `.app`); used when `appBundleId` finds nothing. Without either, the app named `appName` is looked for. |
 | `family` | string | the issuer id up to its first dot | The product family `byApp` stacking groups issuers by (`webwatcher` for `webwatcher.web` and `webwatcher.email`). See [stacking.md](stacking.md). |
 
 ## Fields
