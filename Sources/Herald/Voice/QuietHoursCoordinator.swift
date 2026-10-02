@@ -7,10 +7,8 @@ import Foundation
 final class QuietHoursCoordinator {
     static let shared = QuietHoursCoordinator()
 
-    private var held: [String] = []
-    private var wasSpeechQuiet = false
+    private var tracker = QuietSummaryTracker()
     private var timer: Timer?
-    private var heldForSummary = false
 
     private var config: HeraldQuietHours {
         get { AppSettings.shared.quiet }
@@ -30,11 +28,11 @@ final class QuietHoursCoordinator {
 
     /// Remembers a notification whose speech was suppressed, for the end-of-window summary.
     func hold(title: String, at now: Date = Date()) {
-        if !QuietEvaluator.summaryWindowIDs(at: now, config: config).isEmpty { held.append(title); heldForSummary = true }
+        tracker.hold(title: title, config: config, at: now)
     }
 
     func start() {
-        wasSpeechQuiet = status().speech
+        tracker = QuietSummaryTracker(wasSpeechQuiet: status().speech)
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -43,14 +41,7 @@ final class QuietHoursCoordinator {
 
     /// Detects the end of a speech-silencing period; speaks the summary if one was asked for.
     func tick(at now: Date = Date()) {
-        let quiet = status(at: now).speech
-        defer { wasSpeechQuiet = quiet }
-        if !quiet && wasSpeechQuiet {
-            let titles = held
-            held = []
-            if heldForSummary, let text = QuietSummary.text(titles: titles) { VoiceCoordinator.shared.speakSummary(text) }
-            heldForSummary = false
-        }
+        if let text = tracker.tick(speechQuiet: status(at: now).speech) { VoiceCoordinator.shared.speakSummary(text) }
         // The menu and the Settings pane follow the clock too.
         NotificationCenter.default.post(name: .heraldChanged, object: nil)
     }

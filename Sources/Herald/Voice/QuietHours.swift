@@ -155,3 +155,31 @@ public enum QuietSummary {
         return "\(n) message\(n == 1 ? "" : "s") while you were away: \(list)"
     }
 }
+
+
+/// The end-of-window summary state machine, kept apart from the timer and the speech engine so it can be tested
+/// (issue #37): titles of messages whose speech was silenced are held while a window that asked for a summary is
+/// active; the tick that sees speech become audible again returns the one-line summary to speak, once.
+public struct QuietSummaryTracker: Sendable {
+    public private(set) var held: [String] = []
+    private var heldForSummary = false
+    private var wasSpeechQuiet = false
+
+    public init(wasSpeechQuiet: Bool = false) { self.wasSpeechQuiet = wasSpeechQuiet }
+
+    public mutating func hold(title: String, config: HeraldQuietHours, at now: Date, calendar: Calendar = .current) {
+        if !QuietEvaluator.summaryWindowIDs(at: now, config: config, calendar: calendar).isEmpty {
+            held.append(title); heldForSummary = true
+        }
+    }
+
+    /// `speechQuiet` is the current status. Returns the text to speak when a silencing period just ended.
+    public mutating func tick(speechQuiet: Bool) -> String? {
+        defer { wasSpeechQuiet = speechQuiet }
+        guard !speechQuiet, wasSpeechQuiet else { return nil }
+        let titles = held
+        held = []
+        defer { heldForSummary = false }
+        return heldForSummary ? QuietSummary.text(titles: titles) : nil
+    }
+}

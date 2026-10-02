@@ -37,7 +37,7 @@ final class VoiceSettings: ObservableObject {
     @Published var perApp: [String: AppVoicePrefs] { didSet { persistPerApp() } }
 
     /// Posted when the engine changes, so the coordinator can restart its worker.
-    static let engineChanged = Notification.Name("com.ivg.herald.voiceEngineChanged")
+    static let engineChanged = Notification.Name.heraldVoiceEngineChanged
 
     private init() {
         if ProcessInfo.processInfo.environment["HERALD_SUPPORT_DIR"]?.isEmpty == false,

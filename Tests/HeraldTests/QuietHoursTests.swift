@@ -169,6 +169,38 @@ final class QuietHoursTests: XCTestCase {
                        "6 messages while you were away: A, B, C, D, and 2 more")
         XCTAssertNil(QuietSummary.text(titles: []))
     }
+
+    // End-of-window summary (issue #37): held titles are spoken once when the silenced period ends.
+    func testSummaryIsSpokenOnceWhenTheWindowEnds() {
+        var w = night; w.speakSummary = true
+        let cfg = HeraldQuietHours(windows: [w])
+        var t = QuietSummaryTracker(wasSpeechQuiet: true)
+        t.hold(title: "Build failed", config: cfg, at: at(5, 23), calendar: cal)
+        t.hold(title: "Bid accepted", config: cfg, at: at(6, 2), calendar: cal)
+        XCTAssertNil(t.tick(speechQuiet: true), "still inside the window")
+        XCTAssertEqual(t.tick(speechQuiet: false), "2 messages while you were away: Build failed, Bid accepted")
+        XCTAssertNil(t.tick(speechQuiet: false), "spoken once")
+        XCTAssertTrue(t.held.isEmpty)
+    }
+
+    func testNoSummaryWhenTheWindowDidNotAskForOne() {
+        let cfg = HeraldQuietHours(windows: [night])   // speakSummary defaults to false
+        var t = QuietSummaryTracker(wasSpeechQuiet: true)
+        t.hold(title: "Build failed", config: cfg, at: at(5, 23), calendar: cal)
+        XCTAssertTrue(t.held.isEmpty)
+        XCTAssertNil(t.tick(speechQuiet: false))
+    }
+
+    func testResumeNowEndsTheSilenceAndSpeaksTheSummary() {
+        var w = night; w.speakSummary = true
+        var cfg = HeraldQuietHours(windows: [w])
+        var t = QuietSummaryTracker(wasSpeechQuiet: true)
+        t.hold(title: "Alert", config: cfg, at: at(5, 23), calendar: cal)
+        cfg.resumedUntil = at(6, 8)   // "Resume now": quiet ends for this occurrence
+        XCTAssertFalse(QuietEvaluator.status(at: at(5, 23, 30), config: cfg, calendar: cal).speech)
+        XCTAssertEqual(t.tick(speechQuiet: QuietEvaluator.status(at: at(5, 23, 30), config: cfg, calendar: cal).speech),
+                       "1 message while you were away: Alert")
+    }
 }
 
 final class QuietHoursPlumbingTests: XCTestCase {

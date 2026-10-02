@@ -1,5 +1,10 @@
 import Foundation
 
+extension Notification.Name {
+    /// Posted when the voice engine or its installation on disk changed.
+    static let heraldVoiceEngineChanged = Notification.Name("com.ivg.herald.voiceEngineChanged")
+}
+
 /// Downloads Kokoro (optional, ~340 MB), builds its Python environment and shows SHA-256 sums; or links an
 /// existing installation such as `~/.claude/tts`. Everything lands in `<support>/tts`.
 @MainActor
@@ -25,7 +30,13 @@ final class KokoroInstaller: ObservableObject {
     /// download or a tool was unwinding) must not touch the published state any more.
     private var generation = 0
 
-    init(layout: KokoroLayout) { self.layout = layout }
+    /// Where the model files come from; the release URL unless a test points it at a local server.
+    let releaseBase: String
+
+    init(layout: KokoroLayout, releaseBase: String = KokoroLayout.releaseBase) {
+        self.layout = layout
+        self.releaseBase = releaseBase
+    }
 
     var isBusy: Bool {
         switch phase { case .downloading, .settingUp: return true; default: return false }
@@ -79,7 +90,7 @@ final class KokoroInstaller: ObservableObject {
                     setPhase(.downloading(file: name, fraction: 0), gen)
                     let d = ResumableDownloader()
                     downloader = d
-                    try await d.download(URL(string: KokoroLayout.releaseBase + name)!, to: dest) { [weak self] f in
+                    try await d.download(URL(string: releaseBase + name)!, to: dest) { [weak self] f in
                         Task { @MainActor in self?.setPhase(.downloading(file: name, fraction: f), gen) }
                     }
                     try current()
@@ -176,7 +187,7 @@ final class KokoroInstaller: ObservableObject {
 
     private func installationChanged() {
         revision += 1
-        NotificationCenter.default.post(name: VoiceSettings.engineChanged, object: nil)
+        NotificationCenter.default.post(name: .heraldVoiceEngineChanged, object: nil)
     }
 }
 

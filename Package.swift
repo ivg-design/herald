@@ -24,7 +24,7 @@ let package = Package(
         // snooze math can be unit tested. The Xcode app target compiles Sources/Herald directly.
         .target(name: "HeraldCore", dependencies: ["HeraldClient"],
                 path: "Sources/Herald", sources: ["Core", "Authoring/CodeExport.swift", "Authoring/ComposerModel.swift",
-                         "Designer/DesignerModel.swift", "Voice/TTSWorker.swift", "Voice/SpeechQueue.swift", "Voice/AudioCache.swift", "Voice/KokoroLayout.swift", "Voice/QuietHours.swift", "MCP/MCPInstaller.swift"]),
+                         "Designer/DesignerModel.swift", "Voice/TTSWorker.swift", "Voice/KokoroInstaller.swift", "Voice/SpeechQueue.swift", "Voice/AudioCache.swift", "Voice/KokoroLayout.swift", "Voice/QuietHours.swift", "MCP/MCPInstaller.swift"]),
         .testTarget(name: "HeraldTests", dependencies: ["HeraldClient", "HeraldCore", "herald-mcp"],
                     path: "Tests/HeraldTests"),
     ]
