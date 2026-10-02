@@ -29,8 +29,10 @@ v1 buttons (`label` plus one of `url`, `command`, `callback`) are still accepted
 - `url`: opens `http`, `https` or `mailto` URLs only. Bindings are filled in.
 - `callback`: POSTs `{"notificationId","app","action","payload"}` to the callback URL; a 2xx dismisses the
   banner (see [API.md](API.md#callbacks)).
-- `command`: runs through `/bin/zsh -lc` after a confirmation (below). Bindings in the command text are filled in
-  (shell-quoted) and the merged payload is passed on stdin as JSON.
+- `command`: runs through `/bin/zsh -lc` after a confirmation (below). The command text is never interpolated:
+  the merged payload arrives on stdin as JSON and in `HERALD_*` environment variables (`HERALD_APP`,
+  `HERALD_NOTIFICATION_ID`, `HERALD_ACTION_ID`, `HERALD_ACTION_KIND`, `HERALD_TEMPLATE`, `HERALD_FIELD_<name>`,
+  `HERALD_EXTRA_<name>`).
 - `script`: runs a file from `~/Library/Application Support/Herald/scripts/` (a relative name, no `..`)
   with the merged payload JSON on stdin. The file must be executable.
 - `shortcut`: runs `/usr/bin/shortcuts run "<name>" --input-path <file>`. With `input` set, the file holds
