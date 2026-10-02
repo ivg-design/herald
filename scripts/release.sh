@@ -13,4 +13,4 @@ osascript -e 'tell application "Herald" to quit' >/dev/null 2>&1 || true; sleep 
 rm -rf /Applications/Herald.app && ditto "$APP" /Applications/Herald.app && open -g /Applications/Herald.app && sleep 4
 pgrep -x Herald >/dev/null && echo "running $(defaults read /Applications/Herald.app/Contents/Info.plist CFBundleShortVersionString) b$(defaults read /Applications/Herald.app/Contents/Info.plist CFBundleVersion)"
 git add -A && git commit -q -m "Release $VER (Build $BUILD): see CHANGELOG.md" && git tag -a "v$VER" -m "Herald $VER (Build $BUILD)" && git push -q origin main "v$VER"
-gh release create "v$VER" "release/Herald-$VER-build$BUILD-macOS.dmg" "release/Herald-$VER-build$BUILD-macOS.dmg.sha256" --repo ivg-design/herald --title "Herald $VER (Build $BUILD)" --notes-file <(sed -n "/^## $VER/,/^## 1.4.1/p" CHANGELOG.md | sed '$d') 2>&1 | tail -1
+gh release create "v$VER" "release/Herald-$VER-build$BUILD-macOS.dmg" "release/Herald-$VER-build$BUILD-macOS.dmg.sha256" --repo ivg-design/herald --title "Herald $VER (Build $BUILD)" --notes-file <(awk -v v="$VER" '$0 ~ "^## "v{p=1;print;next} /^## /{if(p)exit} p' CHANGELOG.md) 2>&1 | tail -1
