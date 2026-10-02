@@ -31,11 +31,19 @@ struct IconButtonComponentView: View {
     }
 
     private func glyph(side: CGFloat, tint: Color) -> some View {
-        Image(systemName: GridStyle.symbol(component.symbol))
-            .font(.system(size: side > 18 ? 10 : 9, weight: .bold))
-            .foregroundStyle(tint)
+        glyphImage(tint: tint, side: side)
             .frame(width: side, height: side)
             .background(Circle().fill(Color.primary.opacity(0.08)))
             .contentShape(Circle())
+    }
+
+    @ViewBuilder private func glyphImage(tint: Color, side: CGFloat) -> some View {
+        let sym = component.fullSymbol
+        if SymbolStyle.isDrawable(sym, ctx) {
+            SymbolImage(symbol: sym, ctx: ctx, tint: tint, size: side > 18 ? 10 : 9, defaultWeight: .bold)
+        } else {
+            // An unknown name keeps the old behaviour: a question mark, so a typo still draws something.
+            Image(systemName: "questionmark.circle").font(.system(size: side > 18 ? 10 : 9, weight: .bold)).foregroundStyle(tint)
+        }
     }
 }

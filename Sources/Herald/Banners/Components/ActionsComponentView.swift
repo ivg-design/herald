@@ -63,7 +63,9 @@ struct ActionsComponentView: View {
 
     private func actionButton(_ r: HeraldResolvedAction) -> some View {
         let label = ctx.label(for: r.action)
-        return Button(GridStyle.shortLabel(label)) { ctx.perform(r.action, r.origin) }
+        return Button { ctx.perform(r.action, r.origin) } label: {
+            SymbolLabel(text: GridStyle.shortLabel(label), symbol: r.action.symbol ?? component.symbol, ctx: ctx)
+        }
             .buttonStyle(BannerButtonStyle(kind: r.action.style ?? "default", accent: ctx.accent))
             .help(label)
     }

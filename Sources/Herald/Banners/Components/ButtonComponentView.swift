@@ -9,7 +9,9 @@ struct ButtonComponentView: View {
     var body: some View {
         if let found = ctx.action(inline: component.action, ref: component.actionRef) {
             let label = ctx.label(for: found.action)
-            Button(GridStyle.shortLabel(label)) { ctx.perform(found.action, found.origin) }
+            Button { ctx.perform(found.action, found.origin) } label: {
+                SymbolLabel(text: GridStyle.shortLabel(label), symbol: found.action.symbol ?? component.symbol, ctx: ctx)
+            }
                 .buttonStyle(BannerButtonStyle(kind: component.style ?? found.action.style ?? "default", accent: ctx.accent))
                 .help(label)
         } else {

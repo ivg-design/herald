@@ -510,6 +510,38 @@ final class BannerSnapshotTests: XCTestCase {
         }
     }
 
+    // MARK: SF Symbols (issue #45)
+
+    private static func symbolTemplate(_ symbol: String) -> JSONValue {
+        json(##"{"name":"sym","app":"\##(app)","layoutVersion":2,"grid":{"rows":1,"cols":2,"rowSizes":["auto"],"colSizes":[60,"fill"],"gap":8,"padding":14,"width":240},"cells":[{"id":"i","row":0,"col":0,"component":{"type":"iconButton","size":36,"symbol":\##(symbol),"action":{"id":"d","label":"D","kind":"dismiss"}}},{"id":"t","row":0,"col":1,"component":{"type":"text","binding":"{title}"}}]}"##)
+    }
+
+    /// Counts pixels near a colour (so a hierarchical red symbol and a palette red + blue one can be told apart).
+    private func count(_ png: Data, near rgb: (Int, Int, Int)) throws -> Int {
+        let bmp = try XCTUnwrap(Bitmap(png: png))
+        var n = 0
+        for y in 0..<bmp.height { for x in 0..<bmp.width {
+            let p = bmp.pixel(x, y)
+            if abs(p.r - rgb.0) < 40, abs(p.g - rgb.1) < 40, abs(p.b - rgb.2) < 40, p.a > 200 { n += 1 }
+        } }
+        return n
+    }
+
+    func testHierarchicalAndPaletteSymbolsRenderTheirColours() async throws {
+        let client = try await client()
+        let data = Self.json(#"{"title":"Symbols"}"#)
+        let hier = try await render(Self.symbolTemplate(##"{"name":"bell.badge.fill","renderingMode":"hierarchical","colors":["#FF3B30"],"weight":"bold"}"##), data: data, client: client)
+        let pal = try await render(Self.symbolTemplate(##"{"name":"bell.badge.fill","renderingMode":"palette","colors":["#FF3B30","#007AFF"],"weight":"bold"}"##), data: data, client: client)
+        let mono = try await render(Self.symbolTemplate(#""bell.badge.fill""#), data: data, client: client)
+        assertSnapshot(hier, named: "symbol-hierarchical-light")
+        assertSnapshot(pal, named: "symbol-palette-light")
+        XCTAssertGreaterThan(try count(hier, near: (255, 59, 48)), 2, "hierarchical draws the red")
+        XCTAssertEqual(try count(hier, near: (0, 122, 255)), 0, "and no blue")
+        XCTAssertGreaterThan(try count(pal, near: (255, 59, 48)), 2, "palette draws the first colour")
+        XCTAssertGreaterThan(try count(pal, near: (0, 122, 255)), 2, "and the second")
+        XCTAssertEqual(try count(mono, near: (255, 59, 48)), 0, "a plain name keeps the current look")
+    }
+
     /// The references are only useful if the same request draws (almost) the same pixels twice.
     func testTheSameRequestRendersTheSameImage() async throws {
         let client = try await client()
