@@ -73,8 +73,10 @@ export function ToolList() {
   const ref = useRef<HTMLUListElement>(null);
   const seen = useInViewOnce(ref, 0.5);
   const lines = TOOLS.map(([n, d]) => `${n}: ${d}`);
-  const total = lines.reduce((a, l) => a + l.length, 0);
+  const GAP = 7; // ≈120 ms pause between rows at 18 ms/char
+  const total = lines.reduce((a, l) => a + l.length + GAP, 0) - GAP;
   const [typed, setTyped] = useState(typedOnce ? Infinity : 0);
+  const done = reduced || typed >= total;
   const [preview, setPreview] = useState(false);
   const [state, setState] = useState(false);
 
@@ -88,7 +90,7 @@ export function ToolList() {
         typedOnce = true;
         clearInterval(id);
       }
-    }, 20);
+    }, 18);
     return () => clearInterval(id);
   }, [reduced, seen, total]);
 
@@ -111,7 +113,7 @@ export function ToolList() {
   };
 
   const shown = reduced ? total : Math.min(typed, total);
-  const starts = lines.reduce<number[]>((acc, l, i) => [...acc, i === 0 ? 0 : acc[i - 1] + lines[i - 1].length], []);
+  const starts = lines.reduce<number[]>((acc, l, i) => [...acc, i === 0 ? 0 : acc[i - 1] + lines[i - 1].length + GAP], []);
   const readout = JSON.stringify({ onScreen: herald.onScreen, stacks: herald.pending, history: herald.history, snoozed: herald.snoozed }).replace(/,/g, ", ").replace(/:/g, ": ");
   return (
     <ul ref={ref} className="mono m-0 mt-4 flex list-none flex-col gap-2.5 p-0 text-[12.5px] leading-snug text-muted">
@@ -120,19 +122,19 @@ export function ToolList() {
         const demo = DEMOS[TOOLS[i][0]];
         const open = demo === "preview" ? preview : demo === "state" ? state : undefined;
         return (
-          <li key={l} className="tool-row">
-            <div className="flex items-start gap-3">
-              <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-accent" />
+          <li key={l} className="tool-row min-h-[26px]" style={{ opacity: done || k > 0 ? 1 : 0 }}>
+            <div className="flex items-center gap-3">
+              <Check aria-hidden className="size-3.5 shrink-0 text-accent" />
               <span className="sr-only">{l}</span>
-              <span className="min-w-0">
-                <span aria-hidden>
+              <span className="flex min-w-0 items-center">
+                <span aria-hidden className="min-w-0 truncate">
                   {l.slice(0, k)}
                   <span className="opacity-0">{l.slice(k)}</span>
                 </span>
                 {demo && (
                   <button
                     type="button"
-                    className="tool-try btn btn-ghost ml-3 align-middle font-sans"
+                    className="tool-try btn btn-ghost ml-3 shrink-0 font-sans !min-h-0 !h-7"
                     aria-label={`Try ${TOOLS[i][0]}`}
                     aria-expanded={open}
                     onClick={() => act(demo)}

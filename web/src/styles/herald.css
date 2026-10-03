@@ -25,14 +25,20 @@ header .site-brand { padding-block: 2.5px; }
 .hb-heldline { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 
 /* fixed overlay */
-.hb-overlay { position: fixed; z-index: 60; top: 84px; right: max(16px, calc((100vw - 1200px) / 2)); width: 360px; display: flex; flex-direction: column; align-items: flex-end; }
+.hb-overlay { position: fixed; inset-inline: 0; top: 84px; z-index: 60; pointer-events: none; }
+.hb-overlay-in { max-width: calc(1200px + 32px); margin-inline: auto; padding-inline: 16px; display: flex; justify-content: flex-end; }
+.hb-panel { width: 360px; pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; }
+.hb-arrival { width: 100%; animation: hb-in 420ms var(--ease-expo) both; }
+.hb-arrival .hb-cards { max-width: none; }
 .hb-stack { width: 100%; }
 .hb-stack[data-open="false"] { display: none; }
 .hb-stack[data-open="true"] { box-shadow: none; animation: hb-in 520ms var(--ease-expo) both; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
 .hb-stack .hb-head, .hb-stack .hb-cards { max-width: none; }
 .hb-more { display: block; margin: 8px 0 0 auto; height: 32px; padding: 0 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
 @media (max-width: 639px) {
-  .hb-overlay { left: 12px; right: 12px; top: 76px; width: auto; }
+  .hb-overlay { top: 76px; }
+  .hb-overlay-in { padding-inline: 12px; }
+  .hb-panel { width: 100%; }
 }
 
 /* inline text button (stack lines) */
@@ -56,7 +62,7 @@ header .site-brand { padding-block: 2.5px; }
 @keyframes hb-wave { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .hb-stack { animation: none !important; }
+  .hb-stack, .hb-arrival { animation: none !important; }
   .hb-wave i { animation: none !important; transform: scaleY(0.7); }
 }
 
@@ -73,3 +79,9 @@ header .site-brand { padding-block: 2.5px; }
 @media (prefers-reduced-motion: reduce) { .hb-logo-ping { display: none; } }
 
 @media (max-width: 639px) { header .hb-dl { display: none; } }
+
+.hb-chip { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; border-radius: 999px; display: inline-grid; place-items: center; flex: none; }
+.hb-chip:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent); }
+.hb-chip-chev { width: 24px; height: 24px; color: var(--mb-muted); }
+.hb-chip-chev:hover { background: var(--mb-btn); box-shadow: none; }
+.hb-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

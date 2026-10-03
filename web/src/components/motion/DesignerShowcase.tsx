@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import Image from "next/image";
 import { asset } from "@/lib/config";
 import { HOTSPOTS, type Hotspot } from "./designer-hotspots";
+import GridBanner from "@/components/rive/GridBanner";
 
 export interface ShotDims { w: number; h: number }
 
@@ -49,15 +50,19 @@ export default function DesignerShowcase({ shots, intro }: { shots: { light?: Sh
     <div ref={root} className="w-full">
       <div className="dz-head">
         <div>{intro}</div>
-        {both && (
-          <div className="dz-toggle" role="group" aria-label="Screenshot appearance">
-            {(["dark", "light"] as const).map((m) => (
-              <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}>
-                {m === "dark" ? "Dark" : "Light"}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="dz-side">
+          <GridBanner />
+          <p className="dz-side-cap mono" aria-hidden>a 4 × 3 grid becomes a banner · click to replay</p>
+          {both && (
+            <div className="dz-toggle" role="group" aria-label="Screenshot appearance">
+              {(["dark", "light"] as const).map((m) => (
+                <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}>
+                  {m === "dark" ? "Dark" : "Light"}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {dims && (

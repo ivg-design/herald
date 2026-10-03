@@ -77,6 +77,7 @@ export default function LiveBanner({
   const [note, setNote] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   const timers = useRef<number[]>([]);
   const later = (fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
@@ -200,27 +201,30 @@ export default function LiveBanner({
             <div className="flex items-start gap-2.5">
               <HeraldMark icon={icon} size={32} />
               {stacked ? (
-                <button type="button" className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
+                <button type="button" className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
                   <Head app={app} title={top.title} speaking={speaking} status={status} />
                 </button>
               ) : (
                 <div className="min-w-0 flex-1"><Head app={app} title={top.title} speaking={speaking} status={status} /></div>
               )}
               {stacked && (
-                <motion.span
-                  key={count}
-                  initial={reduce ? false : { scale: 1.6 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.3, ease: EASE.quart }}
-                  className="mono grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-[11px] font-bold"
-                  style={{ background: "var(--signal)", color: "#fff5f2" }}
-                  aria-label={`${count} banners in this stack`}
-                >
-                  {count}
-                </motion.span>
+                <button type="button" className="hb-chip" aria-label={`${count} banners in this stack`} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
+                  <motion.span
+                    key={count}
+                    initial={reduce ? false : { scale: 1.6 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.3, ease: EASE.quart }}
+                    className="mono grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold"
+                    style={{ background: "var(--signal)", color: "#fff5f2" }}
+                  >
+                    {count}
+                  </motion.span>
+                </button>
               )}
               {stacked && (
-                <ChevronDown aria-hidden size={14} className="mt-1.5 shrink-0" style={{ color: "var(--mb-muted)", transform: expanded ? "rotate(180deg)" : "none", transition: "transform 200ms" }} />
+                <button type="button" className="hb-chip hb-chip-chev" aria-label={expanded ? "Collapse stack" : "Expand stack"} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
+                  <ChevronDown aria-hidden size={14} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 200ms" }} />
+                </button>
               )}
               <button type="button" className="mb-x shrink-0" aria-label={stacked ? `Dismiss all ${count}` : "Dismiss"} onClick={onClose}>
                 <X size={15} aria-hidden />
@@ -232,6 +236,7 @@ export default function LiveBanner({
               {expanded && stacked && (
                 <motion.ul
                   key="list"
+                  id={listId}
                   initial={reduce ? false : { height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}

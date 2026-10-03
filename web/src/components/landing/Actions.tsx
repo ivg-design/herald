@@ -1,6 +1,7 @@
 "use client";
 import { AlarmClock, Link2, SquareTerminal, Undo2, Workflow } from "lucide-react";
 import WordFlipper, { type FlipPhrase } from "@/components/motion/WordFlipper";
+import { nowrapText } from "@/lib/nowrap";
 import ActionsDemo from "./b-actions-demo";
 
 /* Herald's real action kinds, each in its own face. Mobile floors are measured so the longest
@@ -34,7 +35,7 @@ export default function Actions() {
           <WordFlipper phrases={PHRASES} />
         </h2>
         <p className="lede !max-w-[78ch]">
-          An app ships its own actions in the manifest. You can relabel, hide, reorder them, or add your own: open a URL, run a shell command or script, trigger an Apple Shortcut, call back into the app. Dangerous ones ask first, inline, without a dialog.
+          {nowrapText("An app ships its own actions in the manifest. You can relabel, hide, reorder them, or add your own: open a URL, run a shell command or script, trigger an Apple Shortcut, call back into the app. Dangerous ones ask first, inline, without a dialog.")}
         </p>
 
         <ul className="m-0 mt-10 list-none border-t border-line p-0">
@@ -42,9 +43,9 @@ export default function Actions() {
             <li key={name} className="grid grid-cols-1 gap-1 border-b border-line py-4 md:grid-cols-[minmax(200px,260px)_1fr] md:items-baseline md:gap-6">
               <div className="flex items-center gap-4">
                 <Icon aria-hidden className="size-[18px] shrink-0 text-accent" />
-                <span className="text-[17px] font-medium">{name}</span>
+                <span className="text-[17px] font-medium">{nowrapText(name)}</span>
               </div>
-              <p className="m-0 pl-[34px] text-[14px] leading-relaxed text-muted md:pl-0">{copy}</p>
+              <p className="m-0 pl-[34px] text-[14px] leading-relaxed text-muted md:pl-0">{nowrapText(copy)}</p>
             </li>
           ))}
         </ul>

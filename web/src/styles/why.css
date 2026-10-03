@@ -1,46 +1,45 @@
 /* why: owned by its section; imported from globals.css */
-.why-top { display: grid; gap: 40px; }
-@media (min-width: 1024px) { .why-top { grid-template-columns: minmax(0, 1fr) 420px; gap: 48px; min-height: 560px; } }
+.why-top { display: grid; gap: 40px; align-items: center; }
+@media (min-width: 1024px) { .why-top { grid-template-columns: minmax(0, 1fr) 460px; gap: 56px; } }
 .why-copy { min-width: 0; }
 .why-h { max-width: 20ch; }
-.why-corner { display: none; margin: 0; font-size: 11px; line-height: 1.5; color: var(--paper-muted); text-align: right; align-self: end; }
-@media (min-width: 1024px) { .why-corner { display: block; } }
+.nowrap { white-space: nowrap; }
 
-/* live countdown composition */
-.fs { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 40px; min-width: 0; }
-@media (min-width: 640px) { .fs { flex-direction: row; align-items: flex-end; gap: 28px; } }
-.fs-num { line-height: 0.8; flex: none; }
-.fs-glyph {
-  display: inline-block; font-style: italic; white-space: nowrap; color: var(--accent-on-paper);
-  font-size: clamp(96px, 12vw, 180px); line-height: .8; font-variant-numeric: tabular-nums;
-  min-width: 2.1ch; animation: fs-swap 120ms linear;
+/* two captures of one desktop */
+.sbs { display: grid; gap: 28px; min-width: 0; width: 100%; max-width: 460px; }
+@media (min-width: 640px) and (max-width: 1023px) { .sbs { max-width: none; grid-template-columns: 1fr 1fr; gap: 24px; } }
+.sbs-fig { margin: 0; min-width: 0; }
+.sbs-cap { display: block; margin-bottom: 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-muted); }
+.sbs-cap-herald { color: var(--accent-on-paper); }
+.sbs-frame {
+  display: block; width: 100%; aspect-ratio: 920 / 406; border-radius: 12px; overflow: hidden; container-type: inline-size;
+  box-shadow: 0 0 0 1px rgba(15, 19, 23, .12);
 }
-@keyframes fs-swap { from { opacity: 0; } to { opacity: 1; } }
-.fs-side { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; width: 100%; max-width: 420px; }
-.fs-btn { min-height: 44px; }
-.fs-lines { width: 100%; display: flex; flex-direction: column; gap: 4px; }
-.fs-gone, .fs-herald { margin: 0; font-size: 13px; line-height: 1.5; color: var(--paper-muted); }
-.fs-gone:empty, .fs-herald:empty { display: none; }
+.sbs-frame[data-testid] {
+  position: relative;
+  background:
+    radial-gradient(120% 120% at 0% 0%, #f9b65a 0%, rgba(249,182,90,0) 45%),
+    radial-gradient(90% 100% at 100% 100%, #b848c8 0%, rgba(184,72,200,0) 60%),
+    linear-gradient(135deg, #f08a63 0%, #e0518a 60%, #d9418f 100%);
+}
+.sbs-img { height: auto; }
 
-/* honest Apple-template mock */
-.sysn {
-  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px 12px 12px;
-  border-radius: 14px; background: #f7f7f8; border: 1px solid rgba(15, 19, 23, .14);
-  font-family: var(--font-body), "DM Sans", system-ui, sans-serif; color: #1c1c1e; text-align: left;
+/* faithful Notification Center alert, drawn at 1 css px = 1 pt of the 460-wide frame */
+.mac-alert {
+  position: absolute; left: 12.6%; top: 50%; transform: translateY(-50%); width: 74.8%;
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px 14px 12px;
+  border-radius: 18px; background: rgba(236, 236, 236, .86); border: .5px solid rgba(255, 255, 255, .55);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 3px rgba(0, 0, 0, .12);
+  backdrop-filter: blur(20px) saturate(1.6);
+  font-family: -apple-system, "SF Pro Text", var(--font-body), system-ui, sans-serif; color: #1d1d1f; text-align: left;
+  font-size: clamp(9px, 2.83cqw, 13px);
 }
-.sysn-icon { flex: none; width: 60px; height: 60px; border-radius: 13px; background: #c9cacf; color: #fff; display: grid; place-items: center; }
-.sysn-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.sysn-title { font-weight: 700; font-size: 14px; line-height: 1.3; }
-.sysn-body { font-size: 13px; line-height: 1.35; color: #3c3c43; }
-.sysn-now { align-self: flex-start; font-size: 12px; color: #8a8a8e; }
-.sysn-in { animation: sysn-in 360ms var(--ease-quart) both; }
-.sysn-out { animation: sysn-out 400ms linear both; }
-@keyframes sysn-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
-@keyframes sysn-out { from { opacity: 1; } to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .sysn-in { animation: none; }
-  .fs-glyph { animation: none; }
-}
+.mac-icon { flex: none; width: 2.92em; height: 2.92em; border-radius: .7em; background: linear-gradient(#b4b4b9, #98989d); color: #fff; display: grid; place-items: center; }
+.mac-icon svg { width: 58%; height: 58%; }
+.mac-text { flex: 1; min-width: 0; }
+.mac-title { margin: 0; font-weight: 700; font-size: 1em; line-height: 1.3; }
+.mac-body { margin: 1px 0 0; font-size: 1em; line-height: 1.3; color: #3c3c43; }
+.mac-now { flex: none; font-size: .92em; color: #86868b; }
 
 /* ledger */
 .ledger { width: 100%; margin-top: 72px; border-collapse: collapse; text-align: left; font-size: 14px; line-height: 1.5; }

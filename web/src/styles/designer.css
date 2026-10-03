@@ -3,6 +3,14 @@
 @media (min-width: 900px) {
   .dz-head { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 48px; }
 }
+/* right column of the head: the Rive grid-to-banner piece, its caption, the dark/light toggle */
+.dz-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; flex: none; width: 100%; max-width: 380px; }
+@media (min-width: 900px) { .dz-side { align-items: flex-end; } }
+.gb { position: relative; display: block; width: 100%; max-width: 380px; aspect-ratio: 380 / 136; padding: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }
+.gb-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; transition: opacity 240ms var(--ease-quart); }
+.gb-fallback { position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--paper-line); border-radius: 12px; font-size: 11px; color: var(--paper-muted); }
+.gb:focus-visible { outline: 2px solid var(--accent-on-paper); outline-offset: 4px; }
+.dz-side-cap { margin: 0; font-size: 11px; color: var(--paper-muted); }
 .dz-toggle { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--paper-line); flex: none; }
 .dz-toggle button { min-height: 40px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; color: var(--paper-muted); }
 .dz-toggle button[aria-pressed="true"] { background: var(--paper-surface); color: var(--paper-ink); }

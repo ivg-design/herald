@@ -14,7 +14,7 @@ export default function Designer({ shots }: { shots: { light?: ShotDims; dark?: 
               </h2>
               <p className="lede" style={{ maxWidth: "66ch" }}>
                 As many rows and columns as the banner needs, merged where you like. Drop fields, images, badges,
-                buttons, progress bars, SF Symbols and Rive animations into cells; align them on nine points; decide
+                buttons, progress bars, <span className="nowrap">SF Symbols</span> and Rive animations into cells; align them on nine points; decide
                 whether an empty field collapses or holds its place.
               </p>
             </>

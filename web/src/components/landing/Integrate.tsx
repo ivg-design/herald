@@ -1,4 +1,5 @@
 import SiteLink from "@/components/SiteLink";
+import { nowrapText } from "@/lib/nowrap";
 import CodeTabs from "./b-code-tabs";
 
 const USERS = [
@@ -22,9 +23,9 @@ export default function Integrate() {
               {USERS.map(({ name, href, copy }) => (
                 <li key={name} className="border-b border-paper-line py-4 text-[14px] leading-snug text-paper-muted">
                   <strong className="font-semibold text-paper-ink">
-                    {href ? <SiteLink href={href} className="underline decoration-paper-line underline-offset-4 hover:decoration-[var(--accent-on-paper)]">{name}</SiteLink> : name}
+                    {href ? <SiteLink href={href} className="underline decoration-paper-line underline-offset-4 hover:decoration-[var(--accent-on-paper)]">{name}</SiteLink> : nowrapText(name)}
                   </strong>{" "}
-                  {copy}
+                  {nowrapText(copy)}
                 </li>
               ))}
             </ul>

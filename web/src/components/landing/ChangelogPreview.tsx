@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import SiteLink from "@/components/SiteLink";
+import { nowrapText } from "@/lib/nowrap";
 import { parseChangelog } from "@/lib/changelog";
 
 export default async function ChangelogPreview() {
@@ -11,9 +12,9 @@ export default async function ChangelogPreview() {
         <ul className="m-0 mt-6 list-none p-0">
           {entries.map((e) => (
             <li key={e.version} className="grid gap-1 border-b border-line py-5 md:grid-cols-[96px_120px_1fr] md:items-baseline md:gap-6 first:border-t">
-              <span className="mono text-[15px] font-bold">{e.version}</span>
+              <span className="mono text-[15px] font-bold">{nowrapText(e.version)}</span>
               <span className="mono text-[12.5px] text-muted">{e.date}</span>
-              <span className="text-[15px] text-muted">{e.summary}</span>
+              <span className="text-[15px] text-muted">{nowrapText(e.summary)}</span>
             </li>
           ))}
         </ul>

@@ -43,7 +43,7 @@ export default async function ChangelogPage() {
                     <a href={`#${id}`}>{e.version}</a>
                   </h2>
                   <p>
-                    {e.build && <span>Build {e.build}</span>}
+                    {e.build && <span className="nowrap">Build {e.build}</span>}
                     {e.date && <time dateTime={e.date}>{fmt(e.date)}</time>}
                   </p>
                 </div>

@@ -1,14 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { HeraldCards, StackHeader } from "./HeraldHost";
 import { useHeraldInternal } from "./internal";
+
+const SHOWN_SMALL = 2;
+const MQ = "(max-width: 639px)";
+const subSmall = (cb: () => void) => {
+  const m = window.matchMedia(MQ);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+const useSmall = () => useSyncExternalStore(subSmall, () => window.matchMedia(MQ).matches, () => false);
 
 /** In-flow slot in the hero. While it is on screen the page's Herald draws its banners here. */
 export default function HeroDock() {
   const h = useHeraldInternal();
   const { setDocked } = h;
   const ref = useRef<HTMLDivElement>(null);
+  const small = useSmall();
+  const [more, setMore] = useState(false);
+  const cut = small && !more && h.cards.length > SHOWN_SMALL;
+  const cards = cut ? h.cards.slice(0, SHOWN_SMALL) : h.cards;
 
   useEffect(() => {
     const el = ref.current;
@@ -30,11 +43,16 @@ export default function HeroDock() {
 
   return (
     <div className="w-full">
-      <div ref={ref} className="hd" data-docked={h.docked}>
+      <div ref={ref} className="hd" style={small ? { minHeight: 0 } : undefined} data-docked={h.docked}>
         <span aria-hidden className="hd-tag mono">your grid · any rows × columns</span>
         <StackHeader />
         <div className="hb-cards" aria-label="Herald banners" role="region">
-          <HeraldCards cards={h.cards} stagger />
+          <HeraldCards cards={cards} stagger />
+          {small && h.cards.length > SHOWN_SMALL && (
+            <button type="button" className="hb-pill-btn" aria-expanded={more} onClick={() => setMore((v) => !v)}>
+              {more ? "Show fewer" : `+${h.cards.length - SHOWN_SMALL} more`}
+            </button>
+          )}
           {h.cards.length === 0 && h.held === 0 && (
             <p className="m-0 rounded-xl border border-dashed border-line p-4 text-[13.5px] text-muted" role="status">
               All clear. Everything you dismissed is in History; send one with Run it below.

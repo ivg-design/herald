@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { toJsxRuntime } from "hast-util-to-jsx-runtime";
-import type { Root } from "hast";
+import type { Root, Element, Text, ElementContent } from "hast";
 import SiteLink from "@/components/SiteLink";
 import { renderTree, type LinkResolver } from "@/lib/markdown";
 import CodeBlock from "./CodeBlock";
@@ -38,7 +38,40 @@ const components = {
   img: DocImage,
 } as never;
 
+const NOWRAP = new RegExp(
+  [
+    "IVG Design", "Claude Code", "Claude Desktop", "Codex CLI", "Apple Silicon", "SF Symbols", "Notification Center",
+    "Apple Shortcuts?", "Developer ID",
+    String.raw`\b\d+\.\d+\.\d+(?: \(Build \d+\))?`,
+    String.raw`\bBuild \d+`,
+    String.raw`[\u2318\u21e7\u2325\u2303]+[A-Z0-9]`,
+    String.raw`macOS \d+(?:\.\d+)?\+?`,
+  ].join("|"),
+  "g",
+);
+
+/** Wrap proper nouns, versions and key combos in <span class="nowrap"> (never inside code/pre). */
+function nowrapNode(parent: Root | Element) {
+  const out: ElementContent[] = [];
+  for (const c of parent.children as ElementContent[]) {
+    if (c.type === "element") {
+      if (c.tagName !== "code" && c.tagName !== "pre") nowrapNode(c);
+      out.push(c);
+    } else if (c.type === "text") {
+      let last = 0;
+      for (const m of c.value.matchAll(NOWRAP)) {
+        if (m.index > last) out.push({ type: "text", value: c.value.slice(last, m.index) } as Text);
+        out.push({ type: "element", tagName: "span", properties: { className: ["nowrap"] }, children: [{ type: "text", value: m[0] }] });
+        last = m.index + m[0].length;
+      }
+      out.push(last ? ({ type: "text", value: c.value.slice(last) } as Text) : c);
+    } else out.push(c);
+  }
+  parent.children = out as never;
+}
+
 export function renderHast(tree: Root): ReactNode {
+  nowrapNode(tree);
   return toJsxRuntime(tree, { Fragment, jsx, jsxs, components, passNode: false });
 }
 

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import SiteLink from "./SiteLink";
+import { nowrapText } from "@/lib/nowrap";
 import { asset, REPO_URL } from "@/lib/config";
 
 const COLUMNS = [
@@ -55,8 +56,8 @@ export default function Footer() {
         <div>
           <Image src={asset("/herald-icon.png")} alt="" width={36} height={36} className="rounded-[8px]" unoptimized />
           <p className="mt-3 text-[17px] font-semibold">Herald</p>
-          <p className="mt-3 max-w-[30ch] text-[13px] leading-relaxed text-muted">A notification service for macOS by IVG Design. MIT license.</p>
-          <p className="mt-4 text-[12px] text-muted">&copy; 2026 IVG Design</p>
+          <p className="mt-3 max-w-[30ch] text-[13px] leading-relaxed text-muted">{nowrapText("A notification service for macOS by IVG Design. MIT license.")}</p>
+          <p className="mt-4 text-[12px] text-muted">{nowrapText("\u00a9 2026 IVG Design")}</p>
         </div>
         {COLUMNS.map((c) => (
           <nav key={c.title} aria-label={c.title}>

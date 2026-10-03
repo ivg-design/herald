@@ -47,7 +47,7 @@ export default async function DocPageRoute({ params }: { params: Promise<Params>
   const body = renderHast(renderPageTree(page));
 
   return (
-    <div className="docs-grid">
+    <div className={`docs-grid${page.headings.length ? "" : " docs-grid--solo"}`}>
       <article className="docs-article">
         <nav aria-label="Breadcrumb" className="docs-crumbs">
           <span>{page.group}</span>
@@ -81,9 +81,11 @@ export default async function DocPageRoute({ params }: { params: Promise<Params>
           ) : <span />}
         </nav>
       </article>
-      <aside className="docs-rail" aria-label="Page outline">
-        <Toc headings={page.headings} />
-      </aside>
+      {page.headings.length > 0 && (
+        <aside className="docs-rail" aria-label="Page outline">
+          <Toc headings={page.headings} />
+        </aside>
+      )}
     </div>
   );
 }

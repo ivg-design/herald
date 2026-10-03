@@ -16,7 +16,7 @@ export default function CloudRelay() {
           <p className="eyebrow">From anywhere · Cloud relay</p>
           <h2 className="display max-w-[12ch] text-[clamp(44px,6vw,72px)]">Let your agent speak to you.</h2>
           <p className="lede">
-            An agent running in the cloud, ChatGPT, Codex, Claude, can reach your Mac even when you&rsquo;re not looking at it. It sends a banner that reads itself aloud, asks you a question, and waits for your answer: typed, or spoken into the banner with one press.
+            An agent running in the cloud, <span className="nowrap">ChatGPT</span>, <span className="nowrap">Codex</span>, <span className="nowrap">Claude</span>, can reach your Mac even when you&rsquo;re not looking at it. It sends a banner that reads itself aloud, asks you a question, and waits for your answer: typed, or spoken into the banner with one press.
           </p>
           <ul className="m-0 mt-10 flex list-none flex-col gap-5 p-0">
             {POINTS.map(({ icon: Icon, text }) => (

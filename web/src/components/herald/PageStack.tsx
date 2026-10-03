@@ -15,31 +15,41 @@ export default function PageStack() {
   const [all, setAll] = useState(false);
   if (h.docked || (h.cards.length === 0 && h.held === 0)) return null;
 
-  const open = h.expanded;
+  const open = h.expanded && h.overlayMode === "full";
+  const arrival = h.expanded && h.overlayMode === "arrival" ? h.cards.find((c) => c.id === h.arrivalId) : undefined;
   const shown = all ? h.cards : h.cards.slice(0, SHOWN);
   const more = h.cards.length - SHOWN;
 
   return (
-    <div
-      id="herald-overlay"
-      className="hb-overlay"
-      onPointerEnter={() => h.setHold("hover", true)}
-      onPointerLeave={() => h.setHold("hover", false)}
-      onFocus={() => h.setHold("focus", true)}
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) h.setHold("focus", false);
-      }}
-    >
-      <div className="hb-stack" data-open={open}>
-        <StackHeader full />
-        <div className="hb-cards">
-          <HeraldCards cards={shown} />
+    <div className="hb-overlay">
+      <div className="hb-overlay-in">
+        <div
+          id="herald-overlay"
+          className="hb-panel"
+          onPointerEnter={() => h.setHold("hover", true)}
+          onPointerLeave={() => h.setHold("hover", false)}
+          onFocus={() => h.setHold("focus", true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) h.setHold("focus", false);
+          }}
+        >
+          {arrival && (
+            <div className="hb-arrival" data-open="true">
+              <HeraldCards cards={[arrival]} />
+            </div>
+          )}
+          <div className="hb-stack" data-open={open}>
+            <StackHeader full />
+            <div className="hb-cards">
+              <HeraldCards cards={shown} />
+            </div>
+            {more > 0 && (
+              <button type="button" className="hb-more" aria-expanded={all} onClick={() => setAll((v) => !v)}>
+                {all ? "Show fewer" : `+${more} more`}
+              </button>
+            )}
+          </div>
         </div>
-        {more > 0 && (
-          <button type="button" className="hb-more" aria-expanded={all} onClick={() => setAll((v) => !v)}>
-            {all ? "Show fewer" : `+${more} more`}
-          </button>
-        )}
       </div>
     </div>
   );

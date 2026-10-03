@@ -86,9 +86,9 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
       style={{ paddingTop: "clamp(56px, 7vh, 88px)", paddingBottom: "clamp(56px, 8vh, 96px)" }}
     >
       <GhostGrid />
-      <div className="shell relative grid items-center gap-12 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_412px] lg:gap-10">
-        <div className="min-w-0">
-          <div className="mb-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-5">
+      <div className="shell relative grid grid-cols-[minmax(0,1fr)] gap-y-8 lg:grid-cols-[minmax(0,1fr)_412px] lg:gap-x-10 lg:gap-y-0">
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1 lg:self-end">
+          <div className="mb-6 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-5">
             <LogoMark ring={ring} />
             <p className="eyebrow m-0 min-w-0">A notification service for macOS · the Growl idea, rebuilt</p>
           </div>
@@ -100,13 +100,18 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
               you&rsquo;d actually design.
             </em>
           </h1>
-          <p className="mt-8 max-w-[56ch] text-[16px] leading-[1.6] text-muted sm:text-[18px]">
+        </div>
+        <div className="relative mx-auto w-full max-w-[412px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mx-0 lg:self-center">
+          <HeroDock />
+        </div>
+        <div className="min-w-0 lg:col-start-1 lg:row-start-2 lg:self-start">
+          <p className="mt-0 lg:mt-8 max-w-[56ch] text-[16px] leading-[1.6] text-muted sm:text-[18px]">
             Any app declares the data it can send. You design — on a grid of any size, with merged cells and
             nine-point alignment — exactly how it shows up: persistent, interactive, animated banners with
             history, sound and actions. They stay until you deal with them, sit above everything, and never
             steal focus.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3 sm:mt-8">
             <SiteLink href={release.dmgUrl} className="btn btn-primary">
               <Download size={18} aria-hidden />
               Download Herald · {release.version}
@@ -122,9 +127,6 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
             <button type="button" className="btn btn-ghost btn-sm" onClick={run}>Run it</button>
           </div>
           <p className="mono m-0 mt-2 min-h-[18px] text-[11px] text-accent" role="status" aria-live="polite">{sent}</p>
-        </div>
-        <div className="relative mx-auto w-full max-w-[412px] lg:mx-0">
-          <HeroDock />
         </div>
       </div>
     </section>

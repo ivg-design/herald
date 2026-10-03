@@ -27,6 +27,10 @@ export interface HeraldInternals extends HeraldApi {
   cards: HeraldCardModel[];
   /** Fixed overlay shows cards (true) or the compact pill (false). */
   expanded: boolean;
+  /** "arrival": only the just-updated card slides in (4 s); "full": header, all cards, Dismiss all (bell hover/click). */
+  overlayMode: "arrival" | "full";
+  /** Card id shown in arrival mode. */
+  arrivalId: string | null;
   speakingId: string | null;
   snoozingIds: string[];
   /** "07:00": when held banners are released. */

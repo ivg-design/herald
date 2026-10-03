@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { ArrowUpRight, Check, Download as DownloadIcon } from "lucide-react";
 import SiteLink from "@/components/SiteLink";
+import { nowrapText } from "@/lib/nowrap";
 import { asset, RELEASES_URL } from "@/lib/config";
 import { monthYear, type ReleaseInfo } from "@/lib/release";
 
@@ -18,13 +19,13 @@ export default function Download({ release }: { release: ReleaseInfo }) {
         <div>
           <h2 className="display text-[clamp(52px,8vw,96px)] !text-accent-ink">Ready when you are.</h2>
           <p className="mt-6 mb-0 max-w-[56ch] text-[clamp(16px,1.4vw,18px)] leading-relaxed">
-            Free and open source. Signed with a Developer ID and notarized by Apple. Menu-bar app, no account, nothing leaves your Mac.
+            {nowrapText("Free and open source. Signed with a Developer ID and notarized by Apple.")} Menu-bar app, no account, nothing leaves your Mac.
           </p>
           <ul className="m-0 mt-6 flex list-none flex-col gap-2 p-0 text-[14px]">
             {REQS.map((r) => (
               <li key={r} className="flex items-start gap-2.5">
                 <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
-                {r}
+                {nowrapText(r)}
               </li>
             ))}
           </ul>
@@ -32,7 +33,7 @@ export default function Download({ release }: { release: ReleaseInfo }) {
         <div className="rounded-2xl bg-surface p-6 text-ink">
           <Image src={asset("/herald-icon.png")} alt="" width={64} height={64} unoptimized className="rounded-[14px]" />
           <p className="mono mt-4 mb-0 text-[12px] font-semibold tracking-wide text-muted">
-            Herald {release.version} · Build {release.build} · {monthYear(release.date)}
+            <span className="nowrap">Herald {release.version} · Build {release.build} · {monthYear(release.date)}</span>
           </p>
           <SiteLink href={release.dmgUrl} className="btn btn-primary mt-5 !h-[52px] w-full !text-[16px]">
             <DownloadIcon aria-hidden className="size-[18px]" />
@@ -44,7 +45,6 @@ export default function Download({ release }: { release: ReleaseInfo }) {
               {release.sha256 && <span className="mono text-[12px] text-muted" title={release.sha256}>{release.sha256.slice(0, 12)}…</span>}
             </span>
             <SiteLink href={RELEASES_URL} className={link}>All releases on GitHub <ArrowUpRight aria-hidden className="size-3.5" /></SiteLink>
-            <span className={`${link} hover:text-muted`}><span className="mono">brew install --cask herald</span>&nbsp;(planned)</span>
           </div>
         </div>
       </div>

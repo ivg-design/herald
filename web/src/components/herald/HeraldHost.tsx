@@ -28,6 +28,13 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   const [docked, setDockedState] = useState(true);
   const [expanded, setExpandedState] = useState(false);
   const expandedRef = useRef(false);
+  const modeRef = useRef<"arrival" | "full">("full");
+  const [overlayMode, setOverlayModeState] = useState<"arrival" | "full">("full");
+  const [arrivalId, setArrivalId] = useState<string | null>(null);
+  const setMode = useCallback((m: "arrival" | "full") => {
+    modeRef.current = m;
+    setOverlayModeState(m);
+  }, []);
   const setExpanded = useCallback((on: boolean) => {
     expandedRef.current = on;
     setExpandedState(on);
@@ -66,13 +73,15 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   );
 
   /* ---- overlay mode ---- */
-  const expandFor = useCallback((ms: number) => {
+  const expandFor = useCallback((ms: number, mode: "arrival" | "full" = "full") => {
+    // A full stack that is already open (hover/pin) is never downgraded to the single arrival card.
+    setMode(expandedRef.current && modeRef.current === "full" ? "full" : mode);
     setExpanded(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       if (!hoverRef.current && !focusRef.current && !pinnedRef.current) setExpanded(false);
     }, ms);
-  }, [setExpanded]);
+  }, [setExpanded, setMode]);
   const compact = useCallback(() => {
     pinnedRef.current = false;
     window.clearTimeout(timer.current);
@@ -95,11 +104,12 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     setExpanded(false);
   }, [setExpanded]);
   const show = useCallback(() => {
+    setMode("full");
     if (hoverRef.current || focusRef.current) {
       window.clearTimeout(timer.current);
       setExpanded(true);
     } else expandFor(6000);
-  }, [expandFor, setExpanded]);
+  }, [expandFor, setExpanded, setMode]);
 
   const toggle = useCallback(() => {
     if (dockedRef.current) {
@@ -110,10 +120,11 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     else {
       // Click pins the overlay open (also when it was only open from hovering the bell).
       pinnedRef.current = true;
+      setMode("full");
       window.clearTimeout(timer.current);
       setExpanded(true);
     }
-  }, [compact, setExpanded]);
+  }, [compact, setExpanded, setMode]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
@@ -184,7 +195,10 @@ export function HeraldHost({ children }: { children: ReactNode }) {
         };
         setCards(seed ? [...cur, card] : [card, ...cur]);
       }
-      if (!seed && !dockedRef.current) expandFor(6000);
+      if (!seed && !dockedRef.current) {
+        setArrivalId(cardId);
+        expandFor(4000, "arrival");
+      }
       return cardId;
     },
     [expandFor, setCards],
@@ -210,7 +224,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     const list = heldRef.current;
     setHeld([]);
     list.forEach((h) => addCard(h, false));
-    if (list.length && dockedRef.current === false) expandFor(6000);
+    if (list.length && dockedRef.current === false) expandFor(4000, "arrival");
   }, [addCard, expandFor, setHeld]);
 
   const quietKey = `${quiet.hold}|${quiet.from}|${quiet.to}|${quiet.pretendNow}`;
@@ -285,6 +299,8 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       ring,
       cards,
       expanded,
+      overlayMode,
+      arrivalId,
       speakingId,
       snoozingIds,
       heldUntil: hhmm(quiet.to),
@@ -300,7 +316,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       setDocked,
       setHold,
     };
-  }, [cards, held, history, snoozingIds, speakingId, quiet, docked, expanded, ring, send, dismissAll, show, setVoice, setQuiet, isQuiet, nowMinute, seed, play, stop, closeCard, dismissItem, setSnoozing, showHeld, compact, toggle, setDocked, setHold]);
+  }, [cards, held, history, snoozingIds, speakingId, quiet, docked, expanded, overlayMode, arrivalId, ring, send, dismissAll, show, setVoice, setQuiet, isQuiet, nowMinute, seed, play, stop, closeCard, dismissItem, setSnoozing, showHeld, compact, toggle, setDocked, setHold]);
 
   return (
     <HeraldContext.Provider value={value}>

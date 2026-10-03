@@ -140,21 +140,19 @@ await section("hero", async () => {
 
 // ============ 2 why ============
 await section("why", async () => {
-  await scrollToSel("#why .fs-btn");
-  const t0 = Date.now();
-  await page.click('button[aria-label="Send the same alert to both"]');
-  await page.mouse.move(2, 2);
-  ok(await waitFor(() => exists('[data-testid="system-banner"]'), 1500), "why: system banner appears");
-  await sleep(Math.max(0, 1200 - (Date.now() - t0)));
-  const g = (await page.$eval(".fs-glyph", (e) => e.innerText.replace(/\s/g, " ")).catch(() => "")).trim();
-  ok(g === "4 s" || g === "3 s", "why: countdown shows 4 s or 3 s at ~1.2 s", g);
-  const ov = await waitFor(async () => (await overlayText()).includes("Build passed"), 2500);
-  ok(ov, "why: page Herald got a CI Bot item (overlay contains 'Build passed')", await overlayText());
-  ok(await page.$eval("#herald-overlay .hb-stack", (e) => e.dataset.open === "true").catch(() => false), "why: overlay is visible (open) after the send");
-  ok((await text('[data-testid="herald-line"]')).trim().length > 0, "why: Herald line is non-empty");
-  await sleep(Math.max(0, 5800 - (Date.now() - t0)));
-  ok(!(await exists('[data-testid="system-banner"]')), "why: system banner is gone after about 5.6 s");
-  ok((await text('[data-testid="gone-line"]')).trim() === "Gone. It is not in any history.", "why: gone line reads 'Gone. It is not in any history.'", await text('[data-testid="gone-line"]'));
+  await scrollToSel("#why");
+  const w = await page.evaluate(() => {
+    const mac = document.querySelector('#why [data-testid="mac-alert"]');
+    const img = document.querySelector('#why img[src*="banner-plain"]');
+    const frames = [...document.querySelectorAll("#why .sbs-frame")].map((f) => f.getBoundingClientRect().height);
+    return { mac: !!mac, img: !!img, frames, txt: document.querySelector("#why").innerText };
+  });
+  ok(w.mac, "why: a faithful macOS Notification Center alert mock is present");
+  ok(w.img, "why: a real Herald banner capture (banner-plain) sits beside it");
+  ok(w.frames.length === 2 && Math.abs(w.frames[0] - w.frames[1]) < 1, "why: both frames render at the same height", w.frames.join("/"));
+  ok(!/\b5 s\b|five seconds|Gone\./.test(w.txt), "why: no five-second premise anywhere in the section");
+  ok(/Notification Center/.test(w.txt) && /Herald/.test(w.txt) && /History|history/.test(w.txt), "why: ledger argues layout, actions, history, grouping, voice, focus, agents");
+  ok(!(await exists("#herald-overlay .hb-stack[data-open='true']")), "why: nothing pops over the page just from reading the section");
 });
 
 // ============ 3 overlay and bell ============
@@ -261,6 +259,13 @@ await section("living", async () => {
   await scrollToSel("#living");
   await clickBtn("#living", "+1 from the same sender");
   ok(await waitFor(() => exists('#living [aria-label="4 banners in this stack"]'), 1500), "living: +1 from the same sender, counter 4");
+  const badge = '#living button[aria-label="4 banners in this stack"]';
+  ok(await exists(badge), "living: the red count badge is a button");
+  await page.$eval(badge, (b) => b.click());
+  ok(await waitFor(() => page.$eval(badge, (b) => b.getAttribute("aria-expanded") === "true"), 1500), "living: clicking the badge fans the stack out (aria-expanded true)");
+  ok(await page.$eval(badge, (b) => !!document.getElementById(b.getAttribute("aria-controls") || "")), "living: badge aria-controls points at the fanned-out list");
+  await jsClick("#living", "Collapse stack");
+  ok(await waitFor(() => page.$eval(badge, (b) => b.getAttribute("aria-expanded") === "false"), 1500), "living: the chevron button collapses it again");
   const sentence = () => page.evaluate(() => {
     const el = [...document.querySelectorAll("#living [role=status]")].find((e) => /muted/.test(e.innerText) && /–/.test(e.innerText));
     return el ? el.innerText : "";
@@ -339,6 +344,12 @@ await section("integrate", async () => {
   ok(clip.includes("from herald import Herald"), "integrate: Copy code copies the shown tab", clip.slice(0, 60));
   await clickBtn("#integrate", "Run snippet");
   ok(await waitFor(async () => (await text('#integrate [aria-label="Run outcome"]')).includes("Sent"), 1500), "integrate: Run snippet outcome says 'Sent'", await text('#integrate [aria-label="Run outcome"]'));
+  ok(await waitFor(() => exists('#herald-overlay .hb-arrival[data-open="true"]'), 1500), "arrival: a send from a lower section shows one arrival card under the bell");
+  ok(!(await exists('#herald-overlay .hb-stack[data-open="true"]')) && !(await has("#herald-overlay", "Dismiss all")), "arrival: the full stack (Dismiss all) stays closed");
+  ok((await page.$$eval('#herald-overlay .hb-arrival [aria-label$=" banner"]', (n) => n.length)) === 1, "arrival: exactly one banner card in the arrival");
+  ok(await waitFor(async () => !(await exists('#herald-overlay .hb-arrival[data-open="true"]')), 6000), "arrival: it goes away by itself after about 4 s");
+  const al = await page.evaluate(() => { const a = document.querySelector(".hb-overlay-in"), sh = document.querySelector("main .shell"); return a && sh ? Math.abs(a.getBoundingClientRect().right - sh.getBoundingClientRect().right) : 999; });
+  ok(al < 1, "arrival: overlay column is aligned to the page shell, no 100vw maths", String(al));
 });
 
 // ============ 11 easter egg ============
@@ -353,6 +364,72 @@ await section("egg", async () => {
   ok(await waitFor(async () => (await overlayText()).includes("You found it."), 2000), "egg: Cmd+Shift+H shows 'You found it.' in the page's Herald", await overlayText());
   await jsClick('#herald-overlay [aria-label="Herald banner"]', "Snooze");
   ok(await waitFor(async () => !(await overlayText()).includes("You found it.") && (await overlayText()).includes("snoozed"), 2000), "egg: Snooze hides the banner and shows the snoozed line", await overlayText());
+});
+
+// ============ 11b round 2: layout, fold, nowrap, grid banner, docs ============
+const PH = ["IVG Design","Claude Code","Claude Desktop","Codex CLI","Apple Silicon","SF Symbols","Notification Center","Apple Shortcut","Apple Shortcuts","macOS 13.1+","macOS 13.1","Developer ID","Kokoro voice","WebWatcher"];
+const RX = [["\\d+\\.\\d+\\.\\d+(?: \\(Build \\d+\\))?","g"],["Build \\d+","g"],["⌘[⇧⌥⌃]*[A-Z0-9]","g"],["macOS \\d+(?:\\.\\d+)?\\+?","g"]];
+function nowrapCheck(PH, RX) {
+  const rxs = RX.map(([s, f]) => new RegExp(s, f)), out = [];
+  const wk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); let n;
+  while ((n = wk.nextNode())) {
+    const t = n.textContent, pe = n.parentElement;
+    if (!pe || pe.closest("script,style,noscript,pre,code") || !pe.getClientRects().length) continue;
+    const ms = [];
+    for (const ph of PH) { let i = -1; while ((i = t.indexOf(ph, i + 1)) >= 0) ms.push([i, ph.length]); }
+    for (const rx of rxs) { rx.lastIndex = 0; let m; while ((m = rx.exec(t))) ms.push([m.index, m[0].length]); }
+    for (const [i, l] of ms) {
+      const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + l);
+      const tops = new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top)));
+      if (tops.size > 1) out.push(t.slice(i, i + l));
+    }
+  }
+  return out;
+}
+await section("round2", async () => {
+  await load("/", 1440, 900);
+  const tops = await page.$$eval("#living h3", (h) => h.map((e) => Math.round(e.getBoundingClientRect().top)));
+  ok(tops.length === 3 && Math.max(...tops) - Math.min(...tops) <= 1, "living: the three headings share one baseline", tops.join("/"));
+  await scrollToSel("#agents ul.mono");
+  await sleep(300);
+  const rows = await page.$$eval("#agents ul.mono li", (li) => li.map((e) => ({ t: e.innerText.trim(), o: getComputedStyle(e).opacity })));
+  ok(rows.every((r) => r.t.length > 0 || Number(r.o) === 0), "agents: untyped rows are invisible, never a bare check mark", JSON.stringify(rows).slice(0, 120));
+  ok(await waitFor(async () => (await page.$$eval("#agents ul.mono li", (li) => li.every((e) => e.innerText.trim().length > 0 && getComputedStyle(e).opacity === "1"))), 9000), "agents: every tool row is typed within 9 s");
+  // Rive grid -> banner piece
+  await scrollToSel('[data-testid="grid-banner"]');
+  ok(await exists('[data-testid="grid-banner"]'), "designer: the Rive grid-to-banner piece is on the page");
+  ok(await waitFor(() => page.$eval('[data-testid="grid-banner"]', (e) => e.dataset.loaded === "true"), 8000), "designer: grid-banner.riv loads (Rive runtime, self-hosted wasm)");
+  await page.$eval('[data-testid="grid-banner"]', (e) => e.click());
+  ok(await waitFor(() => page.$eval('[data-testid="grid-banner"]', (e) => e.dataset.plays === "1"), 1500), "designer: clicking the piece replays the assembly");
+  // phone fold
+  await load("/", 390, 844);
+  const fold = await page.evaluate(() => {
+    const h1 = document.querySelector("#top h1").getBoundingClientRect();
+    const dock = document.querySelector("#top .hd").getBoundingClientRect();
+    const card = document.querySelector('#top [aria-label$=" banner"]')?.getBoundingClientRect();
+    const more = [...document.querySelectorAll("#top button")].find((b) => /\+\d+ more/.test(b.innerText));
+    return { h1b: h1.bottom, dockT: dock.top, cardT: card?.top ?? 9999, more: !!more, sw: document.documentElement.scrollWidth };
+  });
+  ok(fold.h1b < fold.dockT && fold.cardT < 844, "mobile 390: a real banner card is on the first screen, right under the headline", JSON.stringify(fold));
+  ok(fold.more, "mobile 390: the dock shows two cards and a '+N more' pill", JSON.stringify(fold));
+  ok(fold.sw <= 390, `mobile 390: no horizontal overflow after the hero reorder (scrollWidth ${fold.sw})`);
+  // proper nouns never wrap
+  for (const [w, h] of [[1440, 900], [834, 1100], [390, 844]]) {
+    for (const path of ["/", "/changelog", "/docs/getting-started/install"]) {
+      await load(path, w, h);
+      const bad = await page.evaluate(nowrapCheck, PH, RX);
+      ok(bad.length === 0, `nowrap: no proper noun / version / key combo breaks across lines at ${w} on ${path}`, bad.join(" | "));
+    }
+  }
+  // docs: solo grid without a rail, tables scroll inside the article
+  await load("/docs/getting-started/install", 1440, 900);
+  ok(await page.$eval(".docs-grid", (g) => g.classList.contains("docs-grid--solo") && !document.querySelector(".docs-rail")), "docs: a page without headings drops the empty rail column");
+  await load("/docs/reference/http-api", 1440, 900);
+  const tbl = await page.evaluate(() => { const a = document.querySelector("#docs-main article, #docs-main").getBoundingClientRect(); return [...document.querySelectorAll(".docs-table")].map((t) => Math.round(t.getBoundingClientRect().right - a.right)); });
+  ok(tbl.length > 0 && tbl.every((d) => d <= 1), "docs: every wide table scrolls inside the article instead of overflowing it", tbl.join("/"));
+  await load("/docs/reference/http-api", 390, 844);
+  ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "docs 390: the API reference has no horizontal page overflow");
+  ok(await page.evaluate(() => !!document.querySelector("html") && getComputedStyle(document.documentElement).scrollbarGutter.includes("stable")), "layout: html has scrollbar-gutter: stable (no shift when a scrollbar appears)");
 });
 
 // ============ 12 docs ============

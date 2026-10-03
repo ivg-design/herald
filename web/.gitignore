@@ -5,3 +5,4 @@ next-env.d.ts
 *.tsbuildinfo
 .next-verify/
 .shots-raw/
+.next-verify*/
