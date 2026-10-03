@@ -6,7 +6,7 @@ import { ArrowUpRight, Download, Menu, X } from "lucide-react";
 import SiteLink from "./SiteLink";
 import Bell from "@/components/rive/Bell";
 import { HeraldInternalContext } from "@/components/herald/internal";
-import { asset, REPO_URL } from "@/lib/config";
+import { asset, REPO_URL, route } from "@/lib/config";
 
 const NAV = [
   { label: "Why", href: "/#why" },
@@ -33,7 +33,16 @@ export default function Header({ downloadUrl }: { downloadUrl: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="shell flex h-16 items-center justify-between gap-6">
-        <SiteLink href="/" className="site-brand flex h-full min-w-0 shrink-0 items-center gap-3" aria-label="Herald home">
+        <SiteLink href="/" data-testid="brand-home" onClick={(e) => {
+            // Already on the landing page: go to the very top and drop any #section, instead of a no-op or a reload.
+            const here = window.location.pathname.replace(/\/$/, "");
+            const home = route("/").replace(/\/$/, "");
+            if (here === home && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+              e.preventDefault();
+              window.history.replaceState(null, "", window.location.pathname + window.location.search);
+              window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+            }
+          }} className="site-brand flex h-full min-w-0 shrink-0 items-center gap-3" aria-label="Herald home">
           <Image src={asset("/herald-icon.png")} alt="" width={64} height={64} className="site-brand-icon" unoptimized />
           <span className="text-[17px] font-semibold tracking-[-0.01em]">Herald</span>
         </SiteLink>
