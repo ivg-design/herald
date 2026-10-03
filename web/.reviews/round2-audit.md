@@ -39,3 +39,7 @@ Verified against the repo: 67 MCP tool names in `Sources/herald-mcp` ("60+ tools
 
 ## Positive
 The host concept works and is coherent (one stack, bell count, History counter, snooze, inline confirm with the Rive ring); the Designer RAV-style hotspots on the real capture are excellent; LERP flipper is distinctive; docs search is fast and clean; the transparent SVG mark with the ping is right.
+
+## Status after the round-2 fixes (commits 61270ea, 5a40926)
+Fixed and verified headless (125/125 assertions in `scripts/test-demos.mjs`, screenshots at 1440/834/390): 1–14 above. Added: Rive grid-to-banner piece (`web/rive/grid-banner`, 43 KB with a subset DM Sans) in the Designer head; `scrollbar-gutter: stable`; `.nowrap` helper (`src/lib/nowrap.tsx`) plus a rehype pass for docs/changelog; arrival-card overlay mode; badge/chevron buttons on stacks; phone hero reorder with a "+N more" pill; Flow field-linked highlights and icon rail; docs solo column and scrolling tables; Homebrew line removed.
+Still weakest: the Living voice card's waveform is static until Play (decorative while idle); the Why mac-alert is a CSS reproduction, not a system capture (capturing one would post a real notification on the owner's screen); the arrival card still covers ~200 px of the right column for 4 s at 1440 (by design, like the app).
