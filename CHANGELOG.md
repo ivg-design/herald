@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Herald's own icon** is the real app icon (256 px, never the system's generic placeholder); a bad `herald.png` from an earlier export is replaced at start (#84).
+- **Connector apps** are named with the client's `client_name`, not the truncated key slug; existing `cloud.*` apps are renamed from the relay's `displayName` (#85).
+- **Icons for connectors, keys and agents**: ChatGPT/Claude/Codex icon when installed, else a cloud / key / terminal tile (no more letter tiles); Settings > Apps > Change icon... / Remove; Apps and History read name and icon from the registry only; the Apps list sorts ignoring case (#86).
 
 ## 1.6.3 (Build 13) - 2026-10-02
 
