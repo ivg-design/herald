@@ -29,7 +29,11 @@ public enum HeraldIdentity {
     @discardableResult
     public static func ensureRegistered(registry: AppRegistry, supportDirectory: URL, iconPNG: Data?, refreshIcon: Bool = false) -> AppRecord {
         let file = iconFile(in: supportDirectory)
-        if let iconPNG, refreshIcon || !FileManager.default.fileExists(atPath: file.path) {
+        // A file that is not a usable app icon (the system's generic placeholder, a transparent or unreadable image: what an early
+        // export stored) is replaced as soon as a good icon is at hand.
+        let stored = try? Data(contentsOf: file)
+        let storedIsBad = stored.map { !IconArt.isUsableAppIcon($0) } ?? false
+        if let iconPNG, refreshIcon || stored == nil || (storedIsBad && IconArt.isUsableAppIcon(iconPNG)) {
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? iconPNG.write(to: file, options: .atomic)
         }
