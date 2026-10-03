@@ -1,49 +1,47 @@
-/* Herald host: banner cards, the hero dock, the fixed page stack, pill, waveform. Imported from globals.css. */
-
-header .site-brand { padding-block: 2.5px; }
+/* Herald host (v3): header bell, the overlay stack under the header, banner chips, waveform. Imported from globals.css. */
 
 /* header bell */
-.hb-bell { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; }
-.hb-bell:hover { background: var(--surface-2); }
+.hb-bell { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; transition: background-color var(--t-state) var(--ease-quint); }
+.hb-bell:hover { background: var(--surface); }
 
-/* sender mark: 32px rounded tile tinted from surface-2 */
+/* sender mark: 32px rounded tile on the banner's own ground */
 .hb-mark { display: inline-grid; place-items: center; flex: none; border-radius: 22%; background: var(--mb-btn); color: var(--mb-ink); }
 
-/* hero dock: a grid cell the banners are drawn into */
-.hd { position: relative; width: 100%; max-width: 412px; min-height: 380px; padding: 18px 16px 16px; border: 1px dashed var(--line); border-radius: 14px; }
-.hd-tag { position: absolute; top: 0; right: 14px; transform: translateY(-50%); padding: 1px 8px; background: var(--bg); color: var(--muted); font-size: 10px; letter-spacing: 0.02em; border: 1px dashed var(--line); border-radius: 4px; white-space: nowrap; }
 .hb-cards { display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
 
+/* stack head line: Archivo, sentence case; counts in mono */
 .hb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; max-width: 380px; }
-.hb-head-l { min-width: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hb-voice { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-.hb-voice { white-space: nowrap; flex: none; }
+.hb-head-l { min-width: 0; font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-voice { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; flex: none; transition: color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint); }
 .hb-voice-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 16px; }
-.hb-voice:hover { color: var(--ink); }
-.hb-voice[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.hb-voice:hover { color: var(--ink); border-color: var(--muted); }
+.hb-voice[aria-pressed="true"] { color: var(--blue-ink); border-color: var(--blue-ink); }
 
-.hb-heldline { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+.hb-heldline { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.hb-heldline .mono, .hb-heldline time { font-family: var(--font-mono); letter-spacing: 0.02em; }
 
-/* fixed overlay */
-.hb-overlay { position: fixed; inset-inline: 0; top: 84px; z-index: 60; pointer-events: none; }
+/* the overlay: fixed under the 64 px header + 12 px; it starts empty */
+.hb-overlay { position: fixed; inset-inline: 0; top: 76px; z-index: 60; pointer-events: none; }
 .hb-overlay-in { max-width: calc(1200px + 32px); margin-inline: auto; padding-inline: 16px; display: flex; justify-content: flex-end; }
 .hb-panel { width: 360px; pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end; }
-.hb-arrival { width: 100%; animation: hb-in 420ms var(--ease-expo) both; }
+.hb-arrival { width: 100%; animation: hb-in var(--t-arrive) var(--ease-expo) both; }
 .hb-arrival .hb-cards { max-width: none; }
 .hb-stack { width: 100%; }
 .hb-stack[data-open="false"] { display: none; }
-.hb-stack[data-open="true"] { box-shadow: none; animation: hb-in 520ms var(--ease-expo) both; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+/* Day: a bone surface with a hairline; banners inside keep the night-card skin */
+.hb-stack[data-open="true"] { box-shadow: none; animation: hb-in var(--t-arrive) var(--ease-expo) both; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
 .hb-stack .hb-head, .hb-stack .hb-cards { max-width: none; }
-.hb-more { display: block; margin: 8px 0 0 auto; height: 32px; padding: 0 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.hb-more { display: block; margin: 8px 0 0 auto; height: 32px; padding: 0 14px; border: 1px solid var(--line); border-radius: 16px; background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; cursor: pointer; transition: color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint); }
+.hb-more:hover { color: var(--ink); border-color: var(--muted); }
 @media (max-width: 639px) {
   .hb-overlay { top: 76px; }
   .hb-overlay-in { padding-inline: 12px; }
   .hb-panel { width: 100%; }
 }
 
-/* inline text button (stack lines) */
-.hb-pill-btn { height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
-.hb-pill-btn:hover { background: var(--surface-2); }
+/* inline text button (stack lines: "Dismiss all") */
+.hb-pill-btn { height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: var(--blue-ink); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--t-state) var(--ease-quint); }
+.hb-pill-btn:hover { background: var(--surface); }
 @media (pointer: coarse) {
   .hb-pill-btn, .hb-voice, .hb-more { min-height: 40px; }
   .hb-card .mb-btn { min-height: 40px; }
@@ -52,9 +50,9 @@ header .site-brand { padding-block: 2.5px; }
 
 @keyframes hb-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
 
-/* speaking waveform */
+/* speaking waveform: Herald speaks, so blue */
 .hb-wave { display: inline-flex; align-items: center; gap: 2px; height: 14px; flex: none; }
-.hb-wave i { display: block; width: 2px; height: 100%; border-radius: 1px; background: var(--accent); transform-origin: center; animation: hb-wave 900ms ease-in-out infinite; }
+.hb-wave i { display: block; width: 2px; height: 100%; border-radius: 1px; background: var(--blue); transform-origin: center; animation: hb-wave 900ms ease-in-out infinite; }
 .hb-wave i:nth-child(2) { animation-delay: -150ms; }
 .hb-wave i:nth-child(3) { animation-delay: -300ms; }
 .hb-wave i:nth-child(4) { animation-delay: -450ms; }
@@ -66,22 +64,23 @@ header .site-brand { padding-block: 2.5px; }
   .hb-wave i { animation: none !important; transform: scaleY(0.7); }
 }
 
-/* stacked-card edges peeking under a banner */
-.hb-ghost { position: absolute; inset-inline: 0; height: 6px; z-index: 0; background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; }
-.on-paper .hb-ghost { background: #fff; border-color: var(--paper-line); }
+/* stacked-card edges peeking under a banner: the same night card, one step down */
+.hb-ghost { position: absolute; inset-inline: 0; height: 6px; z-index: 0; background: var(--night-2); border: 1px solid var(--night-hair); border-top: 0; border-radius: 0 0 10px 10px; }
+.night .hb-ghost { background: #16254a; border-color: #2d3f68; }
 
 /* living hero mark */
 .hb-logo { position: relative; display: inline-block; flex: none; line-height: 0; }
 .hb-logo-img { display: block; height: 64px; width: auto; }
 @media (min-width: 640px) { .hb-logo-img { height: 112px; } }
-.hb-logo-ping { position: absolute; left: 78.3%; top: 12.25%; width: 33.8%; aspect-ratio: 1; margin: -16.9% 0 0 -16.9%; border: 2px solid var(--signal); border-radius: 50%; pointer-events: none; animation: hb-ping 700ms var(--ease-quart) both; }
+.hb-logo-ping { position: absolute; left: 78.3%; top: 12.25%; width: 33.8%; aspect-ratio: 1; margin: -16.9% 0 0 -16.9%; border: 2px solid var(--red); border-radius: 50%; pointer-events: none; animation: hb-ping 700ms var(--ease-quart) both; }
 @keyframes hb-ping { from { transform: scale(1); opacity: 0.55; } to { transform: scale(1.7); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .hb-logo-ping { display: none; } }
 
 @media (max-width: 639px) { header .hb-dl { display: none; } }
 
+/* stack counter chip: the counter itself is red, so the hover ring is too (no glow: a flat 2 px hairline) */
 .hb-chip { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; border-radius: 999px; display: inline-grid; place-items: center; flex: none; }
-.hb-chip:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent); }
+.hb-chip:hover { outline: 1px solid var(--red); outline-offset: 2px; }
 .hb-chip-chev { width: 24px; height: 24px; color: var(--mb-muted); }
-.hb-chip-chev:hover { background: var(--mb-btn); box-shadow: none; }
-.hb-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hb-chip-chev:hover { background: var(--mb-btn); outline: 0; }
+.hb-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

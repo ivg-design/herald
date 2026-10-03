@@ -29,7 +29,7 @@ const MARKS: Record<Exclude<HeraldIcon, "herald">, ReactNode> = {
   mail: <Mail size={18} aria-hidden />,
   ae: (
     <svg viewBox="0 0 24 24" width={20} height={20} aria-hidden>
-      <text x={12} y={16} textAnchor="middle" fontSize={12} fontWeight={700} fill="currentColor" style={{ fontFamily: "var(--font-jetbrains), monospace" }}>Ae</text>
+      <text x={12} y={16} textAnchor="middle" fontSize={12} fontWeight={500} fill="currentColor" style={{ fontFamily: "var(--font-fragment), ui-monospace, monospace" }}>Ae</text>
     </svg>
   ),
   claude: (

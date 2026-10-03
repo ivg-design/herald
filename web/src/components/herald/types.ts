@@ -57,7 +57,7 @@ export interface HeraldState {
   /** True while a card's voice sample is playing. */
   speaking: boolean;
   quiet: HeraldQuiet;
-  /** True while the hero dock is on screen, i.e. banners render in-flow in the hero rather than in the fixed overlay. */
+  /** Always false: there is no hero dock; banners render in the fixed overlay. */
   docked: boolean;
 }
 

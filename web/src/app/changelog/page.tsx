@@ -27,27 +27,26 @@ export default async function ChangelogPage() {
   return (
     <>
       <Header downloadUrl={release.dmgUrl} />
-      <main id="main" className="shell changelog">
-        <header className="changelog-head">
-          <p className="eyebrow">Releases</p>
-          <h1 className="display">Changelog</h1>
-          <p className="lede">What changed in each version, newest first.</p>
+      <main id="main" className="shell">
+        <header className="pt-[clamp(48px,8vw,96px)] pb-[clamp(32px,5vw,56px)]">
+          <h1 className="display display-l">Changelog</h1>
+          <p className="body m-0 mt-5">What changed in each version, newest first.</p>
         </header>
-        <ol className="changelog-list">
+        <ol className="m-0 list-none p-0 pb-[clamp(64px,9vw,112px)]">
           {entries.map((e) => {
             const id = `v${e.version.replace(/\./g, "-")}`;
             return (
-              <li key={e.version} id={id} className="changelog-entry">
-                <div className="changelog-rail">
-                  <h2>
+              <li key={e.version} id={id} className="scroll-mt-[88px] border-t border-line py-9 md:grid md:grid-cols-[220px_minmax(0,1fr)] md:gap-x-12 md:py-12">
+                <div className="md:sticky md:top-24 md:self-start">
+                  <h2 className="display display-m">
                     <a href={`#${id}`}>{e.version}</a>
                   </h2>
-                  <p>
+                  <p className="mono m-0 mt-2.5 mb-6 flex flex-wrap gap-x-4 gap-y-1 text-muted md:mb-0 md:flex-col">
                     {e.build && <span className="nowrap">Build {e.build}</span>}
                     {e.date && <time dateTime={e.date}>{fmt(e.date)}</time>}
                   </p>
                 </div>
-                <div className="docs-prose changelog-body">{renderMarkdown(e.body, resolve, `${id}-`)}</div>
+                <div className="docs-prose body min-w-0 max-w-[760px] !text-ink">{renderMarkdown(e.body, resolve, `${id}-`)}</div>
               </li>
             );
           })}

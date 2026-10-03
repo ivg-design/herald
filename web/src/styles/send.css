@@ -1,7 +1,7 @@
 /* send: owned by its section; imported from globals.css */
 
 /* Agents: the per-row "try" button shows on hover/focus, always on touch */
-.tool-try { display: inline-flex; align-items: center; height: 28px; min-width: 44px; padding: 0 10px; font-size: 12px; opacity: 0; transition: opacity 150ms var(--ease-quart), border-color 150ms; cursor: pointer; }
+.tool-try { display: inline-flex; align-items: center; height: 28px; min-width: 44px; padding: 0 10px; font-size: 12px; opacity: 0; transition: opacity var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint); cursor: pointer; }
 .tool-row:hover .tool-try, .tool-row:focus-within .tool-try, .tool-try[aria-expanded="true"] { opacity: 1; }
 @media (hover: none) { .tool-try { opacity: 1; height: 40px; min-width: 48px; } }
 

@@ -1,48 +1,24 @@
-.pipe { display: grid; grid-template-columns: minmax(0, 1fr); gap: 44px; align-items: start; }
-@media (min-width: 1024px) {
-  .pipe { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1fr); gap: 0 56px; }
-}
-.col { min-width: 0; opacity: 0.7; transition: opacity 300ms var(--ease-quart, ease); }
-.col[data-on="true"], .pipe[data-hot="true"] .col { opacity: 1; }
-
-.marker {
-  display: flex; width: 100%; align-items: center; gap: 10px; margin: 0 0 18px; padding: 0 0 10px;
-  border: 0; border-bottom: 1px solid var(--line); background: none; cursor: pointer;
-  font-family: var(--font-mono, ui-monospace, monospace); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--muted); text-align: left; transition: color 160ms var(--ease-quart, ease), border-color 160ms var(--ease-quart, ease);
-}
-.marker b { font-weight: 600; color: var(--ink); }
-.col[data-on="true"] .marker { color: var(--accent); border-bottom-color: var(--accent); }
+/* Flow: manifest, template and banner on Designer cells. Everything is Day ground; the banner is the page's .mb skin. */
+.head { margin: 0 0 14px; padding: 0 0 10px; border-bottom: 1px solid var(--line); font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: 0.02em; color: var(--muted); }
 
 /* manifest: bare mono column */
-.json { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; line-height: 1.9; }
-.jline {
-  display: flex; align-items: center; gap: 8px; padding: 0 8px 0 18px; margin: 0 -8px; border-radius: 6px;
-  transition: background-color 160ms var(--ease-quart, ease);
-}
-.jline > .jtext { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.jkey { text-decoration: underline 1.5px transparent; text-underline-offset: 4px; color: var(--muted); transition: text-decoration-color 160ms var(--ease-quart, ease), color 160ms var(--ease-quart, ease); }
-.jline[data-hot="true"] { background: var(--accent-soft); }
-.jline[data-hot="true"] .jkey { text-decoration-color: var(--accent); color: var(--ink); }
+.json { font-family: var(--font-mono); font-size: 12px; line-height: 1.9; }
+.jline { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 18px; margin: 0 -8px; border-radius: 6px; outline: 1px solid transparent; transition: background-color var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint); }
+.jtext { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jkey { color: var(--muted); transition: color var(--t-state) var(--ease-quint); }
+.jline[data-hot="true"] { background: var(--accent-soft); outline-color: var(--blue); }
+.jline[data-hot="true"] .jkey { color: var(--ink); }
+.empty { flex: none; height: 24px; padding: 0 8px; border: 0; border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; background: var(--surface-2); color: var(--muted); transition: background-color var(--t-press) var(--ease-quart); }
+.empty[aria-pressed="true"] { background: var(--red); color: #fff5f2; }
 
-/* template: hero on a dotted canvas */
-.canvas {
-  padding: 14px; border-radius: 10px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--muted) 38%, transparent) 1px, transparent 1.6px) 0 0 / 14px 14px, color-mix(in srgb, var(--bg) 70%, transparent);
-}
-.gcell {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; overflow: hidden; min-width: 0;
-  border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--ink);
-  font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px;
-  transition: opacity 250ms, background-color 160ms var(--ease-quart, ease), border-color 160ms var(--ease-quart, ease), box-shadow 160ms var(--ease-quart, ease);
-}
-.gcell[data-empty="true"] { border: 1px dashed var(--muted); background: transparent; color: var(--muted); }
-.gcell[data-rail="true"] { border-color: var(--line); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--muted); }
-.gcell[data-hot="true"] { background: color-mix(in srgb, var(--accent) 36%, transparent); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent); }
-.gcell[data-hot="true"][data-empty="true"] { background: color-mix(in srgb, var(--accent) 12%, transparent); border-style: dashed; }
-.held { font-size: 9px; line-height: 1; padding: 2px 5px; border-radius: 999px; border: 1px dashed var(--muted); color: var(--muted); }
+/* template: a real 4 x 3 grid of Designer cells */
+.tgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; transition: grid-template-rows var(--t-layout) var(--ease-expo); }
+.tgrid > .gcell { min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); border-style: solid; outline: 2px solid transparent; outline-offset: 2px; transition: opacity var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), background-color var(--t-state) var(--ease-quint); }
+.tgrid > .gcell[data-empty="true"] { border-style: dashed; background: transparent; }
+.tgrid > .gcell[data-hot="true"] { outline-color: var(--blue); }
+.tgrid > .gcell[data-gone="true"] { opacity: 0; border-color: transparent; pointer-events: none; }
 
 /* banner */
-.bel { border-radius: 5px; outline: 1.5px solid transparent; outline-offset: 3px; transition: outline-color 160ms var(--ease-quart, ease); }
-.bel[data-hot="true"] { outline-color: var(--accent); }
+.bel { border-radius: 5px; outline: 2px solid transparent; outline-offset: 3px; transition: outline-color var(--t-state) var(--ease-quint); }
+.bel[data-hot="true"] { outline-color: var(--blue); }
 .hold { display: block; border-radius: 4px; border: 1px dashed var(--mb-muted); opacity: 0.6; max-width: 100%; }

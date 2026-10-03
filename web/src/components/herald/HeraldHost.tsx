@@ -17,7 +17,7 @@ type Held = HeraldSend & { id: string };
 
 /**
  * The page's Herald. Owns the one list of banner cards, history/snoozed/held counters, pre-rendered voice samples and quiet
- * hours. HeroDock (in-flow, hero) and PageStack (fixed overlay) are two views of this same list.
+ * hours. PageStack (fixed overlay under the header bell) is the view of this list.
  */
 export function HeraldHost({ children }: { children: ReactNode }) {
   const [cards, setCardsState] = useState<HeraldCardModel[]>([]);
@@ -25,7 +25,6 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState(0);
   const [snoozingIds, setSnoozingIds] = useState<string[]>([]);
   const [quiet, setQuietState] = useState<HeraldQuiet>(DEFAULT_QUIET);
-  const [docked, setDockedState] = useState(true);
   const [expanded, setExpandedState] = useState(false);
   const expandedRef = useRef(false);
   const modeRef = useRef<"arrival" | "full">("full");
@@ -44,7 +43,6 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   const cardsRef = useRef<HeraldCardModel[]>([]);
   const heldRef = useRef<Held[]>([]);
   const quietRef = useRef<HeraldQuiet>(DEFAULT_QUIET);
-  const dockedRef = useRef(true);
   const hoverRef = useRef(false);
   const focusRef = useRef(false);
   const pinnedRef = useRef(false);
@@ -96,13 +94,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       }, 1500);
     }
   }, [setExpanded]);
-  const setDocked = useCallback((on: boolean) => {
-    dockedRef.current = on;
-    pinnedRef.current = false;
-    setDockedState(on);
-    window.clearTimeout(timer.current);
-    setExpanded(false);
-  }, [setExpanded]);
+  const setDocked = useCallback(() => {}, []);
   const show = useCallback(() => {
     setMode("full");
     if (hoverRef.current || focusRef.current) {
@@ -112,10 +104,6 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   }, [expandFor, setExpanded, setMode]);
 
   const toggle = useCallback(() => {
-    if (dockedRef.current) {
-      document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
     if (expandedRef.current && pinnedRef.current) compact();
     else {
       // Click pins the overlay open (also when it was only open from hovering the bell).
@@ -195,7 +183,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
         };
         setCards(seed ? [...cur, card] : [card, ...cur]);
       }
-      if (!seed && !dockedRef.current) {
+      if (!seed) {
         setArrivalId(cardId);
         expandFor(4000, "arrival");
       }
@@ -224,7 +212,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     const list = heldRef.current;
     setHeld([]);
     list.forEach((h) => addCard(h, false));
-    if (list.length && dockedRef.current === false) expandFor(4000, "arrival");
+    if (list.length) expandFor(4000, "arrival");
   }, [addCard, expandFor, setHeld]);
 
   const quietKey = `${quiet.hold}|${quiet.from}|${quiet.to}|${quiet.pretendNow}`;
@@ -288,7 +276,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       voice: true,
       speaking: speakingId !== null,
       quiet,
-      docked,
+      docked: false,
       send,
       dismissAll,
       show,
@@ -316,7 +304,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       setDocked,
       setHold,
     };
-  }, [cards, held, history, snoozingIds, speakingId, quiet, docked, expanded, overlayMode, arrivalId, ring, send, dismissAll, show, setVoice, setQuiet, isQuiet, nowMinute, seed, play, stop, closeCard, dismissItem, setSnoozing, showHeld, compact, toggle, setDocked, setHold]);
+  }, [cards, held, history, snoozingIds, speakingId, quiet, expanded, overlayMode, arrivalId, ring, send, dismissAll, show, setVoice, setQuiet, isQuiet, nowMinute, seed, play, stop, closeCard, dismissItem, setSnoozing, showHeld, compact, toggle, setDocked, setHold]);
 
   return (
     <HeraldContext.Provider value={value}>

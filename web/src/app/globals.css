@@ -156,8 +156,9 @@ img { max-width: 100%; }
   text-wrap: balance;
 }
 .display-xl { font-size: clamp(52px, 7.2vw, 118px); line-height: 0.9; letter-spacing: -0.03em; }
-.display-l { font-size: clamp(36px, 4.6vw, 68px); }
-.display-m { font-size: clamp(28px, 3.2vw, 44px); letter-spacing: -0.02em; line-height: 1; }
+/* Section titles are set condensed and tall: the same axis the hero binds to its cell, at its narrow end. */
+.display-l { font-size: clamp(46px, 6.4vw, 100px); font-variation-settings: "wdth" 68; line-height: 0.9; letter-spacing: -0.012em; }
+.display-m { font-size: clamp(28px, 3vw, 42px); font-variation-settings: "wdth" 78; letter-spacing: -0.008em; line-height: 0.98; }
 .lede { font-size: clamp(17px, 1.4vw, 20px); font-weight: 500; line-height: 1.4; color: var(--muted); max-width: 60ch; margin: 20px 0 0; }
 .body { font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 62ch; }
 .readout { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); }

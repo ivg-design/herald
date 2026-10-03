@@ -1,5 +1,5 @@
 "use client";
-// Internals shared by HeraldHost, HeroDock, PageStack, Header and Hero. Not part of the public HeraldApi contract.
+// Internals shared by HeraldHost, PageStack, Header and Hero. Not part of the public HeraldApi contract.
 import { createContext, useContext } from "react";
 import type { HeraldApi, HeraldButton, HeraldIcon, HeraldSend } from "./types";
 
@@ -46,9 +46,10 @@ export interface HeraldInternals extends HeraldApi {
   /** Release held banners ("Show anyway"). */
   showHeld(): void;
   compact(): void;
-  /** Header bell: scroll to the dock when docked, otherwise toggle the overlay. */
+  /** Header bell: toggle (pin) the overlay. */
   toggle(): void;
-  setDocked(on: boolean): void;
+  /** No-op: the page has no dock. */
+  setDocked(on?: boolean): void;
   setHold(kind: "hover" | "focus", on: boolean): void;
 }
 

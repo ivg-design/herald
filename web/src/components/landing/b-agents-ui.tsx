@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { asset } from "@/lib/config";
 import { useHerald } from "@/components/herald/useHerald";
 import SiteLink from "@/components/SiteLink";
+import { nowrapText } from "@/lib/nowrap";
 import { copyText, useInViewOnce } from "./b-hooks";
 
 const SNIPPET = '{"mcpServers":{"herald":{"command":"herald-mcp"}}}';
@@ -29,23 +30,22 @@ export function McpMock() {
     timer.current = setTimeout(() => setCopied(false), 2200);
   };
   return (
-    <div className="rounded-xl border border-line bg-surface p-4 md:p-5">
-      <p className="mono m-0 mb-3 text-[12px] font-bold tracking-wide text-muted">Settings → MCP</p>
-      <ul className="m-0 flex list-none flex-col gap-3 p-0">
+    <div>
+      <ul className="m-0 flex list-none flex-col border-t border-line p-0">
         {ROWS.map((r) => (
-          <li key={r.name} className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-line bg-bg px-3.5 py-1.5">
-            <span className="text-[14px] font-medium">{r.name}</span>
+          <li key={r.name} className="flex min-h-14 items-center justify-between gap-3 border-b border-line py-2">
+            <span className="text-[17px] font-semibold">{nowrapText(r.name)}</span>
             {r.href ? (
-              <SiteLink href={r.href} className="mini-btn is-primary !h-10 min-w-[84px] justify-center !px-3">How to install</SiteLink>
+              <SiteLink href={r.href} className="btn btn-ghost btn-sm">How to install</SiteLink>
             ) : (
-              <button type="button" onClick={onCopy} className="mini-btn is-primary !h-10 min-w-[84px] cursor-pointer justify-center !px-3" style={copied ? { background: "var(--surface-2)", color: "var(--muted)" } : undefined}>
-                {copied ? "Copied ✓" : "Copy config"}
+              <button type="button" onClick={onCopy} className="btn btn-ghost btn-sm" style={copied ? { color: "var(--accent-text)", borderColor: "var(--blue)" } : undefined}>
+                {copied ? "Copied" : "Copy config"}
               </button>
             )}
           </li>
         ))}
       </ul>
-      <p className="m-0 mt-3 text-[12px] text-muted" role="status" aria-live="polite">
+      <p className="readout m-0 mt-3" role="status" aria-live="polite">
         {failed ? "Copy is not available in this browser." : copied ? "Copied the herald-mcp config." : "The app installs these for you with one click; here each links to the steps."}
       </p>
     </div>
@@ -116,25 +116,25 @@ export function ToolList() {
   const starts = lines.reduce<number[]>((acc, l, i) => [...acc, i === 0 ? 0 : acc[i - 1] + lines[i - 1].length + GAP], []);
   const readout = JSON.stringify({ onScreen: herald.onScreen, stacks: herald.pending, history: herald.history, snoozed: herald.snoozed }).replace(/,/g, ", ").replace(/:/g, ": ");
   return (
-    <ul ref={ref} className="mono m-0 mt-4 flex list-none flex-col gap-2.5 p-0 text-[12.5px] leading-snug text-muted">
+    <ul ref={ref} className="mono m-0 mt-6 flex list-none flex-col border-t border-line p-0 text-[13px] leading-snug text-muted">
       {lines.map((l, i) => {
         const k = Math.max(0, Math.min(l.length, shown - starts[i]));
         const demo = DEMOS[TOOLS[i][0]];
         const open = demo === "preview" ? preview : demo === "state" ? state : undefined;
         return (
-          <li key={l} className="tool-row min-h-[26px]" style={{ opacity: done || k > 0 ? 1 : 0 }}>
-            <div className="flex items-center gap-3">
-              <Check aria-hidden className="size-3.5 shrink-0 text-accent" />
+          <li key={l} className="tool-row min-h-[52px] border-b border-line py-3" style={{ opacity: done || k > 0 ? 1 : 0 }}>
+            <div className="flex items-start gap-3">
+              <Check aria-hidden className="mt-[3px] size-3.5 shrink-0 text-accent" />
               <span className="sr-only">{l}</span>
-              <span className="flex min-w-0 items-center">
-                <span aria-hidden className="min-w-0 truncate">
+              <span className="flex min-w-0 flex-wrap items-center gap-y-2">
+                <span aria-hidden className="min-w-0">
                   {l.slice(0, k)}
                   <span className="opacity-0">{l.slice(k)}</span>
                 </span>
                 {demo && (
                   <button
                     type="button"
-                    className="tool-try btn btn-ghost ml-3 shrink-0 font-sans !min-h-0 !h-7"
+                    className="tool-try btn btn-ghost btn-sm ml-3 shrink-0 !h-7 !px-3 !text-[13px]"
                     aria-label={`Try ${TOOLS[i][0]}`}
                     aria-expanded={open}
                     onClick={() => act(demo)}
@@ -146,14 +146,14 @@ export function ToolList() {
             </div>
             {demo === "preview" && preview && (
               <figure className="m-0 ml-[26px] mt-3 max-w-[460px]">
-                <div className="overflow-hidden rounded-lg border border-line bg-bg p-2">
+                <div className="overflow-hidden rounded-xl border border-line bg-bg p-2">
                   <Image src={asset("/shots/banner-plain.png")} alt="Banner rendered by render_preview" width={920} height={406} unoptimized className="h-auto w-full" />
                 </div>
-                <figcaption className="mt-2 font-sans text-[12px] text-muted">render_preview returns a PNG from the real renderer, no window</figcaption>
+                <figcaption className="readout mt-2">render_preview returns a PNG from the real renderer, no window</figcaption>
               </figure>
             )}
             {demo === "state" && state && (
-              <p className="m-0 ml-[26px] mt-3 rounded-md border border-line bg-bg px-3 py-2 text-ink" role="status" aria-live="polite" aria-label="Herald state readout">{readout}</p>
+              <p className="m-0 ml-[26px] mt-3 readout rounded-lg border border-line bg-surface px-3 py-2 text-ink" role="status" aria-live="polite" aria-label="Herald state readout">{readout}</p>
             )}
           </li>
         );

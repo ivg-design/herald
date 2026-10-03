@@ -74,7 +74,7 @@ export default function Bell({
   }, [rive, loaded, ring, reduced]);
 
   const showFallback = failed || !loaded;
-  const ink = tone === "paper" ? "var(--paper-ink, #0f1317)" : "var(--ink)";
+  const ink = tone === "paper" ? "var(--ink)" : "var(--ink)";
   return (
     <span className={`relative inline-grid place-items-center ${className}`} style={{ width: size, height: size }} aria-hidden>
       {showFallback && <BellIcon size={size - 2} style={{ color: ink }} />}
@@ -83,8 +83,8 @@ export default function Bell({
       )}
       {count > 0 && (
         <span
-          className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 font-mono text-[10px] font-bold"
-          style={{ background: "var(--signal)", color: "#fff5f2" }}
+          className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 font-mono text-[10px] font-semibold"
+          style={{ background: "var(--red)", color: "#fff" }}
         >
           {count}
         </span>

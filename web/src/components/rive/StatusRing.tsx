@@ -53,7 +53,7 @@ export default function StatusRing({ state, size = 20, className = "" }: { state
     return () => window.clearTimeout(t);
   }, [rive, loaded, state, reduced]);
 
-  const color = state === "failed" ? "var(--signal)" : "var(--accent)";
+  const color = state === "failed" ? "var(--red)" : "var(--blue)";
   const showFallback = failed || !loaded;
   return (
     <span aria-hidden className={`relative inline-block shrink-0 ${className}`} style={{ width: size, height: size }}>

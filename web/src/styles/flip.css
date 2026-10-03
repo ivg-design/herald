@@ -7,7 +7,7 @@
   /* Inherits the h2 size, so the headline font-size alone controls the drum height. */
   height: var(--flip-h, 1.1em);
   perspective: 800px;
-  color: var(--accent);
+  color: var(--accent-text);
   font-style: normal;
 }
 .flip-word {

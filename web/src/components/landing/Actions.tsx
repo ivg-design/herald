@@ -1,5 +1,4 @@
 "use client";
-import { AlarmClock, Link2, SquareTerminal, Undo2, Workflow } from "lucide-react";
 import WordFlipper, { type FlipPhrase } from "@/components/motion/WordFlipper";
 import { nowrapText } from "@/lib/nowrap";
 import ActionsDemo from "./b-actions-demo";
@@ -17,48 +16,28 @@ const PHRASES: FlipPhrase[] = [
   { text: "snooze till 9.", fontFamily: "'Caveat', cursive", fontSize: "clamp(54px, 8vw, 92px)", fontWeight: 700, googleFamily: "Caveat:wght@700" },
 ];
 
-const LEDGER = [
-  { icon: Link2, name: "URL", copy: "Open a page, a mail thread, a deep link." },
-  { icon: SquareTerminal, name: "Command / script", copy: "Run a shell command or a script file with the banner's fields as arguments." },
-  { icon: Workflow, name: "Apple Shortcut", copy: "Run any Shortcut via the shortcuts CLI; pass fields as input." },
-  { icon: Undo2, name: "Callback", copy: "POST back to the issuing app; Herald waits for the outcome before dismissing." },
-  { icon: AlarmClock, name: "Snooze / dismiss", copy: "Built-in. Snoozed banners vanish and return on time." },
-];
-
 export default function Actions() {
   return (
-    <section id="actions" className="section section-dark">
-      <div className="shell">
-        <p className="eyebrow">Two-way actions</p>
-        <h2 className="display text-[clamp(40px,6vw,72px)]">
-          Buttons that
-          <WordFlipper phrases={PHRASES} />
-        </h2>
-        <p className="lede !max-w-[78ch]">
-          {nowrapText("An app ships its own actions in the manifest. You can relabel, hide, reorder them, or add your own: open a URL, run a shell command or script, trigger an Apple Shortcut, call back into the app. Dangerous ones ask first, inline, without a dialog.")}
-        </p>
+    <section id="actions" className="section">
+      <div className="shell g">
+        <div className="col-span-full">
+          <h2 className="display display-l">
+            Buttons that
+            <WordFlipper phrases={PHRASES} />
+          </h2>
+          <p className="lede !max-w-[78ch]">
+            {nowrapText("An app ships its own actions in the manifest. You can relabel, hide, reorder them, or add your own: open a URL, run a shell command or script, trigger an Apple Shortcut, call back into the app. Dangerous ones ask first, inline, without a dialog.")}
+          </p>
+        </div>
 
-        <ul className="m-0 mt-10 list-none border-t border-line p-0">
-          {LEDGER.map(({ icon: Icon, name, copy }) => (
-            <li key={name} className="grid grid-cols-1 gap-1 border-b border-line py-4 md:grid-cols-[minmax(200px,260px)_1fr] md:items-baseline md:gap-6">
-              <div className="flex items-center gap-4">
-                <Icon aria-hidden className="size-[18px] shrink-0 text-accent" />
-                <span className="text-[17px] font-medium">{nowrapText(name)}</span>
-              </div>
-              <p className="m-0 pl-[34px] text-[14px] leading-relaxed text-muted md:pl-0">{nowrapText(copy)}</p>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-12 grid gap-8 md:grid-cols-[minmax(0,460px)_1fr] md:items-start md:gap-14">
+        <div className="col-span-full mt-6 lg:col-span-6">
           <ActionsDemo />
-          <div className="md:pt-2">
-            <p className="eyebrow !mb-3">Confirmation gates</p>
-            <h3 className="m-0 text-[clamp(20px,2vw,24px)] font-medium leading-snug">Per app or per template</h3>
-            <p className="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">
-              Mark an action as needing confirmation and Herald swaps the button row for a yes/no strip inside the banner. Press Deploy on the banner to see it. Callbacks report success, failure or still-running, so a banner is only dismissed when the thing actually happened.
-            </p>
-          </div>
+        </div>
+        <div className="col-span-full mt-6 lg:col-span-6">
+          <h3 className="display display-m">Per app or per template</h3>
+          <p className="body mt-4">
+            Mark an action as needing confirmation and Herald swaps the button row for a yes/no strip inside the banner. Press Deploy on the banner to see it. Callbacks report success, failure or still-running, so a banner is only dismissed when the thing actually happened.
+          </p>
         </div>
       </div>
     </section>

@@ -1,28 +1,24 @@
 /* why: owned by its section; imported from globals.css */
-.why-top { display: grid; gap: 40px; align-items: center; }
-@media (min-width: 1024px) { .why-top { grid-template-columns: minmax(0, 1fr) 460px; gap: 56px; } }
-.why-copy { min-width: 0; }
-.why-h { max-width: 20ch; }
 .nowrap { white-space: nowrap; }
 
-/* two captures of one desktop */
-.sbs { display: grid; gap: 28px; min-width: 0; width: 100%; max-width: 460px; }
-@media (min-width: 640px) and (max-width: 1023px) { .sbs { max-width: none; grid-template-columns: 1fr 1fr; gap: 24px; } }
+/* two captures of one desktop, one scale */
+.sbs { display: grid; gap: 20px; min-width: 0; width: 100%; }
+@media (min-width: 640px) and (max-width: 1023px) { .sbs { grid-template-columns: 1fr 1fr; gap: 24px; } }
 .sbs-fig { margin: 0; min-width: 0; }
-.sbs-cap { display: block; margin-bottom: 10px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--paper-muted); }
-.sbs-cap-herald { color: var(--accent-on-paper); }
+.sbs-cap { display: block; margin-bottom: 10px; }
+.sbs-cap-herald { color: var(--accent-text); }
 .sbs-frame {
-  display: block; width: 100%; aspect-ratio: 920 / 406; border-radius: 12px; overflow: hidden; container-type: inline-size;
-  box-shadow: 0 0 0 1px rgba(15, 19, 23, .12);
+  display: block; position: relative; width: 100%; aspect-ratio: 920 / 406; border-radius: 12px; overflow: hidden; container-type: inline-size;
+  font-size: clamp(9px, 2.83cqw, 13px);
 }
-.sbs-frame[data-testid] {
-  position: relative;
+/* the one gradient on the page: the desktop both alerts sit on */
+.sbs-wall {
   background:
     radial-gradient(120% 120% at 0% 0%, #f9b65a 0%, rgba(249,182,90,0) 45%),
     radial-gradient(90% 100% at 100% 100%, #b848c8 0%, rgba(184,72,200,0) 60%),
     linear-gradient(135deg, #f08a63 0%, #e0518a 60%, #d9418f 100%);
 }
-.sbs-img { height: auto; }
+.sbs-out { margin: 8px 0 0; min-height: 1.5em; color: var(--accent-text); }
 
 /* faithful Notification Center alert, drawn at 1 css px = 1 pt of the 460-wide frame */
 .mac-alert {
@@ -32,7 +28,6 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 3px rgba(0, 0, 0, .12);
   backdrop-filter: blur(20px) saturate(1.6);
   font-family: -apple-system, "SF Pro Text", var(--font-body), system-ui, sans-serif; color: #1d1d1f; text-align: left;
-  font-size: clamp(9px, 2.83cqw, 13px);
 }
 .mac-icon { flex: none; width: 2.92em; height: 2.92em; border-radius: .7em; background: linear-gradient(#b4b4b9, #98989d); color: #fff; display: grid; place-items: center; }
 .mac-icon svg { width: 58%; height: 58%; }
@@ -41,33 +36,42 @@
 .mac-body { margin: 1px 0 0; font-size: 1em; line-height: 1.3; color: #3c3c43; }
 .mac-now { flex: none; font-size: .92em; color: #86868b; }
 
-/* ledger */
-.ledger { width: 100%; margin-top: 72px; border-collapse: collapse; text-align: left; font-size: 14px; line-height: 1.5; }
-.ledger-h { padding: 0 20px 12px; font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--paper-muted); }
-.ledger-h-herald { color: var(--accent-on-paper); }
-.ledger tbody tr { border-top: 1px solid var(--paper-line); }
-.ledger-label { width: 16%; padding: 16px 20px 16px 0; vertical-align: top; font-size: 13px; font-weight: 500; color: var(--paper-muted); }
-.ledger-mac { width: 38%; padding: 16px 20px; vertical-align: top; color: var(--paper-muted); }
-.ledger-herald { padding: 16px 20px; vertical-align: top; color: var(--paper-ink); font-weight: 500; border-left: 2px solid var(--accent-on-paper); }
-.ledger-h-herald { border-left: 2px solid var(--accent-on-paper); }
-@media (max-width: 719px) {
-  .ledger, .ledger tbody, .ledger tr, .ledger th, .ledger td { display: block; }
-  .ledger thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .ledger { margin-top: 56px; }
-  .ledger tbody tr { padding: 16px 0; }
-  .ledger-label { width: auto; padding: 0 0 6px; }
-  .ledger-mac, .ledger-herald { width: auto; padding: 6px 0; }
-  .ledger-herald { padding-left: 14px; margin-top: 4px; }
-  .ledger-mac::before, .ledger-herald::before {
-    content: attr(data-col); display: block; font-size: 11px; font-weight: 500; letter-spacing: .06em;
-    text-transform: uppercase; color: var(--paper-muted);
-  }
-  .ledger-herald::before { color: var(--accent-on-paper); }
+/* the Herald banner at the same position and width as the Apple alert */
+.herald-alert {
+  position: absolute; left: 12.6%; top: 50%; transform: translateY(-50%); width: 74.8%;
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px 14px 12px; border-radius: 14px;
+  font-family: var(--font-sans); font-size: inherit;
 }
+.herald-alert .mac-title { color: var(--mb-ink); font-weight: 600; }
+.herald-sender { margin: 1px 0 0; font-size: .92em; line-height: 1.3; color: var(--mb-muted); }
+.herald-body { margin: 3px 0 0; font-size: 1em; line-height: 1.3; color: var(--mb-muted); }
+.herald-actions { margin-top: 8px; }
+.herald-open { height: 2.4em; padding: 0 1em; font-size: 1em; }
+.herald-now { flex: none; font-size: .92em; color: var(--mb-muted); }
 
-/* run-in points */
-.why-points { list-style: none; margin: 64px 0 0; padding: 28px 0 0; border-top: 1px solid var(--paper-line); display: grid; gap: 24px; }
-@media (min-width: 900px) { .why-points { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; } }
-.why-points li { font-size: 14px; line-height: 1.6; }
-.why-lead { font-size: 18px; font-weight: 500; color: var(--paper-ink); }
-.why-body { color: var(--paper-muted); }
+/* ledger: the page's 12 columns, hairline rows. label 1-2, Notification Center 3-7, Herald 8-12 */
+.ledger { margin-top: clamp(56px, 7vw, 96px); font-size: 15px; line-height: 1.5; }
+.ledger-row { border-top: 1px solid var(--line); padding-block: 16px; align-items: start; }
+.ledger-head .ledger-row { border-top: 0; padding-block: 0 12px; }
+.ledger-h { font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .02em; text-transform: lowercase; color: var(--muted); }
+.ledger-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; color: var(--muted); padding-top: 3px; grid-column: 1 / -1; }
+.ledger-c-mac, .ledger-c-herald { min-width: 0; grid-column: 1 / -1; }
+.ledger-mac { color: var(--muted); }
+.ledger-herald { color: var(--ink); font-weight: 500; }
+.ledger-head .ledger-c-herald, .ledger-herald { border-left: 1px solid var(--blue); padding-left: 14px; }
+.ledger-head .ledger-c-herald { color: var(--accent-text); }
+.ledger-head .sr-only + .ledger-c-mac { grid-column: 1 / -1; }
+@media (max-width: 1023px) {
+  .ledger-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .ledger-label { padding-bottom: 6px; }
+  .ledger-mac, .ledger-herald { padding-block: 4px; }
+  .ledger-herald { margin-top: 6px; }
+  .ledger-mac::before, .ledger-herald::before { content: attr(data-col); display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: .02em; color: var(--muted); }
+  .ledger-herald::before { color: var(--accent-text); }
+}
+@media (min-width: 1024px) {
+  .ledger-label { grid-column: 1 / span 2; }
+  .ledger-c-mac { grid-column: 3 / span 5; }
+  .ledger-c-herald { grid-column: 8 / span 5; }
+  .ledger-head .ledger-c-mac { grid-column: 3 / span 5; }
+}

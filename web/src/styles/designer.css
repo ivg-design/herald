@@ -1,61 +1,54 @@
-/* designer: owned by its section; imported from globals.css */
-.dz-head { display: flex; flex-direction: column; gap: 20px; align-items: flex-start; }
-@media (min-width: 900px) {
-  .dz-head { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 48px; }
-}
-/* right column of the head: the Rive grid-to-banner piece, its caption, the dark/light toggle */
-.dz-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; flex: none; width: 100%; max-width: 380px; }
-@media (min-width: 900px) { .dz-side { align-items: flex-end; } }
-.gb { position: relative; display: block; width: 100%; max-width: 380px; aspect-ratio: 380 / 136; padding: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }
-.gb-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; transition: opacity 240ms var(--ease-quart); }
-.gb-fallback { position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--paper-line); border-radius: 12px; font-size: 11px; color: var(--paper-muted); }
-.gb:focus-visible { outline: 2px solid var(--accent-on-paper); outline-offset: 4px; }
-.dz-side-cap { margin: 0; font-size: 11px; color: var(--paper-muted); }
-.dz-toggle { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--paper-line); flex: none; }
-.dz-toggle button { min-height: 40px; padding: 0 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; color: var(--paper-muted); }
-.dz-toggle button[aria-pressed="true"] { background: var(--paper-surface); color: var(--paper-ink); }
+/* designer: owned by its section; imported from globals.css. Day ground; tokens only. */
+.dz-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+@media (min-width: 1024px) { .dz-side { align-self: end; } }
+.gb { position: relative; display: block; width: 100%; max-width: 480px; aspect-ratio: 380 / 136; padding: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }
+.gb-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; transition: opacity var(--t-state) var(--ease-quint); }
+.gb-fallback { position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 12px; font-size: 11px; color: var(--muted); }
+.gb:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
+.dz-side-cap { margin: 0; }
 
-.dz-frame { position: relative; width: 100%; aspect-ratio: 2000 / 1341; margin-top: 32px; }
-.dz-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 14px; }
+.dz-toggle { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dz-toggle .btn[aria-pressed="true"] { border-color: var(--ink); background: var(--surface); }
+
+.dz-frame { position: relative; width: 100%; aspect-ratio: 2000 / 1341; }
+.dz-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 12px; }
+.dz-clip::after { content: ""; position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 12px; pointer-events: none; }
 .dz-clip img { display: block; width: 100%; height: 100%; }
 
-.dz-lit { position: absolute; border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 0 9999px rgb(15 19 23 / 0.55); pointer-events: none; animation: dz-in 220ms var(--ease-quart) both; }
+.dz-lit { position: absolute; border: 2px solid var(--blue); border-radius: 8px; background: var(--accent-soft); pointer-events: none; animation: dz-in var(--t-state) var(--ease-quint) both; }
 @keyframes dz-in { from { opacity: 0; } to { opacity: 1; } }
 
 .dz-hot, .dz-dot, .dz-card { display: none; }
 @media (min-width: 900px) {
   .dz-hot { display: block; position: absolute; cursor: pointer; border-radius: 8px; background: transparent; z-index: 2; }
-  .dz-hot:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .dz-hot:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .dz-dot { display: grid; place-items: center; position: absolute; z-index: 3; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 999px; pointer-events: none;
-    background: var(--accent); color: var(--accent-ink, #04121f); border: 2px solid #fff; font: 600 12px/1 var(--font-mono, monospace); box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
-    transition: transform 180ms var(--ease-quart); }
-  .dz-dot[data-on="true"] { transform: scale(1.12); }
-  .dz-card { display: block; position: absolute; z-index: 4; width: 260px; padding: 12px; border-radius: 10px; pointer-events: none;
-    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink); box-shadow: 0 8px 24px rgb(0 0 0 / 0.35); animation: dz-in 160ms var(--ease-quart) both; }
-  .dz-card h3 { font-size: 14px; font-weight: 600; margin: 0; }
-  .dz-card p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+    background: var(--blue); color: #fff; border: 2px solid #fff; font: 600 12px/1 var(--font-mono); }
+  .dz-card { display: block; position: absolute; z-index: 4; width: 260px; padding: 12px 14px; border-radius: 10px; pointer-events: none;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink); animation: dz-in var(--t-state) var(--ease-quint) both; }
+  .dz-card h3 { font-size: 15px; font-weight: 600; margin: 0; }
+  .dz-card p { margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: var(--muted); }
 }
 
-.dz-hint { display: none; margin-top: 12px; text-align: center; font: 11px/1 var(--font-mono, monospace); color: var(--paper-muted); }
-.dz-legend { display: none; list-style: none; margin: 32px 0 0; padding: 0; }
-.dz-list { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
+.dz-hint { display: none; margin: 0; }
+.dz-legend { display: none; list-style: none; margin: 16px 0 0; padding: 0; }
+.dz-list { display: flex; flex-direction: column; gap: 8px; }
 @media (min-width: 900px) {
   .dz-hint { display: block; }
   .dz-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 16px; }
   .dz-list { display: none; }
 }
 @media (min-width: 1232px) { .dz-legend { grid-template-columns: repeat(6, 1fr); } }
-.dz-legend li { display: flex; gap: 12px; padding: 10px; margin: -10px; border-radius: 10px; transition: background-color 160ms var(--ease-quart); }
-.dz-legend li[data-on="true"] { background: color-mix(in srgb, var(--accent-on-paper) 10%, transparent); }
-.dz-num { display: grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: 999px; font: 600 12px/1 var(--font-mono, monospace); background: var(--accent); color: var(--accent-ink, #04121f); }
-.dz-legend h3 { font-size: 14px; font-weight: 500; color: var(--paper-ink); margin: 0; }
-.dz-legend p { margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: var(--paper-muted); }
+.dz-legend li { display: flex; gap: 12px; padding: 10px; margin: -10px; border-radius: 10px; transition: background-color var(--t-state) var(--ease-quint); }
+.dz-legend li[data-on="true"] { background: var(--accent-soft); }
+.dz-num { display: grid; flex: none; place-items: center; width: 28px; height: 28px; border-radius: 999px; font: 600 12px/1 var(--font-mono); background: var(--blue); color: #fff; }
+.dz-legend h3 { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0; }
+.dz-legend p { margin: 4px 0 0; font-size: 14px; line-height: 1.4; color: var(--muted); }
 
-.dz-list details { border: 1px solid var(--paper-line); border-radius: 10px; padding: 0 16px; background: var(--paper-surface); }
-.dz-list summary { min-height: 44px; display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--paper-ink); }
-.dz-list details p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: var(--paper-muted); }
+.dz-list details { border: 1px solid var(--line); border-radius: 10px; padding: 0 16px; background: var(--surface); }
+.dz-list summary { min-height: 44px; display: flex; align-items: center; gap: 12px; cursor: pointer; font-size: 15px; font-weight: 600; color: var(--ink); }
+.dz-list details p { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: var(--muted); }
 
 @media (prefers-reduced-motion: reduce) {
   .dz-lit, .dz-card { animation: none; }
-  .dz-dot { transition: none; }
 }

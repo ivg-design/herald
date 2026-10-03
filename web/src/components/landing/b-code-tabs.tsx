@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Copy, Play } from "lucide-react";
 import { useHerald } from "@/components/herald/useHerald";
+import SiteLink from "@/components/SiteLink";
 import { copyText } from "./b-hooks";
 
 const TABS = [
@@ -96,46 +97,75 @@ export default function CodeTabs() {
 
   return (
     <div className="min-w-0">
-    <div className="overflow-hidden rounded-xl bg-bg text-ink">
-      <div className="flex items-center justify-between border-b border-line pr-2">
-        <div role="tablist" aria-label="Language" className="flex overflow-x-auto" onKeyDown={onKey}>
-          {TABS.map((t, n) => (
-            <button
-              key={t.id}
-              ref={(el) => { refs.current[n] = el; }}
-              role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={n === i}
-              aria-controls={`panel-${t.id}`}
-              tabIndex={n === i ? 0 : -1}
-              onClick={() => setI(n)}
-              className="h-11 min-w-[56px] cursor-pointer px-4 text-[13px] font-medium transition-[background-color,color] duration-200"
-              style={{ background: n === i ? "var(--surface)" : "transparent", color: n === i ? "var(--ink)" : "var(--muted)" }}
-            >
-              {t.label}
+      <div className="night overflow-hidden rounded-xl border border-line">
+        <div className="flex items-center justify-between gap-2 border-b border-line px-2 py-2">
+          <div role="tablist" aria-label="Language" className="flex gap-1 overflow-x-auto" onKeyDown={onKey}>
+            {TABS.map((t, n) => (
+              <button
+                key={t.id}
+                ref={(el) => { refs.current[n] = el; }}
+                role="tab"
+                id={`tab-${t.id}`}
+                aria-selected={n === i}
+                aria-controls={`panel-${t.id}`}
+                tabIndex={n === i ? 0 : -1}
+                onClick={() => setI(n)}
+                className="btn btn-sm cursor-pointer !px-3.5"
+                style={{
+                  background: n === i ? "var(--surface-2)" : "transparent",
+                  color: n === i ? "var(--ink)" : "var(--muted)",
+                  borderColor: n === i ? "var(--blue)" : "transparent",
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={onCopy} className="btn btn-ghost btn-sm cursor-pointer" aria-label="Copy code">
+              {copied ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}
+              {copied ? "Copied" : "Copy"}
             </button>
-          ))}
+            <button type="button" onClick={onRun} className="btn btn-primary btn-sm cursor-pointer" aria-label="Run snippet">
+              <Play aria-hidden className="size-3.5" /> Run
+            </button>
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={onCopy} className="mini-btn !h-9 cursor-pointer gap-1.5 !px-3" aria-label="Copy code">
-            {copied ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}
-            {copied ? "Copied" : "Copy"}
-          </button>
-          <button type="button" onClick={onRun} className="mini-btn is-primary !h-9 cursor-pointer gap-1.5 !px-3" aria-label="Run snippet">
-            <Play aria-hidden className="size-3.5" /> Run
-          </button>
-        </div>
+        {TABS.map((t, n) => (
+          <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={n !== i} tabIndex={0}>
+            <pre className="m-0 overflow-x-auto p-5 text-[13px] leading-[1.7]" style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.02em", color: "var(--bone)" }}><code>{t.code}</code></pre>
+          </div>
+        ))}
+        <p className="sr-only" role="status" aria-live="polite">{copied ? "Copied to clipboard" : ""}</p>
       </div>
-      {TABS.map((t, n) => (
-        <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={n !== i} tabIndex={0}>
-          <pre className="mono m-0 overflow-x-auto p-5 text-[12.5px] leading-[1.7]"><code>{t.code}</code></pre>
-        </div>
-      ))}
-      <p className="sr-only" role="status" aria-live="polite">{copied ? "Copied to clipboard" : ""}</p>
+      <p className="readout m-0 mt-3 min-h-[1.5em]" role="status" aria-live="polite" aria-label="Run outcome">
+        {ran ? `Sent. Same payload, any language.` : ""}
+      </p>
     </div>
-    <p className="m-0 mt-3 min-h-[1.5em] text-[13.5px] text-paper-muted" role="status" aria-live="polite" aria-label="Run outcome">
-      {ran ? `Sent. Same payload, any language.` : ""}
-    </p>
+  );
+}
+
+/** SHA-256 in mono, truncated, with a Copy button whose outcome reads "Copied". */
+export function ShaCopy({ sha, href }: { sha: string; href: string | null }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const onCopy = async () => {
+    if (await copyText(sha)) {
+      setCopied(true);
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1800);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {href ? <SiteLink href={href} className="text-[15px] text-accent-text underline-offset-4 hover:underline">SHA-256</SiteLink> : <span className="text-[15px]">SHA-256</span>}
+      <span className="mono text-muted" title={sha}>{sha.slice(0, 8)}…{sha.slice(-8)}</span>
+      <button type="button" onClick={onCopy} className="btn btn-ghost btn-sm cursor-pointer" aria-label="Copy SHA-256">
+        {copied ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+      <span className="sr-only" role="status" aria-live="polite">{copied ? "Copied" : ""}</span>
     </div>
   );
 }

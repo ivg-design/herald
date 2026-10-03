@@ -47,26 +47,25 @@ export default function DesignerShowcase({ shots, intro }: { shots: { light?: Sh
   };
 
   return (
-    <div ref={root} className="w-full">
-      <div className="dz-head">
-        <div>{intro}</div>
-        <div className="dz-side">
-          <GridBanner />
-          <p className="dz-side-cap mono" aria-hidden>a 4 × 3 grid becomes a banner · click to replay</p>
-          {both && (
-            <div className="dz-toggle" role="group" aria-label="Screenshot appearance">
-              {(["dark", "light"] as const).map((m) => (
-                <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m}>
-                  {m === "dark" ? "Dark" : "Light"}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+    <div ref={root} className="g">
+      <div className="col-span-full lg:col-span-7">{intro}</div>
+      <div className="dz-side col-span-full lg:col-span-5 lg:col-start-8">
+        <GridBanner />
+        <p className="dz-side-cap readout" aria-hidden>a 4 × 3 grid becomes a banner · click to replay</p>
       </div>
 
+      {both && (
+        <div className="dz-toggle col-span-full" role="group" aria-label="Screenshot appearance">
+          {(["dark", "light"] as const).map((m) => (
+            <button key={m} type="button" className="btn btn-ghost btn-sm" onClick={() => setMode(m)} aria-pressed={mode === m}>
+              {m === "dark" ? "Dark" : "Light"}
+            </button>
+          ))}
+        </div>
+      )}
+
       {dims && (
-        <div className="dz-frame">
+        <div className="dz-frame col-span-full">
           <div className="dz-clip">
             <Image
               src={asset(mode === "dark" && shots.dark ? "/designer-dark.png" : "/designer-light.png")}
@@ -111,9 +110,9 @@ export default function DesignerShowcase({ shots, intro }: { shots: { light?: Sh
         </div>
       )}
 
-      <p className="dz-hint">Hover or focus a region of the Designer</p>
+      <p className="dz-hint readout col-span-full">Hover or focus a region of the Designer</p>
 
-      <ol className="dz-legend">
+      <ol className="dz-legend col-span-full">
         {HOTSPOTS.map((h) => (
           <li key={h.id} data-on={active === h.id} onMouseEnter={() => setActive(h.id)} onMouseLeave={() => setActive((a) => (a === h.id ? null : a))}>
             <span className="dz-num">{h.n}</span>
@@ -125,7 +124,7 @@ export default function DesignerShowcase({ shots, intro }: { shots: { light?: Sh
         ))}
       </ol>
 
-      <div className="dz-list" role="group" aria-label="Explore the Designer">
+      <div className="dz-list col-span-full" role="group" aria-label="Explore the Designer">
         {HOTSPOTS.map((h) => (
           <details key={h.id}>
             <summary><span className="dz-num">{h.n}</span>{h.title}</summary>

@@ -23,7 +23,7 @@ export default function CloudMock() {
         </AnimatePresence>
       </div>
       {shown ? (
-        <p className="mt-3 mb-0 text-right text-[12px] text-muted">Type a reply or press Record. Nothing leaves this page.</p>
+        <p className="readout mt-3 mb-0 text-right">Type a reply or press Record. Nothing leaves this page.</p>
       ) : (
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
           <History size={15} aria-hidden /> Re-show from History

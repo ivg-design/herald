@@ -7,13 +7,13 @@ import { useHeraldInternal } from "./internal";
 const SHOWN = 3;
 
 /**
- * The page's Herald when the hero dock is off screen: a fixed overlay under the header. There is no floating
+ * The page's Herald always: a fixed overlay under the header. There is no floating
  * pill; the header bell (Herald's menu-bar bell) is the compact state. Cards stay mounted while collapsed.
  */
 export default function PageStack() {
   const h = useHeraldInternal();
   const [all, setAll] = useState(false);
-  if (h.docked || (h.cards.length === 0 && h.held === 0)) return null;
+  if ((h.cards.length === 0 && h.held === 0)) return null;
 
   const open = h.expanded && h.overlayMode === "full";
   const arrival = h.expanded && h.overlayMode === "arrival" ? h.cards.find((c) => c.id === h.arrivalId) : undefined;

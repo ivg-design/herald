@@ -187,14 +187,14 @@ export default function LiveBanner({
           <span aria-hidden className="hb-ghost" style={{ bottom: 0, marginInline: 14, opacity: 0.4 }} />
         </>
       )}
-      <div className="mb relative z-[1] p-3" style={{ borderRadius: 12 }}>
+      <div className="mb relative z-[1] p-3 font-sans">
         {phase === "snoozed" ? (
           <p className="m-0 flex items-center gap-2.5 text-[13px]" role="status">
-            <AlarmClock aria-hidden size={16} className="shrink-0 text-accent" />
+            <AlarmClock aria-hidden size={16} className="shrink-0 text-blue" />
             <span className="min-w-0 flex-1 truncate">
               <b className="font-semibold">{app}</b> snoozed · returns at {snoozeLabel}
             </span>
-            <span className="mono shrink-0 text-[11px]" style={{ color: "var(--mb-muted)" }}>back in {Math.max(left, 0)} s (demo)</span>
+            <span className="shrink-0 font-mono text-[11px]" style={{ color: "var(--mb-muted)" }}>back in {Math.max(left, 0)} s (demo)</span>
           </p>
         ) : (
           <>
@@ -214,8 +214,8 @@ export default function LiveBanner({
                     initial={reduce ? false : { scale: 1.6 }}
                     animate={{ scale: 1 }}
                     transition={{ duration: 0.3, ease: EASE.quart }}
-                    className="mono grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] font-bold"
-                    style={{ background: "var(--signal)", color: "#fff5f2" }}
+                    className="grid h-5 min-w-5 place-items-center rounded-full px-1.5 font-mono text-[11px] font-semibold"
+                    style={{ background: "var(--red)", color: "#fff" }}
                   >
                     {count}
                   </motion.span>
@@ -230,7 +230,7 @@ export default function LiveBanner({
                 <X size={15} aria-hidden />
               </button>
             </div>
-            <p className="m-0 mt-1.5 pl-[42px] text-[12.5px] leading-snug" style={{ color: "var(--mb-muted)" }}>{top.body}</p>
+            <p className="m-0 mt-1.5 pl-[42px] text-[13.5px] leading-[1.45]" style={{ color: "var(--mb-muted)" }}>{top.body}</p>
 
             <AnimatePresence initial={false}>
               {expanded && stacked && (
@@ -246,7 +246,7 @@ export default function LiveBanner({
                   {items.slice(1).map((it) => (
                     <li key={it.id} className="flex items-center gap-2 border-t py-1.5" style={{ borderColor: "var(--mb-line)" }}>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[12.5px] font-medium">{it.title}</span>
+                        <span className="block truncate text-[13px] font-medium">{it.title}</span>
                         <span className="block truncate text-[11.5px]" style={{ color: "var(--mb-muted)" }}>{it.body}</span>
                       </span>
                       <button type="button" className="mb-x" aria-label={`Dismiss ${it.title}`} onClick={() => onDismissItem?.(it.id)}>
@@ -259,10 +259,10 @@ export default function LiveBanner({
             </AnimatePresence>
 
             {(buttons.length > 0 || !!toggleVoice || phase === "done") && (
-              <div className="mt-3 pl-[42px]">
+              <div className={phase === "idle" ? "mt-3 pl-[42px]" : "mt-3 border-t pl-[42px] pt-3"} style={phase === "idle" ? undefined : { borderColor: "var(--mb-line)" }}>
                 {phase === "confirm" ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="mr-1 text-[13px] font-medium">{confirmText ?? "Run this action?"}</span>
+                    <span className="mr-1 text-[13.5px] font-medium">{confirmText ?? "Run this action?"}</span>
                     <button type="button" className="mb-btn is-primary" onClick={yes}>Yes, deploy</button>
                     <button type="button" className="mb-btn" onClick={() => setPhase("idle")}>Cancel</button>
                   </div>
@@ -298,8 +298,8 @@ export default function LiveBanner({
               <div className="mt-3 pl-[42px]">
                 {rec > 0 ? (
                   <div className="flex h-10 items-center gap-3 rounded-lg px-3 text-[13px]" style={{ background: "var(--mb-field)", border: "1px solid var(--mb-line)" }} role="status">
-                    <motion.span aria-hidden className="size-2.5 rounded-full" style={{ background: "var(--signal)" }} animate={reduce ? undefined : { opacity: [1, 0.3, 1] }} transition={{ duration: 0.9, repeat: Infinity }} />
-                    <span className="flex-1">Recording… <span className="mono">0:0{4 - rec}</span></span>
+                    <motion.span aria-hidden className="size-2.5 rounded-full" style={{ background: "var(--red)" }} animate={reduce ? undefined : { opacity: [1, 0.3, 1] }} transition={{ duration: 0.9, repeat: Infinity }} />
+                    <span className="flex-1">Recording… <span className="font-mono">0:0{4 - rec}</span></span>
                     <button type="button" className="mb-btn" style={{ height: 30 }} onClick={finishRec}><Square size={12} aria-hidden />Stop</button>
                   </div>
                 ) : (
@@ -312,7 +312,7 @@ export default function LiveBanner({
                 {heard && <p className="m-0 mt-2 text-[12.5px]" style={{ color: "var(--mb-muted)" }}>Transcript: “{heard}” · press Send to deliver</p>}
                 {sent && (
                   <p className="m-0 mt-2 text-[12.5px]" role="status">
-                    You: “{sent}” · <b className="font-semibold text-accent">delivered to the agent</b>
+                    You: “{sent}” · <b className="font-semibold text-blue">delivered to the agent</b>
                   </p>
                 )}
                 <p className="m-0 mt-2 text-[11.5px]" style={{ color: "var(--mb-muted)" }}>
@@ -330,7 +330,7 @@ export default function LiveBanner({
             )}
 
             {note && (
-              <p className="m-0 mt-2 pl-[42px] text-[12.5px]" role="status" style={{ color: "var(--accent)" }}>
+              <p className="m-0 mt-2 pl-[42px] text-[12.5px]" role="status" style={{ color: "var(--blue)" }}>
                 {note}
               </p>
             )}
@@ -344,9 +344,9 @@ export default function LiveBanner({
 function Head({ app, title, speaking, status }: { app: string; title: string; speaking: boolean; status?: RingState }) {
   return (
     <>
-      <span className="mono block text-[10px] uppercase leading-tight tracking-[0.06em]" style={{ color: "var(--mb-muted)" }}>{app}</span>
+      <span className="block truncate font-mono text-[12px] leading-tight tracking-[0.02em]" style={{ color: "var(--mb-muted)" }}>{app}</span>
       <span className="flex items-center gap-2">
-        <span className="block min-w-0 truncate text-[15px] font-medium leading-snug">{title}</span>
+        <span className="block min-w-0 truncate text-[15px] font-semibold leading-snug">{title}</span>
         {speaking && (
           <span className="hb-wave" role="img" aria-label="Speaking">
             <i /><i /><i /><i /><i />
