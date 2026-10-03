@@ -1,12 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
+import { Archivo, Fragment_Mono } from "next/font/google";
 import StructuredData from "@/components/StructuredData";
 import { SITE_URL, asset } from "@/lib/config";
 import "./globals.css";
 
-const instrument = Instrument_Serif({ variable: "--font-instrument", weight: "400", style: ["normal", "italic"], subsets: ["latin"], display: "swap" });
-const dmSans = DM_Sans({ variable: "--font-dm-sans", subsets: ["latin"], display: "swap" });
-const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"], display: "swap" });
+const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"], display: "swap" });
+const fragment = Fragment_Mono({ variable: "--font-fragment", weight: "400", subsets: ["latin"], display: "swap" });
 
 const TITLE = "Herald: notifications you'd actually design";
 const DESC =
@@ -26,11 +25,11 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export const viewport: Viewport = { themeColor: "#0f1317", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#f4f6fa", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${instrument.variable} ${dmSans.variable} ${jetbrains.variable}`}>
+    <html lang="en" className={`${archivo.variable} ${fragment.variable}`}>
       <body>
         {children}
         <StructuredData />

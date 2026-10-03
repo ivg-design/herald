@@ -4,31 +4,78 @@
 @import "../styles/designer.css";
 @import "../styles/why.css";
 @import "../styles/send.css";
+@import "../styles/hero.css";
+@import "../styles/night.css";
 
-/* Herald tokens. Blue-tinted charcoal, logo blue accent, signal red only for counters/stack badges. */
+/*
+  Herald v3 tokens (see .reviews/v3-concept.md).
+  Day is the page: bone ground, deep blue-black ink, blue-tinted hairlines. Night is one band (Living + Cloud) and the
+  footer: `.night` overrides the same variables, so every component follows the ground it sits on.
+  Two inks, two signals: --blue is what Herald says (links, bell, Open, waveform, selection); --red is what needs you
+  (counters, Record, destructive, the mark's dot). Nothing else is coloured.
+*/
 :root {
-  --bg: #0f1317;
-  --surface: #161b21;
-  --surface-2: #1e252d;
-  --line: #2a323b;
-  --ink: #f4f1ea;
-  --muted: #9aa6b2;
-  --accent: #3b9be8;
-  --accent-soft: #3b9be826;
-  --accent-ink: #0f1317;
-  --signal: #d9371e;
-  --paper: #f3f6f9;
-  --paper-ink: #0f1317;
-  --paper-muted: #55606c;
-  --paper-line: #d5dde5;
+  --bone: #f4f6fa;
+  --bone-2: #e8edf4;
+  --hair: #cdd6e2;
+  --ink-day: #0e1b36;
+  --ink-2-day: #4b5a75;
+  --night: #0b1530;
+  --night-2: #13203f;
+  --night-hair: #263559;
+  --blue: #3b9be8;
+  --blue-ink: #1b6fb8;
+  --red: #d9371e;
+
+  /* ground-relative (Day by default) */
+  --bg: var(--bone);
+  --surface: var(--bone-2);
+  --surface-2: #dde5ef;
+  --line: var(--hair);
+  --ink: var(--ink-day);
+  --muted: var(--ink-2-day);
+  --accent: var(--blue);
+  --accent-text: var(--blue-ink);
+  --accent-soft: #3b9be822;
+  --accent-ink: #ffffff;
+  --signal: var(--red);
+
+  /* legacy aliases kept for components not yet moved; they all resolve to the ground above */
+  --paper: var(--bg);
+  --paper-ink: var(--ink);
+  --paper-muted: var(--muted);
+  --paper-line: var(--line);
   --paper-surface: #ffffff;
-  /* Accent text on paper needs more contrast than the logo blue. */
-  --accent-on-paper: #1b6fb8;
+  --accent-on-paper: var(--blue-ink);
+
   --ease-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-press: 120ms;
+  --t-state: 220ms;
+  --t-arrive: 420ms;
+  --t-layout: 560ms;
   --gutter: 16px;
+  --gap: 24px;
   --shell: 1200px;
+  --cols: 12;
+}
+
+/* The Night band: same variables, inverted ground. */
+.night, .section-dark {
+  --bg: var(--night);
+  --surface: var(--night-2);
+  --surface-2: #1b2a4d;
+  --line: var(--night-hair);
+  --ink: var(--bone);
+  --muted: #9aa8c4;
+  --accent-text: var(--blue);
+  --accent-ink: #0b1530;
+  --paper-surface: var(--night-2);
+  --accent-soft: #3b9be82e;
+  background: var(--bg);
+  color: var(--ink);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -39,93 +86,104 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
   --color-accent-soft: var(--accent-soft);
   --color-signal: var(--signal);
+  --color-blue: var(--blue);
+  --color-red: var(--red);
   --color-paper: var(--paper);
   --color-paper-ink: var(--paper-ink);
   --color-paper-muted: var(--paper-muted);
   --color-paper-line: var(--paper-line);
-  --font-display: var(--font-instrument), "Times New Roman", serif;
-  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-fragment), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 html {
   scrollbar-gutter: stable;
   background: var(--bg);
-  color-scheme: dark;
+  color-scheme: light;
   scroll-behavior: smooth;
-  scroll-padding-top: 88px;
+  scroll-padding-top: 80px;
 }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.55;
+  font-variation-settings: "wdth" 100;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   overflow-x: clip;
 }
+@media (max-width: 639px) { body { font-size: 16px; } }
 .nowrap { white-space: nowrap; }
-::selection { background: var(--accent); color: var(--accent-ink); }
+::selection { background: var(--blue); color: #fff; }
 a { color: inherit; text-decoration: none; }
 img { max-width: 100%; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
-.on-paper :focus-visible { outline-color: var(--accent-on-paper); }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
 
 /* Layout primitives */
 .shell { width: 100%; max-width: calc(var(--shell) + 2 * var(--gutter)); margin-inline: auto; padding-inline: var(--gutter); }
 @media (min-width: 1280px) { .shell { padding-inline: 0; } }
-.section { padding-block: clamp(64px, 9vw, 112px); }
-.section-paper { background: var(--paper); color: var(--paper-ink); }
-.section-dark { background: var(--bg); color: var(--ink); }
-.section-accent { background: var(--accent); color: var(--accent-ink); }
+.section { padding-block: clamp(88px, 11vw, 160px); }
+.section + .section:not(.night) { border-top: 1px solid var(--line); }
+.section-paper, .on-paper { /* Day is the default ground; kept so existing markup keeps working */ }
 
-.eyebrow {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 16px;
-}
-.section-paper .eyebrow { color: var(--accent-on-paper); }
+/* The page grid: 12 columns (6 at 640–1023, 4 below), 24 px gutters. Children place themselves with grid-column. */
+.g { display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); column-gap: var(--gap); row-gap: var(--gap); }
+@media (max-width: 1023px) { .g { --cols: 6; } }
+@media (max-width: 639px) { .g { --cols: 4; --gap: 16px; } }
 
+/* The Designer cell, drawn the way the app draws an empty slot: dashed hairline, 8 px radius, the slot name in mono. */
+.cell { position: relative; border: 1px dashed var(--line); border-radius: 8px; min-height: 48px; }
+.cell[data-filled="true"] { border-style: solid; border-color: transparent; }
+.cell > .slot { position: absolute; top: 6px; left: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; color: var(--muted); pointer-events: none; transition: opacity var(--t-state) var(--ease-quint); }
+.cell[data-filled="true"] > .slot { opacity: 0; }
+
+/* Type */
+.mono { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.02em; }
 .display {
   font-family: var(--font-display);
-  font-weight: 400;
-  line-height: 0.98;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  font-variation-settings: "wdth" 100;
+  line-height: 0.95;
+  letter-spacing: -0.025em;
   margin: 0;
   text-wrap: balance;
 }
-.display em { font-style: italic; color: var(--accent); }
-.section-paper .display em { color: var(--accent-on-paper); }
-.lede { font-size: clamp(16px, 1.3vw, 18px); line-height: 1.6; color: var(--muted); max-width: 62ch; margin: 20px 0 0; }
-.section-paper .lede { color: var(--paper-muted); }
-.mono { font-family: var(--font-mono); }
+.display-xl { font-size: clamp(52px, 7.2vw, 118px); line-height: 0.9; letter-spacing: -0.03em; }
+.display-l { font-size: clamp(36px, 4.6vw, 68px); }
+.display-m { font-size: clamp(28px, 3.2vw, 44px); letter-spacing: -0.02em; line-height: 1; }
+.lede { font-size: clamp(17px, 1.4vw, 20px); font-weight: 500; line-height: 1.4; color: var(--muted); max-width: 60ch; margin: 20px 0 0; }
+.body { font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 62ch; }
+.readout { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); }
+/* Legacy: v2 eyebrows. Do not add new ones; sections carry their own titles. */
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); margin: 0 0 12px; }
 
-/* Buttons */
+/* Buttons: one primary per view; the rest are ghosts. */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 44px; padding: 0 20px; border-radius: 8px; border: 1px solid transparent;
-  font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  transition: transform 160ms var(--ease-quart), background-color 160ms var(--ease-quart), border-color 160ms var(--ease-quart);
+  height: 44px; padding: 0 20px; border-radius: 10px; border: 1px solid transparent;
+  font-family: var(--font-sans); font-size: 15px; font-weight: 600; cursor: pointer; white-space: nowrap; color: var(--ink);
+  transition: transform var(--t-press) var(--ease-quart), background-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), color var(--t-state) var(--ease-quint);
 }
 .btn:active { transform: translateY(1px); }
-.btn-primary { background: var(--accent); color: var(--accent-ink); }
-.btn-primary:hover { background: #5aaeef; }
-.btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn-primary { background: var(--ink); color: var(--bg); }
+.btn-primary:hover { background: var(--blue-ink); color: #fff; }
+.night .btn-primary { background: var(--bone); color: var(--night); }
+.night .btn-primary:hover { background: var(--blue); color: #fff; }
+.btn-ghost { background: transparent; border-color: var(--line); }
 .btn-ghost:hover { border-color: var(--muted); background: var(--surface); }
-.on-paper .btn-ghost { color: var(--paper-ink); border-color: var(--paper-line); }
-.on-paper .btn-ghost:hover { border-color: var(--paper-muted); background: var(--paper-surface); }
 .btn-sm { height: 36px; padding: 0 14px; font-size: 14px; }
+.btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Mini banner buttons (mocks) */
-.mini-btn { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 5px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink); border: 0; }
-.mini-btn.is-primary { background: var(--accent); color: var(--accent-ink); }
+.mini-btn { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink); border: 0; }
+.mini-btn.is-primary { background: var(--blue); color: #fff; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
@@ -134,25 +192,29 @@ img { max-width: 100%; }
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
 
-/* Mock Herald banner (shared by the hero, Actions, Living, Cloud). Dark by default, white on paper sections. */
+/*
+  The page's Herald banner: one skin on every ground. Night card, hairline edge, 14 px radius, Archivo inside.
+  (--mb-* are read by LiveBanner and the mocks.)
+*/
 .mb {
-  --mb-bg: var(--surface); --mb-line: var(--line); --mb-ink: var(--ink); --mb-muted: var(--muted);
-  --mb-btn: var(--surface-2); --mb-field: var(--bg);
-  background: var(--mb-bg); border: 1px solid var(--mb-line); color: var(--mb-ink); border-radius: 12px; position: relative;
+  --mb-bg: var(--night-2); --mb-line: var(--night-hair); --mb-ink: var(--bone); --mb-muted: #9aa8c4;
+  --mb-btn: #1f2f55; --mb-field: var(--night);
+  background: var(--mb-bg); border: 1px solid var(--mb-line); color: var(--mb-ink); border-radius: 14px; position: relative;
+  box-shadow: 0 8px 24px -12px rgba(11, 21, 48, 0.45);
+  color-scheme: dark;
 }
-.on-paper .mb { --mb-bg: #fff; --mb-line: var(--paper-line); --mb-ink: var(--paper-ink); --mb-muted: var(--paper-muted); --mb-btn: #e8edf2; --mb-field: #f3f6f9; }
+.night .mb { --mb-bg: #16254a; --mb-line: #2d3f68; box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.6); }
 .mb-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 8px;
   background: var(--mb-btn); color: var(--mb-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
-  transition: transform 140ms var(--ease-quart), background-color 140ms var(--ease-quart), opacity 140ms;
+  transition: transform var(--t-press) var(--ease-quart), background-color var(--t-press) var(--ease-quart), opacity var(--t-press);
 }
-.mb-btn:hover { background: color-mix(in srgb, var(--mb-btn) 82%, var(--mb-ink)); }
+.mb-btn:hover { background: color-mix(in srgb, var(--mb-btn) 78%, var(--mb-ink)); }
 .mb-btn:active { transform: translateY(1px); }
 .mb-btn:disabled { opacity: 0.45; cursor: default; }
-.mb-btn.is-primary { background: var(--accent); color: var(--accent-ink); }
+.mb-btn.is-primary { background: var(--blue); color: #fff; }
 .mb-btn.is-primary:hover { background: #5aaeef; }
-.on-paper .mb-btn.is-primary:hover { background: #2d82cf; }
-.mb-btn.is-danger { background: var(--signal); color: #fff5f2; }
+.mb-btn.is-danger { background: var(--red); color: #fff5f2; }
 .mb-x { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--mb-muted); cursor: pointer; }
 .mb-x:hover { background: var(--mb-btn); color: var(--mb-ink); }
 .mb-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--mb-line); background: var(--mb-field); color: var(--mb-ink); font: inherit; font-size: 13px; }
