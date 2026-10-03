@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import Image from "next/image";
 import { asset } from "@/lib/config";
 import { HOTSPOTS, type Hotspot } from "./designer-hotspots";
-import GridBanner from "@/components/rive/GridBanner";
 
 export interface ShotDims { w: number; h: number }
 
@@ -12,7 +11,7 @@ export interface ShotDims { w: number; h: number }
  * The real Designer window with six numbered regions. Hover or focus a region (or its legend entry): everything else
  * dims, the region keeps an accent outline, and a card explains it. Below 900 px the regions give way to a details list.
  */
-export default function DesignerShowcase({ shots, intro }: { shots: { light?: ShotDims; dark?: ShotDims }; intro?: ReactNode }) {
+export default function DesignerShowcase({ shots, head }: { shots: { light?: ShotDims; dark?: ShotDims }; head?: ReactNode }) {
   const both = !!shots.light && !!shots.dark;
   const [mode, setMode] = useState<"dark" | "light">(shots.dark ? "dark" : "light");
   const [active, setActive] = useState<string | null>(null);
@@ -48,11 +47,7 @@ export default function DesignerShowcase({ shots, intro }: { shots: { light?: Sh
 
   return (
     <div ref={root} className="g">
-      <div className="col-span-full lg:col-span-7">{intro}</div>
-      <div className="dz-side col-span-full lg:col-span-5 lg:col-start-8">
-        <GridBanner />
-        <p className="dz-side-cap readout" aria-hidden>a 4 × 3 grid becomes a banner · click to replay</p>
-      </div>
+      {head}
 
       {both && (
         <div className="dz-toggle col-span-full" role="group" aria-label="Screenshot appearance">

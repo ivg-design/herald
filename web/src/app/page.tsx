@@ -38,8 +38,8 @@ export default async function Home() {
         <CloudRelay />
         <Agents />
         <Integrate />
-        <Download release={release} />
         <ChangelogPreview />
+        <Download release={release} />
       </main>
       <PageStack />
       <EasterEgg />

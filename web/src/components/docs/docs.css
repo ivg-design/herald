@@ -84,7 +84,7 @@ kbd {
 }
 .docs-crumbs { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 20px; }
 .docs-crumbs [aria-current] { color: var(--muted); }
-.display.docs-h1 { font-family: var(--font-display); font-weight: 800; font-variation-settings: "wdth" 68; font-size: clamp(40px, 5vw, 64px); line-height: 1; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.display.docs-h1 { font-family: var(--font-display); font-weight: 800; font-variation-settings: "wdth" 128; font-size: clamp(30px, 3.6vw, 48px); line-height: 1.02; letter-spacing: -0.035em; text-transform: none; color: var(--ink); }
 .docs-h1 em { font-style: normal; color: inherit; }
 .docs-note { margin: 14px 0 0; font-size: 14px; color: var(--muted); }
 
@@ -103,10 +103,10 @@ kbd {
 .docs-article .docs-prose { margin-top: 28px; }
 .docs-article .docs-prose > p:first-child { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; color: var(--muted); }
 .docs-prose p { margin: 0 0 1em; }
-.docs-prose h2, .docs-prose h3 { position: relative; font-family: var(--font-display); font-weight: 800; font-variation-settings: "wdth" 78; color: var(--ink); line-height: 1.1; letter-spacing: 0; scroll-margin-top: 88px; }
-.docs-prose h2 { font-size: clamp(28px, 3.2vw, 36px); margin: 2em 0 0.55em; }
-.docs-prose h3 { font-size: clamp(22px, 2.4vw, 27px); margin: 1.7em 0 0.5em; }
-.docs-prose h4, .docs-prose h5, .docs-prose h6 { font-size: 15px; font-weight: 700; font-variation-settings: "wdth" 78; color: var(--ink); margin: 1.6em 0 0.4em; scroll-margin-top: 88px; }
+.docs-prose h2, .docs-prose h3 { position: relative; font-family: var(--font-display); font-weight: 750; font-variation-settings: "wdth" 116; color: var(--ink); line-height: 1.12; letter-spacing: -0.02em; scroll-margin-top: 88px; }
+.docs-prose h2 { font-size: clamp(23px, 2.3vw, 29px); margin: 2em 0 0.55em; }
+.docs-prose h3 { font-size: clamp(19px, 1.8vw, 22px); margin: 1.7em 0 0.5em; }
+.docs-prose h4, .docs-prose h5, .docs-prose h6 { font-size: 15px; font-weight: 700; font-variation-settings: "wdth" 110; color: var(--ink); margin: 1.6em 0 0.4em; scroll-margin-top: 88px; }
 .docs-prose .anchor {
   margin-left: 10px; font-family: var(--font-sans); font-size: 0.6em; color: var(--muted); opacity: 0;
   transition: opacity 140ms var(--ease-quart), color 140ms var(--ease-quart);
@@ -214,7 +214,7 @@ dialog.docs-search::backdrop { background: rgb(11 21 48 / 0.5); }
 @media (min-width: 560px) { .docs-search-foot { display: flex; } }
 
 /* ---------- Docs index ---------- */
-.docs-index { padding: 40px 16px 96px; max-width: 1040px; }
+.docs-index { padding: 40px 16px 96px; max-width: 1040px; margin-inline: auto; }
 @media (min-width: 1024px) { .docs-index { padding: 64px 48px 120px; } }
 .docs-lead { margin: 20px 0 0; max-width: 60ch; font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; color: var(--muted); }
 .docs-hint {
@@ -245,7 +245,7 @@ dialog.docs-search::backdrop { background: rgb(11 21 48 / 0.5); }
 .changelog-head .display { font-size: clamp(56px, 10vw, 128px); }
 .changelog-list { list-style: none; margin: 0; padding: 0 0 clamp(64px, 9vw, 112px); }
 .changelog-entry { display: block; padding-block: 36px; border-top: 1px solid var(--line); scroll-margin-top: 88px; }
-.changelog-rail h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-variation-settings: "wdth" 78; font-size: clamp(36px, 4vw, 48px); line-height: 1; }
+.changelog-rail h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-variation-settings: "wdth" 130; letter-spacing: -0.04em; font-size: clamp(30px, 3.2vw, 40px); line-height: 1; }
 .changelog-rail h2 a:hover { color: var(--accent-text); }
 .changelog-rail p { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 24px; font-size: 14px; color: var(--muted); }
 .changelog-body { max-width: 760px; min-width: 0; font-size: 15.5px; }

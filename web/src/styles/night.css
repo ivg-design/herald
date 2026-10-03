@@ -1,5 +1,5 @@
 /* The Night band: #living + #cloud read as one band (no rule between, #cloud's top padding is halved). */
-#cloud.section { padding-top: calc(clamp(88px, 11vw, 160px) / 2); }
+#cloud.section { padding-top: calc(clamp(64px, 8vw, 112px) / 2); }
 
 .night .btn[aria-pressed="true"] { border-color: var(--blue); color: var(--blue); background: var(--accent-soft); }
 

@@ -12,18 +12,30 @@ export interface ReleaseInfo {
   live: boolean;
 }
 
-// Fallback used when GitHub is unreachable at build time: the 1.6.4 asset.
+// Fallback used when GitHub is unreachable at build time: the real 1.6.5 (build 15) asset.
 const FALLBACK: ReleaseInfo = {
-  version: "1.6.4",
-  build: "14",
-  date: "2026-10-03T00:39:36Z",
-  dmgUrl: `https://github.com/${REPO}/releases/download/v1.6.4/Herald-1.6.4-build14-macOS.dmg`,
-  dmgName: "Herald-1.6.4-build14-macOS.dmg",
-  sizeMB: 14,
-  sha256: "f679c0985d31f201588bb7f2c69f6e55fd155fd2a043c915fea28c481bd8c7c7",
-  shaUrl: `https://github.com/${REPO}/releases/download/v1.6.4/Herald-1.6.4-build14-macOS.dmg.sha256`,
+  version: "1.6.5",
+  build: "15",
+  date: "2026-10-03T05:07:58Z",
+  dmgUrl: `https://github.com/${REPO}/releases/download/v1.6.5/Herald-1.6.5-build15-macOS.dmg`,
+  dmgName: "Herald-1.6.5-build15-macOS.dmg",
+  sizeMB: Math.round(14691902 / 1024 / 1024),
+  sha256: "2311d62233f5a1c18cfd158f5eca1a67ef87fe1854a4c425539a0bd0920de818",
+  shaUrl: `https://github.com/${REPO}/releases/download/v1.6.5/Herald-1.6.5-build15-macOS.dmg.sha256`,
   live: false,
 };
+
+function parts(v: string): number[] {
+  const m = v.replace(/^v/, "").split(/[.\-+]/).slice(0, 3).map((n) => parseInt(n, 10));
+  return [0, 1, 2].map((i) => (Number.isFinite(m[i]) ? m[i] : 0));
+}
+
+/** True when version a is newer than b (major.minor.patch, numerically). */
+function newer(a: string, b: string): boolean {
+  const x = parts(a), y = parts(b);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+}
 
 interface GhAsset { name: string; size: number; browser_download_url: string; digest?: string }
 
@@ -40,7 +52,7 @@ export async function getRelease(): Promise<ReleaseInfo> {
     if (!dmg) return FALLBACK;
     const sha = rel.assets.find((a) => a.name.endsWith(".sha256"));
     const build = dmg.name.match(/build(\d+)/i)?.[1] ?? FALLBACK.build;
-    return {
+    const live: ReleaseInfo = {
       version: rel.tag_name.replace(/^v/, ""),
       build,
       date: rel.published_at,
@@ -51,6 +63,8 @@ export async function getRelease(): Promise<ReleaseInfo> {
       shaUrl: sha?.browser_download_url ?? null,
       live: true,
     };
+    // Never let an older live answer downgrade the page below the known fallback.
+    return newer(FALLBACK.version, live.version) ? FALLBACK : live;
   } catch {
     return FALLBACK;
   }

@@ -3,7 +3,8 @@
 
 /* two captures of one desktop, one scale */
 .sbs { display: grid; gap: 20px; min-width: 0; width: 100%; }
-@media (min-width: 640px) and (max-width: 1023px) { .sbs { grid-template-columns: 1fr 1fr; gap: 24px; } }
+@media (min-width: 640px) { .sbs { grid-template-columns: 1fr 1fr; gap: 24px; } }
+.sec-head .sec-meta:has(.sbs) { display: block; }
 .sbs-fig { margin: 0; min-width: 0; }
 .sbs-cap { display: block; margin-bottom: 10px; text-transform: lowercase; }
 .sbs-cap-herald { color: var(--accent-text); }
@@ -50,7 +51,7 @@
 .herald-now { flex: none; font-size: .92em; color: var(--mb-muted); }
 
 /* ledger: the page's 12 columns, hairline rows. label 1-2, Notification Center 3-7, Herald 8-12 */
-.ledger { margin-top: 64px; font-size: 15px; line-height: 1.5; }
+.ledger { margin-top: 0; font-size: 15px; line-height: 1.5; }
 .ledger-row { border-top: 1px solid var(--line); padding-block: 16px; align-items: start; }
 .ledger-head .ledger-row { border-top: 0; padding-block: 0 12px; align-items: baseline; }
 .ledger-h { font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .02em; text-transform: lowercase; color: var(--muted); }
@@ -62,12 +63,14 @@
 .ledger-head .ledger-c-herald { color: var(--accent-text); }
 @media (max-width: 1023px) {
   .ledger-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .ledger-label { padding-bottom: 6px; }
-  .ledger-mac, .ledger-herald { padding-block: 4px; }
-  .ledger-herald { margin-top: 6px; }
-  .ledger-mac::before, .ledger-herald::before { content: attr(data-col); display: block; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: .02em; color: var(--muted); }
+  .ledger-row { row-gap: 2px; padding-block: 12px; }
+  .ledger-label { padding: 0; }
+  .ledger-mac, .ledger-herald { padding: 0; font-size: 14px; line-height: 1.4; }
+  .ledger-herald { margin-top: 4px; padding-left: 10px; }
+  .ledger-mac::before, .ledger-herald::before { content: attr(data-short) "\00a0\00a0"; font-family: var(--font-mono); font-size: 11px; font-weight: 400; letter-spacing: .02em; color: var(--muted); }
   .ledger-herald::before { color: var(--accent-text); }
 }
+@media (max-width: 639px) { .ledger { font-size: 14px; } }
 @media (min-width: 1024px) {
   .ledger-label { grid-column: 1 / span 2; }
   .ledger-c-mac { grid-column: 3 / span 5; }

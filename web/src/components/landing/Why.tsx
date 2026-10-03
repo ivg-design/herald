@@ -1,25 +1,26 @@
 import Comparison from "./a-compare";
 import SideBySide from "./b-side-by-side";
+import SectionHead from "./SectionHead";
 
 export default function Why() {
   return (
     <section id="why" className="section why">
       <div className="shell">
-        <div className="g items-start">
-          <div className="col-span-full min-w-0 lg:col-span-7 lg:col-start-1">
-            <h2 className="display display-l">
-              You can&rsquo;t restyle a macOS notification, and you can&rsquo;t get one back. Herald fixes both.
-            </h2>
-            <p className="lede">
+        <SectionHead
+          title={<>You can&rsquo;t restyle a macOS notification, and you can&rsquo;t get one back. Herald fixes both.</>}
+          titleCols="lg:col-span-12"
+          ledeCols="order-1 lg:order-none lg:col-span-4 lg:col-start-1 lg:row-start-2"
+          asideSlot="alert"
+          asideCols="order-2 lg:order-none lg:col-span-8 lg:col-start-5 lg:row-start-2"
+          lede={
+            <>
               A system alert can stay on screen, but it is one Apple template with the buttons the app
               registered, and it can take focus. A Herald banner is laid out by you, acts on your Mac, never takes focus, and every
               one lands in a searchable history.
-            </p>
-          </div>
-          <div className="col-span-full min-w-0 max-lg:mt-8 lg:col-span-5 lg:col-start-8">
-            <SideBySide />
-          </div>
-        </div>
+            </>
+          }
+          aside={<SideBySide />}
+        />
         <Comparison />
       </div>
     </section>

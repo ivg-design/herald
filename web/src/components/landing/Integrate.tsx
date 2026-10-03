@@ -1,5 +1,6 @@
 import SiteLink from "@/components/SiteLink";
 import { nowrapText } from "@/lib/nowrap";
+import SectionHead from "./SectionHead";
 import CodeTabs from "./b-code-tabs";
 
 const USERS = [
@@ -12,16 +13,21 @@ export default function Integrate() {
   return (
     <section id="integrate" className="section">
       <div className="shell g">
-        <h2 className="display display-l col-span-full lg:col-span-8">Ten lines, any language.</h2>
-        <p className="lede col-span-full !mt-0 lg:col-span-8">Loopback HTTP + JSON on 127.0.0.1 with a bearer token Herald writes for you. Clients for Swift, Python and Node; a CLI for everything else.</p>
-        <div className="col-span-full mt-6 min-w-0 lg:col-span-8">
+        <SectionHead
+          title="Ten lines, any language."
+          titleCols="lg:col-span-9"
+          ledeCols="lg:col-span-8"
+          lede="Loopback HTTP + JSON on 127.0.0.1 with a bearer token Herald writes for you. Clients for Swift, Python and Node; a CLI for everything else."
+        />
+        <div className="col-span-full min-w-0 lg:col-span-8">
+          <h3 className="display display-m m-0 mb-5">Send from your language</h3>
           <CodeTabs />
         </div>
-        <div className="col-span-full mt-6 min-w-0 lg:col-span-4 lg:col-start-9">
-          <h3 className="display display-m">Already speaking Herald</h3>
-          <ul className="m-0 mt-6 list-none p-0">
+        <div className="col-span-full mt-6 min-w-0 lg:col-span-4 lg:col-start-9 lg:mt-0">
+          <h3 className="display display-m m-0">Already speaking Herald</h3>
+          <ul className="m-0 mt-5 list-none border-t border-line p-0">
             {USERS.map(({ name, href, copy }) => (
-              <li key={name} className="border-t border-line py-4 text-[15px] leading-snug text-muted">
+              <li key={name} className="border-b border-line py-4 text-[15px] leading-snug text-muted">
                 <strong className="font-semibold text-ink">
                   {href ? <SiteLink href={href} className="text-accent-text underline underline-offset-4">{nowrapText(name)}</SiteLink> : nowrapText(name)}
                 </strong>{" "}

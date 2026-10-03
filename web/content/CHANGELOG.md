@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.5 (Build 15) - 2026-10-03
+
+### Fixed
+
+- Clicking the red stack-count badge on a banner toggles the stack open or closed, the same as clicking the title
+  (#87); the badge is a real button with a pointer cursor and an accessibility label, and the panel still never
+  becomes key.
+
+### Added
+
+- `web/`: the Herald product site (Next.js) — landing page with a live in-page Herald banner stack, docs rendered
+  from this repo's Markdown, changelog, Rive pieces built with the `rive` CLI (`web/rive/`). Not deployed yet.
+
+1190 tests.
+
 ## 1.6.4 (Build 14) - 2026-10-02
 
 1189 tests.

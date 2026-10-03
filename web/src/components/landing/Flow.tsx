@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Send } from "lucide-react";
 import s from "./flow.module.css";
 import MiniIcon from "./MiniIcon";
+import SectionHead from "./SectionHead";
 import { useHerald } from "@/components/herald/useHerald";
 import type { HeraldButton } from "@/components/herald/types";
 import type { Transition } from "framer-motion";
@@ -87,13 +88,15 @@ export default function Flow() {
     <section id="flow" className="section">
       <div className="shell">
         <div className="g">
-          <h2 className="display display-l col-span-full min-w-0 lg:col-span-9">Apps declare. You design. Herald renders.</h2>
-          <p className="lede col-span-full lg:col-span-7" style={{ margin: 0 }}>
-            An app registers a manifest once: the fields it can send, sample values, the actions it offers. You lay those fields out in the Designer. Every notification from then on is rendered through your template.
-          </p>
+          <SectionHead
+            title="Apps declare. You design. Herald renders."
+            titleCols="lg:col-span-9"
+            ledeCols="lg:col-span-7"
+            lede="An app registers a manifest once: the fields it can send, sample values, the actions it offers. You lay those fields out in the Designer. Every notification from then on is rendered through your template."
+          />
 
           {/* manifest */}
-          <article className="col-span-full min-w-0 lg:col-span-4 lg:col-start-1 lg:mt-8">
+          <article className="col-span-full min-w-0 lg:col-span-4 lg:col-start-1">
             <h3 className={s.head}>manifest</h3>
             <div className={s.json}>
               <div className="text-muted">{"{ \"app\": \"ci.bot\","}</div>
@@ -119,36 +122,34 @@ export default function Flow() {
 
           {/* template */}
           <article className="col-span-full min-w-0 lg:col-span-4">
-            <div className={s.headrow}>
-              <h3 className={s.headt}>template · 4 × 3</h3>
-              <div role="group" aria-label="When a field is empty" className={s.sw}>
-                <span>when a field is empty:</span>
-                <span className="inline-flex rounded-md border border-line p-0.5">
-                  {[true, false].map((v) => (
-                    <button
-                      key={String(v)}
-                      type="button"
-                      aria-pressed={collapse === v}
-                      onClick={() => setCollapse(v)}
-                      className="h-7 cursor-pointer rounded px-2.5 text-[12px] font-medium"
-                      style={{ background: collapse === v ? "var(--surface-2)" : "transparent", color: collapse === v ? "var(--ink)" : "var(--muted)", transition: "background-color var(--t-state) var(--ease-quint)" }}
-                    >
-                      {v ? "collapse" : "keep space"}
-                    </button>
-                  ))}
-                </span>
-              </div>
-            </div>
+            <h3 className={s.head}>template · 4 × 3</h3>
             <div
               className={s.tgrid}
               style={{ gridTemplateRows: trackRows, transition: reduce ? "none" : undefined }}
             >
-              <div className={`cell ${s.gcell}`} style={{ gridArea: "1 / 1 / 6 / 2" }}><span className="slot">icon</span></div>
+              <div className={`cell ${s.gcell} ${s.icell}`} style={{ gridArea: "1 / 1 / 6 / 2" }}><span className="slot">icon</span><MiniIcon size={32} /></div>
               <Cell hh={hh("title")} area="1 / 2 / 2 / 4" name="title" empty={isEmpty("title")} />
               <Cell hh={hh("status")} area="1 / 4 / 2 / 5" name="status" empty={isEmpty("status")} />
               <Cell hh={hh("body")} area="3 / 2 / 4 / 5" name="body" empty={isEmpty("body")} gone={rowGone(1)} />
               <Cell hh={hh("log")} area="5 / 2 / 6 / 4" name="log" empty={isEmpty("log")} gone={rowGone(2)} />
               <Cell hh={hh("deploy")} area="5 / 4 / 6 / 5" name="action" empty={isEmpty("deploy")} gone={rowGone(2)} />
+            </div>
+            <div role="group" aria-label="When a field is empty" className={s.sw}>
+              <span>when a field is empty:</span>
+              <span className="inline-flex rounded-md border border-line p-0.5">
+                {[true, false].map((v) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    aria-pressed={collapse === v}
+                    onClick={() => setCollapse(v)}
+                    className="h-7 cursor-pointer rounded px-2.5 text-[12px] font-medium"
+                    style={{ background: collapse === v ? "var(--surface-2)" : "transparent", color: collapse === v ? "var(--ink)" : "var(--muted)", transition: "background-color var(--t-state) var(--ease-quint)" }}
+                  >
+                    {v ? "collapse" : "keep space"}
+                  </button>
+                ))}
+              </span>
             </div>
             <p className="readout m-0 mt-3" role="status" aria-live="polite">{summary}</p>
           </article>
@@ -216,6 +217,7 @@ function Cell({ area, name, empty, gone, hh }: { area: string; name: string; emp
   return (
     <div className={`cell ${s.gcell}`} {...hh} data-empty={!!empty} data-gone={!!gone} style={{ gridArea: area }}>
       <span className="slot">{name}</span>
+      <span className={s.tok}>{`{${name}}`}</span>
     </div>
   );
 }

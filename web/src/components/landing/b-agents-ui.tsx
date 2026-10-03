@@ -1,13 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { Check } from "lucide-react";
 import { asset } from "@/lib/config";
 import { useHerald } from "@/components/herald/useHerald";
 import SiteLink from "@/components/SiteLink";
 import { nowrapText } from "@/lib/nowrap";
-import { copyText, useInViewOnce } from "./b-hooks";
+import { copyText } from "./b-hooks";
 
 const SNIPPET = '{"mcpServers":{"herald":{"command":"herald-mcp"}}}';
 const ROWS: { name: string; href?: string }[] = [
@@ -30,7 +29,7 @@ export function McpMock() {
     timer.current = setTimeout(() => setCopied(false), 2200);
   };
   return (
-    <div>
+    <div className="mt-5">
       <ul className="m-0 flex list-none flex-col border-t border-line p-0">
         {ROWS.map((r) => (
           <li key={r.name} className="flex min-h-14 items-center justify-between gap-3 border-b border-line py-2">
@@ -46,7 +45,7 @@ export function McpMock() {
         ))}
       </ul>
       <p className="readout m-0 mt-3" role="status" aria-live="polite">
-        {failed ? "Copy is not available in this browser." : copied ? "Copied the herald-mcp config." : "The app installs these for you with one click; here each links to the steps."}
+        {failed ? "Copy is not available in this browser." : copied ? "Copied the herald-mcp config." : "How to install opens the steps for that client in the docs. The app does the same in one click."}
       </p>
     </div>
   );
@@ -64,35 +63,10 @@ const TOOLS: [string, string][] = [
 type Demo = "send" | "preview" | "state";
 const DEMOS: Record<string, Demo> = { "send_test / speak": "send", render_preview: "preview", "list_history / list_stacks": "state" };
 
-/** Typing plays once per page load, whatever re-renders or remounts the list. */
-let typedOnce = false;
-
 export function ToolList() {
-  const reduced = useReducedMotion();
   const herald = useHerald();
-  const ref = useRef<HTMLUListElement>(null);
-  const seen = useInViewOnce(ref, 0.5);
-  const lines = TOOLS.map(([n, d]) => `${n}: ${d}`);
-  const GAP = 7; // ≈120 ms pause between rows at 18 ms/char
-  const total = lines.reduce((a, l) => a + l.length + GAP, 0) - GAP;
-  const [typed, setTyped] = useState(typedOnce ? Infinity : 0);
-  const done = reduced || typed >= total;
   const [preview, setPreview] = useState(false);
   const [state, setState] = useState(false);
-
-  useEffect(() => {
-    if (reduced || !seen || typedOnce) return;
-    let n = 0;
-    const id = setInterval(() => {
-      n += 1;
-      setTyped(n);
-      if (n >= total) {
-        typedOnce = true;
-        clearInterval(id);
-      }
-    }, 18);
-    return () => clearInterval(id);
-  }, [reduced, seen, total]);
 
   const act = (d: Demo) => {
     if (d === "send") {
@@ -112,30 +86,25 @@ export function ToolList() {
     else setState((v) => !v);
   };
 
-  const shown = reduced ? total : Math.min(typed, total);
-  const starts = lines.reduce<number[]>((acc, l, i) => [...acc, i === 0 ? 0 : acc[i - 1] + lines[i - 1].length + GAP], []);
   const readout = JSON.stringify({ onScreen: herald.onScreen, stacks: herald.pending, history: herald.history, snoozed: herald.snoozed }).replace(/,/g, ", ").replace(/:/g, ": ");
   return (
-    <ul ref={ref} className="mono m-0 mt-6 flex list-none flex-col border-t border-line p-0 text-[13px] leading-snug text-muted">
-      {lines.map((l, i) => {
-        const k = Math.max(0, Math.min(l.length, shown - starts[i]));
-        const demo = DEMOS[TOOLS[i][0]];
+    <ul className="mono m-0 mt-5 flex list-none flex-col border-t border-line p-0 text-[13px] leading-snug text-muted">
+      {TOOLS.map(([name, desc]) => {
+        const demo = DEMOS[name];
         const open = demo === "preview" ? preview : demo === "state" ? state : undefined;
         return (
-          <li key={l} className="tool-row min-h-[52px] border-b border-line py-3" style={{ opacity: done || k > 0 ? 1 : 0 }}>
+          <li key={name} className="tool-row min-h-[52px] border-b border-line py-3">
             <div className="flex items-start gap-3">
               <Check aria-hidden className="mt-[3px] size-3.5 shrink-0 text-accent" />
-              <span className="sr-only">{l}</span>
               <span className="flex min-w-0 flex-wrap items-center gap-y-2">
-                <span aria-hidden className="min-w-0">
-                  {l.slice(0, k)}
-                  <span className="opacity-0">{l.slice(k)}</span>
+                <span className="min-w-0">
+                  <span className="text-ink">{name}</span>: {desc}
                 </span>
                 {demo && (
                   <button
                     type="button"
                     className="tool-try btn btn-ghost btn-sm ml-3 shrink-0 !h-7 !px-3 !text-[13px]"
-                    aria-label={`Try ${TOOLS[i][0]}`}
+                    aria-label={`Try ${name}`}
                     aria-expanded={open}
                     onClick={() => act(demo)}
                   >

@@ -1,6 +1,4 @@
 /* designer: owned by its section; imported from globals.css. Day ground; tokens only. */
-.dz-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
-@media (min-width: 1024px) { .dz-side { align-self: end; } }
 .gb { position: relative; display: block; width: 100%; max-width: 480px; aspect-ratio: 380 / 136; padding: 0; border: 0; background: transparent; cursor: pointer; border-radius: 12px; }
 .gb-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; transition: opacity var(--t-state) var(--ease-quint); }
 .gb-fallback { position: absolute; inset: 0; display: grid; place-items: center; border: 1px dashed var(--line); border-radius: 12px; font-size: 11px; color: var(--muted); }

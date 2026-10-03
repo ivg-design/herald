@@ -32,8 +32,8 @@ export default function Comparison() {
         {ROWS.map((r) => (
           <div role="row" key={r.label} className="ledger-row g">
             <span role="rowheader" className="ledger-label">{r.label}</span>
-            <span role="cell" className="ledger-c-mac ledger-mac" data-col="notification center">{r.mac}</span>
-            <span role="cell" className="ledger-c-herald ledger-herald" data-col="herald">{r.herald}</span>
+            <span role="cell" className="ledger-c-mac ledger-mac" data-col="notification center" data-short="macOS">{r.mac}</span>
+            <span role="cell" className="ledger-c-herald ledger-herald" data-col="herald" data-short="Herald">{r.herald}</span>
           </div>
         ))}
       </div>

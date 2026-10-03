@@ -6,6 +6,7 @@
 @import "../styles/send.css";
 @import "../styles/hero.css";
 @import "../styles/night.css";
+@import "../styles/tail.css";
 
 /*
   Herald v3 tokens (see .reviews/v3-concept.md).
@@ -26,6 +27,9 @@
   --blue: #3b9be8;
   --blue-ink: #1b6fb8;
   --red: #d9371e;
+  /* Blueprint: the Designer canvas at page scale (the hero and the closing download band). */
+  --bp: #1554c0;
+  --bp-2: #1a5fd2;
 
   /* ground-relative (Day by default) */
   --bg: var(--bone);
@@ -55,7 +59,7 @@
   --t-state: 220ms;
   --t-arrive: 420ms;
   --t-layout: 560ms;
-  --gutter: 16px;
+  --gutter: clamp(16px, 3.2vw, 44px);
   --gap: 24px;
   --shell: 1200px;
   --cols: 12;
@@ -78,6 +82,28 @@
   color-scheme: dark;
 }
 
+/* The Blueprint ground: white ink on Herald blue, dashed cells in white. */
+.blueprint {
+  --bg: var(--bp);
+  --surface: rgb(255 255 255 / 0.1);
+  --surface-2: rgb(255 255 255 / 0.18);
+  --line: rgb(255 255 255 / 0.46);
+  --ink: #ffffff;
+  --muted: #d5e4fb;
+  --accent-text: #ffffff;
+  --accent-soft: rgb(255 255 255 / 0.16);
+  --accent-ink: var(--bp);
+  background: var(--bg);
+  color: var(--ink);
+  color-scheme: dark;
+}
+.blueprint .btn-primary { background: #fff; color: var(--bp); }
+.blueprint .btn-primary:hover { background: var(--ink-day); color: #fff; }
+.blueprint .btn-ghost { border-color: rgb(255 255 255 / 0.55); color: #fff; }
+.blueprint .btn-ghost:hover { border-color: #fff; background: rgb(255 255 255 / 0.12); }
+.blueprint :focus-visible { outline-color: #fff; }
+.blueprint ::selection { background: #fff; color: var(--bp); }
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
@@ -95,8 +121,8 @@
   --color-paper-ink: var(--paper-ink);
   --color-paper-muted: var(--paper-muted);
   --color-paper-line: var(--paper-line);
-  --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
-  --font-sans: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-georama), "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-georama), "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-fragment), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
@@ -128,8 +154,7 @@ img { max-width: 100%; }
 
 /* Layout primitives */
 .shell { width: 100%; max-width: calc(var(--shell) + 2 * var(--gutter)); margin-inline: auto; padding-inline: var(--gutter); }
-@media (min-width: 1280px) { .shell { padding-inline: 0; } }
-.section { padding-block: clamp(88px, 11vw, 160px); }
+.section { padding-block: clamp(64px, 8vw, 112px); }
 .section + .section:not(.night) { border-top: 1px solid var(--line); }
 .section-paper, .on-paper { /* Day is the default ground; kept so existing markup keeps working */ }
 
@@ -144,21 +169,29 @@ img { max-width: 100%; }
 .cell > .slot { position: absolute; top: 6px; left: 8px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; color: var(--muted); pointer-events: none; transition: opacity var(--t-state) var(--ease-quint); }
 .cell[data-filled="true"] > .slot { opacity: 0; }
 
+/* A section head is two fields in two cells, as in the hero: `title` and `body`. (SectionHead.tsx) */
+.sec-head { row-gap: 12px; margin-bottom: clamp(28px, 4vw, 56px); }
+.sec-head > .cell { padding: 30px clamp(14px, 1.6vw, 22px) clamp(16px, 1.8vw, 24px); min-width: 0; }
+.sec-head > .cell > .slot { top: 8px; left: 10px; }
+.sec-head .lede { margin: 0; }
+.sec-head .sec-meta { display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+.sec-head .sec-meta .readout { margin: 0; }
+
 /* Type */
 .mono { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.02em; }
 .display {
   font-family: var(--font-display);
   font-weight: 800;
   font-variation-settings: "wdth" 100;
-  line-height: 0.95;
-  letter-spacing: -0.025em;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
   margin: 0;
   text-wrap: balance;
 }
-.display-xl { font-size: clamp(52px, 7.2vw, 118px); line-height: 0.9; letter-spacing: -0.03em; }
-/* Section titles are set condensed and tall: the same axis the hero binds to its cell, at its narrow end. */
-.display-l { font-size: clamp(46px, 6.4vw, 100px); font-variation-settings: "wdth" 68; line-height: 0.9; letter-spacing: -0.012em; }
-.display-m { font-size: clamp(28px, 3vw, 42px); font-variation-settings: "wdth" 78; letter-spacing: -0.008em; line-height: 0.98; }
+.display-xl { font-size: clamp(52px, 7.2vw, 118px); line-height: 0.92; letter-spacing: -0.035em; }
+/* Section titles are set wide: the axis the hero binds to its cell, at its broad end. */
+.display-l { font-size: clamp(30px, 4.5vw, 66px); font-variation-settings: "wdth" 132; line-height: 0.98; letter-spacing: -0.04em; }
+.display-m { font-size: clamp(21px, 2vw, 28px); font-variation-settings: "wdth" 122; font-weight: 700; letter-spacing: -0.025em; line-height: 1.05; }
 .lede { font-size: clamp(17px, 1.4vw, 20px); font-weight: 500; line-height: 1.4; color: var(--muted); max-width: 60ch; margin: 20px 0 0; }
 .body { font-size: 17px; line-height: 1.55; color: var(--muted); max-width: 62ch; }
 .readout { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); }
@@ -194,7 +227,7 @@ img { max-width: 100%; }
 }
 
 /*
-  The page's Herald banner: one skin on every ground. Night card, hairline edge, 14 px radius, Archivo inside.
+  The page's Herald banner: one skin on every ground. Night card, hairline edge, 14 px radius, Georama inside.
   (--mb-* are read by LiveBanner and the mocks.)
 */
 .mb {

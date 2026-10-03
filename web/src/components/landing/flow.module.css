@@ -13,9 +13,12 @@
 
 /* template: a real 4 x 3 grid of Designer cells */
 .tgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; transition: grid-template-rows var(--t-layout) var(--ease-expo); }
-.tgrid > .gcell { min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); border-style: solid; outline: 2px solid transparent; outline-offset: 2px; transition: opacity var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), background-color var(--t-state) var(--ease-quint); }
+.tgrid > .gcell { min-width: 0; min-height: 0; overflow: hidden; display: flex; align-items: center; padding: 8px 0 0 10px; background: var(--surface); border-style: solid; outline: 1px solid transparent; outline-offset: -1px; transition: opacity var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), background-color var(--t-state) var(--ease-quint); }
 .tgrid > .gcell[data-empty="true"] { border-style: dashed; background: transparent; }
-.tgrid > .gcell[data-hot="true"] { outline-color: var(--blue); }
+.tgrid > .gcell[data-hot="true"] { outline-color: var(--blue); background: var(--accent-soft); }
+.tgrid > .gcell.icell { align-items: flex-start; padding-top: 28px; }
+.tok { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--ink); white-space: nowrap; }
+.tgrid > .gcell[data-empty="true"] .tok { color: var(--signal); text-decoration: line-through; }
 .tgrid > .gcell[data-gone="true"] { opacity: 0; border-color: transparent; pointer-events: none; }
 
 /* banner */
@@ -23,7 +26,5 @@
 .bel[data-hot="true"] { outline-color: var(--blue); }
 .hold { display: block; border-radius: 4px; border: 1px dashed var(--mb-muted); opacity: 0.6; max-width: 100%; }
 
-/* head row with a control on the right */
-.headrow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin: 0 0 14px; padding: 0 0 8px; border-bottom: 1px solid var(--line); min-height: 38px; }
-.headt { margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: 0.02em; color: var(--muted); }
-.sw { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); }
+/* the empty-field switch sits under the template grid */
+.sw { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 14px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--muted); }

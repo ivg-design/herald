@@ -102,11 +102,11 @@ export function QuietMock() {
   const nowMin = real !== null ? (real - T0 + 1440) % 1440 : null;
   return (
     <div className="contents">
-      <div className="col-span-full mt-8 min-w-0 lg:col-span-4 lg:mt-[56px]">
+      <div className="col-span-full mt-8 min-w-0 lg:col-span-4">
         <h3 className="display display-m m-0">Quiet hours</h3>
         <p className="body mt-4 max-w-[44ch]">Pick windows where voice and sound stay off and, if you want, banners wait. Per app overrides for the ones that may wake you.</p>
       </div>
-      <p className="col-span-full m-0 min-w-0 text-[17px] font-medium lg:col-span-8 lg:mt-[56px] lg:self-end lg:text-right" role="status" aria-live="polite" id={id}>{sentence}</p>
+      <p className="col-span-full m-0 min-w-0 text-[17px] font-medium lg:col-span-8 lg:self-end lg:text-right" role="status" aria-live="polite" id={id}>{sentence}</p>
       <div className="col-span-full min-w-0">
         <div className="qh">
           {nowMin !== null && <div className="qh-now" style={{ left: pos(nowMin) }}><span>now {clock(T0 + nowMin)}</span></div>}

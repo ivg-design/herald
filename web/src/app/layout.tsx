@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Fragment_Mono } from "next/font/google";
+import { Georama, Fragment_Mono } from "next/font/google";
 import StructuredData from "@/components/StructuredData";
 import { SITE_URL, asset } from "@/lib/config";
 import "./globals.css";
 
-const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"], display: "swap" });
+// Georama: one family with a width axis from 62.5 to 150. The hero binds that axis to the cell; titles sit at its wide end.
+const georama = Georama({ variable: "--font-georama", subsets: ["latin"], axes: ["wdth"], display: "swap" });
 const fragment = Fragment_Mono({ variable: "--font-fragment", weight: "400", subsets: ["latin"], display: "swap" });
 
 const TITLE = "Herald: notifications you'd actually design";
@@ -29,7 +30,7 @@ export const viewport: Viewport = { themeColor: "#f4f6fa", width: "device-width"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${archivo.variable} ${fragment.variable}`}>
+    <html lang="en" className={`${georama.variable} ${fragment.variable}`}>
       <body>
         {children}
         <StructuredData />
