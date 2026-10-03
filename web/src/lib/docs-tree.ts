@@ -7,6 +7,7 @@ export interface DocEntry {
   title: string;
   file: string;
   slice?: string[];
+  description?: string; // overrides the first-paragraph description
   note?: string; // shown under the title when a page is a cut of a larger file
 }
 export interface DocGroup {
@@ -23,8 +24,8 @@ export const DOC_TREE: DocGroup[] = [
     id: "getting-started",
     title: "Getting started",
     items: [
-      { slug: "install", title: "Install", file: "README.md", slice: ["Install"] },
-      { slug: "first-notification", title: "Send your first notification", file: "README.md", slice: ["API"] },
+      { slug: "install", title: "Install", file: "README.md", slice: ["Install"], description: "Download the notarized app or build Herald from source; a bell appears in the menu bar." },
+      { slug: "first-notification", title: "Send your first notification", file: "README.md", slice: ["Examples"], description: "Send a banner to the local API with curl, then from Swift, Python, Node or the CLI." },
       { slug: "agent-quickstart", title: "Agent quickstart", file: "docs/AGENT-QUICKSTART.md" },
       { slug: "glossary", title: "Glossary", file: `${R}/glossary.md` },
     ],
@@ -99,7 +100,7 @@ export const DOC_TREE: DocGroup[] = [
       { slug: "http-api", title: "HTTP API", file: `${R}/api.md` },
       { slug: "cli", title: "herald CLI", file: `${R}/cli.md` },
       { slug: "mcp-tools", title: "MCP tools", file: `${R}/mcp-tools.md` },
-      { slug: "swift-client", title: "HeraldClient (Swift)", file: "clients/README.md", slice: ["Swift"] },
+      { slug: "swift-client", title: "HeraldClient (Swift)", file: "clients/README.md", slice: ["intro", "Swift"] },
       { slug: "clients", title: "Python & Node clients", file: "clients/README.md", slice: ["Python", "Node", "Registering a manifest (1.1)"] },
       { slug: "template-bundles", title: "Template bundles", file: `${R}/api.md`, slice: ["Template bundles"], note: "From the HTTP API reference." },
       { slug: "config-files", title: "config & files", file: `${R}/api.md`, slice: ["Settings", "Per-app settings", "Assets"], note: "From the HTTP API reference." },

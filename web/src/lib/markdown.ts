@@ -59,7 +59,23 @@ export function sliceMarkdown(src: string, names?: string[]): string {
     if (idx < 0) throw new Error(`docs: heading "${name}" not found`);
     const h = heads[idx];
     const end = heads.slice(idx + 1).find((x) => x.level <= h.level);
-    chunks.push(lines.slice(h.line, end ? end.line : lines.length).join("\n").trim());
+    let chunk = lines.slice(h.line, end ? end.line : lines.length);
+    const rel = scan(chunk);
+    if (names.length === 1) {
+      // A page cut from one section: the page title replaces its heading, sub-sections move up a level.
+      chunk = chunk.slice(1);
+      for (const x of rel.filter((r) => r.line > 0)) {
+        const level = Math.max(2, x.level - h.level + 1);
+        chunk[x.line - 1] = chunk[x.line - 1].replace(/^#{1,6}/, "#".repeat(level));
+      }
+    } else if (h.level > 2) {
+      // Several sections on one page: each cut starts at h2.
+      for (const x of rel) {
+        const level = Math.max(2, x.level - h.level + 2);
+        chunk[x.line] = chunk[x.line].replace(/^#{1,6}/, "#".repeat(level));
+      }
+    }
+    chunks.push(chunk.join("\n").trim());
   }
   return chunks.filter(Boolean).join("\n\n");
 }
@@ -67,17 +83,21 @@ export function sliceMarkdown(src: string, names?: string[]): string {
 export function firstParagraph(md: string): string {
   const para: string[] = [];
   let fence = false;
+  let block = false;
   for (const l of md.split("\n")) {
     if (/^\s*```/.test(l)) fence = !fence;
     if (fence || /^\s*```/.test(l)) continue;
     if (!l.trim()) {
       if (para.length) break;
+      block = false;
       continue;
     }
     if (/^(#|\||>|-|\*|\d+\.|<)/.test(l.trim())) {
       if (para.length) break;
+      block = true;
       continue;
     }
+    if (block && !para.length) continue; // continuation of a list item or table row
     para.push(l.trim());
   }
   const text = para
@@ -136,7 +156,24 @@ export function headingsOf(md: string): Heading[] {
   return (file.data.headings as Heading[]) ?? [];
 }
 
-export function renderTree(md: string, resolve?: LinkResolver): Root {
+/** Prefixes heading ids (and their anchors) so several documents can share one page. */
+function rehypeIdPrefix(prefix?: string) {
+  return (tree: Root) => {
+    if (!prefix) return;
+    visit(tree, "element", (el: Element) => {
+      if (!/^h[1-6]$/.test(el.tagName) || !el.properties?.id) return;
+      const id = `${prefix}${el.properties.id}`;
+      el.properties.id = id;
+      for (const c of el.children) {
+        if (c.type === "element" && c.tagName === "a" && Array.isArray(c.properties?.className) && c.properties.className.includes("anchor")) {
+          c.properties.href = `#${id}`;
+        }
+      }
+    });
+  };
+}
+
+export function renderTree(md: string, resolve?: LinkResolver, idPrefix?: string): Root {
   const proc = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -147,6 +184,7 @@ export function renderTree(md: string, resolve?: LinkResolver): Root {
       properties: { className: ["anchor"], ariaLabel: "Link to this section" },
       content: { type: "text", value: "#" },
     })
+    .use(rehypeIdPrefix, idPrefix)
     .use(rehypeCodeMeta)
     .use(rehypeHighlight, { detect: false, ignoreMissing: true })
     .use(rehypeLinks, resolve);

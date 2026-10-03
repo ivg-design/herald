@@ -54,7 +54,7 @@ export function getPages(): DocPage[] {
         href: `/docs/${g.id}/${e.slug}`,
         file: e.file,
         source,
-        description: firstParagraph(source) || e.title,
+        description: e.description || firstParagraph(source) || e.title,
         headings: headingsOf(source),
         note: e.note,
         editUrl: e.file ? `${REPO_URL}/blob/main/${e.file}` : null,
