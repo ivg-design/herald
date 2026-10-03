@@ -37,6 +37,7 @@ enum ScreenshotMode {
         defaultsBefore = UserDefaults.standard.persistentDomain(forName: domain) ?? [:]
         voiceSuiteExisted = UserDefaults.standard.persistentDomain(forName: "com.ivg.herald.voice-dev") != nil
         NSApp.appearance = NSAppearance(named: .aqua)
+        for k in defaultsBefore.keys where k.hasPrefix("designer") || k.hasPrefix("NSWindow Frame Herald") { UserDefaults.standard.removeObject(forKey: k) }
         Task { @MainActor in
             await Runner(controller: controller, out: out).run()
             restoreDefaults()
@@ -159,7 +160,10 @@ enum ScreenshotMode {
                     SymbolBrowserHost(designer: m, current: { HeraldSymbol(name: "bell.badge") }, apply: { _ in })
                 }
                 await pause(1.2)
-                if let p = w.childWindows?.first(where: { $0.title == "SF Symbols" }) { await capture(p, "symbol-browser", settle: 0.8) }
+                if let p = w.childWindows?.first(where: { $0.title == "SF Symbols" }) {
+                    w.removeChildWindow(p)
+                    await capture(p, "symbol-browser", settle: 0.8)
+                }
                 else { ScreenshotMode.log("symbol-browser: panel not found") }
                 SymbolBrowserPanel.close()
             }
@@ -175,7 +179,7 @@ enum ScreenshotMode {
             await pause(0.8)
             let tabs: [(String, Int)] = [("settings-general", 0), ("settings-apps", 1), ("settings-voice", 3), ("settings-cloud", 4), ("settings-mcp", 5)]
             for (name, index) in tabs {
-                if !selectTab(index, in: w.contentView) { ScreenshotMode.log("\(name): no NSTabView to switch"); continue }
+                NotificationCenter.default.post(name: Notification.Name("herald.debug.settingsTab"), object: index)
                 await capture(w, name, settle: 0.9)
             }
             w.close()

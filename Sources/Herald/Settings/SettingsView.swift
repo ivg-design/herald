@@ -3,17 +3,23 @@ import AppKit
 
 struct SettingsView: View {
     let controller: AppController
+    @State private var tab = 0
     var body: some View {
-        TabView {
-            GeneralSettingsView(controller: controller).tabItem { Label("General", systemImage: "gearshape") }
-            AppsSettingsView(controller: controller).tabItem { Label("Apps", systemImage: "square.grid.2x2") }
-            ActionsSettingsView(controller: controller).tabItem { Label("Actions", systemImage: "bolt") }
-            VoiceSettingsView(controller: controller).tabItem { Label("Voice", systemImage: "waveform") }
-            CloudSettingsView(controller: controller).tabItem { Label("Cloud", systemImage: "icloud") }
-            MCPSettingsView(controller: controller).tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }
+        TabView(selection: $tab) {
+            GeneralSettingsView(controller: controller).tabItem { Label("General", systemImage: "gearshape") }.tag(0)
+            AppsSettingsView(controller: controller).tabItem { Label("Apps", systemImage: "square.grid.2x2") }.tag(1)
+            ActionsSettingsView(controller: controller).tabItem { Label("Actions", systemImage: "bolt") }.tag(2)
+            VoiceSettingsView(controller: controller).tabItem { Label("Voice", systemImage: "waveform") }.tag(3)
+            CloudSettingsView(controller: controller).tabItem { Label("Cloud", systemImage: "icloud") }.tag(4)
+            MCPSettingsView(controller: controller).tabItem { Label("MCP", systemImage: "puzzlepiece.extension") }.tag(5)
         }
         .padding(16)
         .frame(minWidth: 600, minHeight: 420)
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.settingsTab"))) { n in
+            if let i = n.object as? Int { tab = i }
+        }
+        #endif
     }
 }
 
