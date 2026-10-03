@@ -353,3 +353,13 @@ final class BannerStackTests: XCTestCase {
         XCTAssertFalse(exact.capped)
     }
 }
+
+/// The stack-count badge is a Button bound to the same toggle intent as the title (opens a closed stack, closes an
+/// open one); it lives in the non-activating panel, so it never makes the panel key.
+final class StackBadgeToggleTests: XCTestCase {
+    func testBadgeToggleOpensAndClosesLikeTheTitle() {
+        XCTAssertEqual(StackToggle.action(expanded: false), .expand)
+        XCTAssertEqual(StackToggle.action(expanded: true), .collapse)
+        XCTAssertEqual(StackToggle.badgeLabel(count: 3), "3 stacked notifications, click to expand")
+    }
+}

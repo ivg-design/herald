@@ -37,6 +37,14 @@ final class StackModel: ObservableObject {
     var onExpand: () -> Void = {}
     var onCollapse: () -> Void = {}
     var onDismissAll: () -> Void = {}
+
+    /// What the count badge and the title do: open a closed stack, close an open one.
+    func toggle() {
+        switch StackToggle.action(expanded: expanded) {
+        case .expand: onExpand()
+        case .collapse: onCollapse()
+        }
+    }
 }
 
 // MARK: - The panel's root view
@@ -52,7 +60,7 @@ struct StackRootView: View {
         if stack.isTop && stack.expanded && stack.count > 1 {
             StackListView(model: model, stack: stack)
         } else {
-            StackedCardView(model: model, count: stack.isTop ? stack.count : 1, isLive: true, onExpand: stack.onExpand)
+            StackedCardView(model: model, count: stack.isTop ? stack.count : 1, isLive: true, onExpand: { stack.toggle() })
         }
     }
 }
@@ -149,22 +157,23 @@ struct StackCountPill: View {
     var onTap: () -> Void = {}
 
     var body: some View {
-        Text("\(count)")
-            .font(.system(size: 11, weight: .bold).monospacedDigit())
-            .foregroundStyle(text)
-            .lineLimit(1)
-            .padding(.horizontal, 6)
-            .frame(minWidth: 19, minHeight: 18)
-            .background(Capsule().fill(fill))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.4), lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.25), radius: 1.5, y: 0.5)
-            .fixedSize()
-            .contentShape(Capsule())
-            .onTapGesture(perform: onTap)
-            .help("Show all \(count)")
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(count) notifications stacked")
-            .accessibilityAddTraits(.isButton)
+        Button(action: onTap) {
+            Text("\(count)")
+                .font(.system(size: 11, weight: .bold).monospacedDigit())
+                .foregroundStyle(text)
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 19, minHeight: 18)
+                .background(Capsule().fill(fill))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.4), lineWidth: 1))
+                .shadow(color: Color.black.opacity(0.25), radius: 1.5, y: 0.5)
+                .fixedSize()
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+        .help("Show all \(count)")
+        .accessibilityLabel(StackToggle.badgeLabel(count: count))
     }
 }
 
