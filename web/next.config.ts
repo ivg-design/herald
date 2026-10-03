@@ -5,6 +5,8 @@ const isForgeContext = process.env.NEXT_PUBLIC_SITE_URL?.includes("forge.mograph
 const prefix = isProd && isForgeContext ? "/apps/herald" : "";
 
 const nextConfig: NextConfig = {
+  // Verification builds use NEXT_DIST_DIR=.next-verify so they never touch the live dev server's .next.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   images: { unoptimized: true },
   turbopack: { root: process.cwd() },
   assetPrefix: prefix,
