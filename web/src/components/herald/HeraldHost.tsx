@@ -40,6 +40,7 @@ export function HeraldHost({ children }: { children: ReactNode }) {
   const dockedRef = useRef(true);
   const hoverRef = useRef(false);
   const focusRef = useRef(false);
+  const pinnedRef = useRef(false);
   const seq = useRef(0);
   const seeds = useRef(0);
   const timer = useRef<number | undefined>(undefined);
@@ -69,10 +70,11 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     setExpanded(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
-      if (!hoverRef.current && !focusRef.current) setExpanded(false);
+      if (!hoverRef.current && !focusRef.current && !pinnedRef.current) setExpanded(false);
     }, ms);
   }, [setExpanded]);
   const compact = useCallback(() => {
+    pinnedRef.current = false;
     window.clearTimeout(timer.current);
     setExpanded(false);
   }, [setExpanded]);
@@ -80,11 +82,14 @@ export function HeraldHost({ children }: { children: ReactNode }) {
     (kind === "hover" ? hoverRef : focusRef).current = on;
     window.clearTimeout(timer.current);
     if (!on && !hoverRef.current && !focusRef.current) {
-      timer.current = window.setTimeout(() => setExpanded(false), 1500);
+      timer.current = window.setTimeout(() => {
+        if (!pinnedRef.current) setExpanded(false);
+      }, 1500);
     }
   }, [setExpanded]);
   const setDocked = useCallback((on: boolean) => {
     dockedRef.current = on;
+    pinnedRef.current = false;
     setDockedState(on);
     window.clearTimeout(timer.current);
     setExpanded(false);
@@ -101,9 +106,14 @@ export function HeraldHost({ children }: { children: ReactNode }) {
       document.getElementById("top")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (expandedRef.current) compact();
-    else show();
-  }, [compact, show]);
+    if (expandedRef.current && pinnedRef.current) compact();
+    else {
+      // Click pins the overlay open (also when it was only open from hovering the bell).
+      pinnedRef.current = true;
+      window.clearTimeout(timer.current);
+      setExpanded(true);
+    }
+  }, [compact, setExpanded]);
 
   useEffect(() => {
     const onDown = (e: PointerEvent) => {

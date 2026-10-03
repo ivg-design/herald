@@ -35,6 +35,11 @@ export default function HeroDock() {
         <StackHeader />
         <div className="hb-cards" aria-label="Herald banners" role="region">
           <HeraldCards cards={h.cards} stagger />
+          {h.cards.length === 0 && h.held === 0 && (
+            <p className="m-0 rounded-xl border border-dashed border-line p-4 text-[13.5px] text-muted" role="status">
+              All clear. Everything you dismissed is in History; send one with Run it below.
+            </p>
+          )}
         </div>
         {h.held > 0 && (
           <p className="hb-heldline" role="status">

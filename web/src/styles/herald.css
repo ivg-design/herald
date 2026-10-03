@@ -61,7 +61,8 @@ header .site-brand { padding-block: 2.5px; }
 }
 
 /* stacked-card edges peeking under a banner */
-.hb-ghost { position: absolute; inset-inline: 0; height: 6px; z-index: 0; background: var(--mb-bg); border: 1px solid var(--mb-line); border-top: 0; border-radius: 0 0 8px 8px; }
+.hb-ghost { position: absolute; inset-inline: 0; height: 6px; z-index: 0; background: var(--surface); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 8px 8px; }
+.on-paper .hb-ghost { background: #fff; border-color: var(--paper-line); }
 
 /* living hero mark */
 .hb-logo { position: relative; display: inline-block; flex: none; line-height: 0; }

@@ -129,12 +129,14 @@ kbd {
 .docs-prose a:not(.anchor) :not(pre) > code, .docs-prose a:not(.anchor) > code { color: inherit; }
 
 /* Tables */
-.docs-table { overflow-x: auto; margin: 1.4em 0; border: 1px solid var(--line); border-radius: 10px; }
-.docs-table table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
-.docs-table th, .docs-table td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.docs-table { overflow-x: auto; margin: 1.4em 0; border: 1px solid var(--line); border-radius: 10px; -webkit-overflow-scrolling: touch; }
+.docs-table table { table-layout: auto; width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
+.docs-table th, .docs-table td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); overflow-wrap: normal; word-break: normal; }
 .docs-table th { font-weight: 600; color: var(--ink); background: var(--surface); white-space: nowrap; }
 .docs-table tr:last-child td { border-bottom: 0; }
-.docs-table td :not(pre) > code { white-space: normal; }
+/* Tokens never break mid-word; the first column (names, kinds, keys) shrinks to its content and the prose columns take the rest. */
+.docs-table td :not(pre) > code, .docs-table th :not(pre) > code, .docs-table td > code, .docs-table th > code { white-space: nowrap; }
+.docs-table td:first-child { max-width: 36ch; }
 
 /* Code blocks */
 .code-block { margin: 1.4em 0; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
