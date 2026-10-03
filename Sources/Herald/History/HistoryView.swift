@@ -34,7 +34,7 @@ struct HistoryView: View {
 
     private var apps: [String] { _ = ticker.tick; return controller.history.apps() }
 
-    private func displayName(_ app: String) -> String { controller.registry.record(for: app)?.displayName ?? app }
+    private func displayName(_ app: String) -> String { controller.registry.displayName(for: app) }
 
     private var items: [HeraldHistoryItem] {
         _ = ticker.tick
@@ -88,7 +88,7 @@ struct HistoryView: View {
     @ViewBuilder private func sidebarRow(_ row: HistoryBrowser.Row) -> some View {
         HStack(spacing: 8) {
             if let app = row.selection.app {
-                Image(nsImage: AppIcons.icon(for: controller.registry.record(for: app), app: app)).resizable().frame(width: 18, height: 18)
+                Image(nsImage: AppIcons.icon(in: controller.registry, app: app)).resizable().frame(width: 18, height: 18)
             } else {
                 Image(systemName: "tray.full").frame(width: 18, height: 18)
             }
@@ -136,7 +136,7 @@ struct HistoryView: View {
 
     private func historyRow(_ item: HeraldHistoryItem) -> some View {
         HistoryRow(item: item, appName: displayName(item.app),
-                   icon: AppIcons.icon(for: controller.registry.record(for: item.app), app: item.app))
+                   icon: AppIcons.icon(in: controller.registry, app: item.app))
             .tag(HistoryKey(item))
             // simultaneous so the click still selects the row while also opening its url.
             .simultaneousGesture(TapGesture().onEnded { open(item) })
@@ -149,7 +149,7 @@ struct HistoryView: View {
         return HStack(spacing: 8) {
             Image(systemName: isOpen ? "chevron.down" : "chevron.right")
                 .font(.caption.weight(.bold)).foregroundStyle(.secondary).frame(width: 12)
-            Image(nsImage: AppIcons.icon(for: controller.registry.record(for: g.app), app: g.app))
+            Image(nsImage: AppIcons.icon(in: controller.registry, app: g.app))
                 .resizable().frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(g.group).font(.headline).lineLimit(1)

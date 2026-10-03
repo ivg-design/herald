@@ -133,7 +133,7 @@ public enum AgentIssuer {
             throw BackendError(429, "too many apps or manifests to add \(agent.appID)")
         }
         var reg = HeraldAppRegistration(app: agent.appID)
-        if existing?.appName == nil { reg.appName = agent.name }
+        if existing?.appName == nil || agent.nameIsAuthoritative { reg.appName = agent.name }
         if let iconPath { reg.icon = iconPath }
         if existing?.defaults?.sound == nil { reg.defaults = HeraldAppDefaults(sound: agent.sound) }
         registry.register(reg)

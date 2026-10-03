@@ -102,6 +102,23 @@ No auth. `{"ok":true,"version":"1.2.0","pid":123}`. Use it to detect that Herald
 Reply `{"ok":true}`. Registering is optional: unknown ids are registered on their first notification with a
 generic icon. A registered name and icon always win over the manifest's.
 
+### App name and icon: one source
+
+Apps, History, search, banners and previews read the app's name and icon from the registry only (`AppRegistry.displayName(for:)`,
+`AppIcons.icon(in:app:)`), so two lists can never disagree. The Apps sidebar sorts by display name, ignoring case.
+
+- **Name**: the registered `appName`, else the id. A cloud connector (an OAuth agent key) is named with the client's `client_name` exactly
+  (for example `Herald Relay — dot cloud computer`); the app id keeps only the key slug (`cloud.herald-relay-dot-cloud-c`). Existing
+  `cloud.*` apps are renamed from the relay's connector `displayName` (`GET /v1/relay/connectors`) whenever the keys load.
+- **Icon**, first match wins: the icon the user chose (Settings > Apps > **Change icon...**, a PNG kept in `<support>/app-icons/`;
+  **Remove** goes back), the registered `icon`, the icon of the app named by `bundleId`, the automatic icon, a bell tile.
+- **Automatic icon** (an app with no icon of its own, applied at startup and when a connector or key is created): a client whose name
+  mentions ChatGPT or OpenAI gets ChatGPT.app's icon, Claude gets Claude's, Codex gets Codex's, when that product is installed on this
+  Mac; otherwise an SF Symbol on Herald's accent as a rounded-square PNG (`agent-icons/auto-<app id>.png`): `cloud` for a connector, `key`
+  for a static key, `terminal` for an agent. A bare letter tile is never drawn.
+- Herald's own icon (`agent-icons/herald.png`) is the real AppIcon at 256 px; an export that is the system's generic application icon or
+  mostly transparent is replaced at the next start.
+
 ## POST /v1/notify
 
 Show a notification.

@@ -80,7 +80,7 @@ struct AppsSettingsView: View {
         HStack(spacing: 0) {
             List(records, id: \.registration.app, selection: $selection) { r in
                 HStack {
-                    Image(nsImage: AppIcons.icon(for: r, app: r.registration.app)).resizable().frame(width: 20, height: 20)
+                    Image(nsImage: AppIcons.icon(in: controller.registry, app: r.registration.app)).resizable().frame(width: 20, height: 20)
                     Text(r.displayName)
                 }.tag(r.registration.app)
             }
@@ -115,6 +115,23 @@ struct AppDetail: View {
         }
     }
 
+    /// A file picker for the app's icon. The picture is copied into Herald's support folder, so the file can move or go.
+    private func chooseIcon() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose an icon for \(record.displayName)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try CustomIcon.set(app: app, from: url, supportDirectory: controller.supportDirectory, registry: controller.registry)
+            AppIcons.invalidate(); controller.changed()
+        } catch {
+            let a = NSAlert()
+            a.messageText = "That file is not an image Herald can use."
+            a.runModal()
+        }
+    }
+
     private var soundOptions: [String] {
         var opts = ["none"] + SoundPlayer.systemSoundNames
         if let s = d.sound, !opts.contains(s) { opts.append(s) }
@@ -123,6 +140,23 @@ struct AppDetail: View {
 
     var body: some View {
         Form {
+            Section {
+                HStack(spacing: 12) {
+                    Image(nsImage: AppIcons.icon(in: controller.registry, app: app)).resizable().frame(width: 40, height: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(record.displayName).font(.headline)
+                        Text(record.customIcon != nil ? "Your icon" : "Automatic icon").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Change icon\u{2026}") { chooseIcon() }
+                    if record.customIcon != nil {
+                        Button("Remove") {
+                            CustomIcon.remove(app: app, supportDirectory: controller.supportDirectory, registry: controller.registry)
+                            AppIcons.invalidate(); controller.changed()
+                        }
+                    }
+                }
+            }
             Section {
                 LabeledContent("Identifier", value: app)
                 if let b = record.registration.bundleId { LabeledContent("Bundle ID", value: b) }
@@ -243,11 +277,11 @@ struct ActionsSettingsView: View {
             let approval = approvals.first { $0.id == t.id }
             let status: CommandRow.Status = approval == nil ? .notConfirmed
                 : (commands.allSatisfy { approval!.commands.contains($0) } ? .confirmed : .changed)
-            out.append(CommandRow(id: t.id, app: t.app, appName: controller.registry.record(for: t.app)?.displayName ?? t.app,
+            out.append(CommandRow(id: t.id, app: t.app, appName: controller.registry.displayName(for: t.app),
                                   template: t.name, commands: commands, status: status, hasApproval: approval != nil))
         }
         for a in approvals where !seen.contains(a.id) {
-            out.append(CommandRow(id: a.id, app: a.app, appName: controller.registry.record(for: a.app)?.displayName ?? a.app,
+            out.append(CommandRow(id: a.id, app: a.app, appName: controller.registry.displayName(for: a.app),
                                   template: a.template, commands: a.commands, status: .templateRemoved, hasApproval: true))
         }
         return out.sorted { ($0.appName, $0.template) < ($1.appName, $1.template) }

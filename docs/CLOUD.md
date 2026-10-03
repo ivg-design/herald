@@ -181,7 +181,9 @@ Any relay that speaks this protocol works: put its address in Advanced > Relay U
    - Codex `~/.codex/config.toml`: `[mcp_servers.herald]`, `url = ".../mcp"`, `bearer_token_env_var = "HERALD_RELAY_KEY"`.
    - Plain HTTPS works too (below).
 4. The agent's notifications arrive as the app **`cloud.<key name>`**: its own manifest, template, sound and icon (the real Claude or
-   Codex icon for those keys), designable in the Designer like any issuer (Settings > Cloud > Design...).
+   Codex icon for those keys), designable in the Designer like any issuer (Settings > Cloud > Design...). A connector's app is named with
+   the client's own `client_name` (the app id keeps the key slug), and an app with no icon gets ChatGPT's, Claude's or Codex's icon when
+   installed, else a cloud tile (static key: a key tile). Settings > Apps > Change icon... overrides it.
 
 Scriptable: `herald-mcp` has `relay_status`, `relay_usage`, `list_connectors`, `create_agent_key(name, client?)`, `revoke_agent_key(id)`; the loopback API
 has `/v1/relay/*` ([reference/api.md](reference/api.md#cloud-relay)).

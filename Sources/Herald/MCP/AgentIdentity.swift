@@ -33,10 +33,15 @@ public struct AgentIdentity: Equatable, Sendable {
     public var isCloud: Bool { idPrefix == Self.cloudPrefix }
     public static let cloudPrefix = "cloud."
     public var appID: String { idPrefix + slug }
+    /// True when `name` is the client's own name (an OAuth connector's `client_name`): it is the app's name exactly, and replaces
+    /// whatever name the app had (an older build named it with the truncated key slug).
+    public private(set) var nameIsAuthoritative = false
 
     /// The issuer of one cloud agent key: `cloud.<key name>`. `client` is the key's client (`claude`, `codex`, anything else);
     /// the first two take the real client's icon and symbol, the rest a generic one.
-    public init?(cloudKeyName: String, client: String) {
+    /// `clientName` is the OAuth client's `client_name` ("Herald Relay \u{2014} dot cloud computer"): it becomes the app's name exactly,
+    /// while the slug of the key name stays in the app id.
+    public init?(cloudKeyName: String, client: String, clientName: String? = nil) {
         let s = HeraldAgent.slug(cloudKeyName)
         guard !s.isEmpty else { return nil }
         let base: AgentIdentity?
@@ -46,7 +51,10 @@ public struct AgentIdentity: Equatable, Sendable {
         default: base = AgentIdentity(kind: .generic, genericName: s)
         }
         guard let b = base else { return nil }
-        kind = b.kind; slug = s; name = cloudKeyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let given = clientName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        kind = b.kind; slug = s
+        name = given.flatMap { $0.isEmpty ? nil : $0 } ?? cloudKeyName.trimmingCharacters(in: .whitespacesAndNewlines)
+        nameIsAuthoritative = given?.isEmpty == false
         symbol = b.kind == .generic ? "cloud" : b.symbol; sound = b.sound; homepage = b.homepage
         idPrefix = Self.cloudPrefix
     }

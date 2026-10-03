@@ -20,16 +20,21 @@ public struct AppRecord: Codable, Equatable, Sendable {
     /// How this issuer's banners stack (DESIGN section 9): the user's own override of the global default
     /// (`AppSettings.stacking`, which the bell menu switches). nil follows the default.
     public var stacking: StackingLevel?
+    /// The icon the user chose in Settings > Apps (a PNG in the support folder's `app-icons`). It wins over the app's own and the
+    /// automatic icon; nil goes back to those.
+    public var customIcon: String?
 
     public init(registration: HeraldAppRegistration, commandsConfirmed: Bool = false, callbackHostApproved: String? = nil,
-                screen: String? = nil, corner: HeraldCorner? = nil, mutedBanners: Bool = false, stacking: StackingLevel? = nil) {
+                screen: String? = nil, corner: HeraldCorner? = nil, mutedBanners: Bool = false, stacking: StackingLevel? = nil,
+                customIcon: String? = nil) {
         self.registration = registration; self.commandsConfirmed = commandsConfirmed
         self.callbackHostApproved = callbackHostApproved
         self.screen = screen; self.corner = corner; self.mutedBanners = mutedBanners; self.stacking = stacking
+        self.customIcon = customIcon
     }
 
     private enum CodingKeys: String, CodingKey {
-        case registration, commandsConfirmed, callbackHostApproved, screen, corner, mutedBanners, stacking
+        case registration, commandsConfirmed, callbackHostApproved, screen, corner, mutedBanners, stacking, customIcon
     }
 
     /// Records written before the display settings existed have none of them.
@@ -41,6 +46,7 @@ public struct AppRecord: Codable, Equatable, Sendable {
         screen = try c.decodeIfPresent(String.self, forKey: .screen)
         corner = try c.decodeIfPresent(HeraldCorner.self, forKey: .corner)
         mutedBanners = try c.decodeIfPresent(Bool.self, forKey: .mutedBanners) ?? false
+        customIcon = try c.decodeIfPresent(String.self, forKey: .customIcon)
         // An unknown level (a newer Herald wrote it) is no override.
         stacking = (try? c.decodeIfPresent(String.self, forKey: .stacking)).flatMap { $0 }.flatMap(StackingLevel.init(rawValue:))
     }
@@ -111,7 +117,20 @@ public final class AppRegistry: @unchecked Sendable {
 
     public func all() -> [AppRecord] {
         lock.lock(); defer { lock.unlock() }
-        return records.values.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        return records.values.sorted {
+            let c = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+            return c == .orderedSame ? $0.registration.app < $1.registration.app : c == .orderedAscending
+        }
+    }
+
+    /// The one name every list shows for `app` (Apps, History, search, banners): the registered `appName`, else the id.
+    public func displayName(for app: String) -> String { record(for: app)?.displayName ?? app }
+
+    /// The icon file or `data:` URI every list draws for `app`: the user's own choice, else the app's registered icon; nil leaves the
+    /// bundle id or the generated tile to the view (`AppIcons`).
+    public func iconSource(for app: String) -> String? {
+        guard let r = record(for: app) else { return nil }
+        return r.customIcon ?? r.registration.icon
     }
 
     /// False when `app` is new and the registry is full.

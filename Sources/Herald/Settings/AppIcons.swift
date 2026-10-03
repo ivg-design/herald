@@ -6,6 +6,9 @@ enum AppIcons {
 
     static func invalidate() { cache.removeAll() }
 
+    /// The icon every list draws for `app`: Apps, History, banners and the preview all come through here, from the registry.
+    static func icon(in registry: AppRegistry, app: String) -> NSImage { icon(for: registry.record(for: app), app: app) }
+
     static func icon(for record: AppRecord?, app: String) -> NSImage {
         if let c = cache[app] { return c }
         let img = load(record) ?? generic(app)
@@ -15,6 +18,8 @@ enum AppIcons {
 
     private static func load(_ record: AppRecord?) -> NSImage? {
         guard let reg = record?.registration else { return nil }
+        // The user's own choice wins, then the app's registered (or automatic) icon, then its application's icon.
+        if let custom = record?.customIcon, let img = NSImage(contentsOfFile: custom) { return img }
         if let icon = reg.icon {
             if icon.hasPrefix("data:"), let comma = icon.firstIndex(of: ","),
                let data = Data(base64Encoded: String(icon[icon.index(after: comma)...]), options: .ignoreUnknownCharacters),
@@ -27,20 +32,9 @@ enum AppIcons {
         return nil
     }
 
-    /// Rounded letter tile used when an app has no icon.
+    /// An app with nothing else gets a bell tile (an SF Symbol on Herald's accent), never a bare letter.
     private static func generic(_ app: String) -> NSImage {
-        let size = NSSize(width: 64, height: 64)
-        let letter = String(app.first.map { Character($0.uppercased()) } ?? "?")
-        let hue = CGFloat(abs(app.hashValue % 360)) / 360
-        return NSImage(size: size, flipped: false) { rect in
-            NSColor(hue: hue, saturation: 0.5, brightness: 0.75, alpha: 1).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
-            let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 34, weight: .semibold),
-                                                        .foregroundColor: NSColor.white]
-            let s = NSAttributedString(string: letter, attributes: attrs)
-            let sz = s.size()
-            s.draw(at: NSPoint(x: rect.midX - sz.width / 2, y: rect.midY - sz.height / 2))
-            return true
-        }
+        if let png = IconArt.symbolTilePNG(symbol: "bell.fill"), let img = NSImage(data: png) { return img }
+        return NSImage(size: NSSize(width: 64, height: 64))
     }
 }

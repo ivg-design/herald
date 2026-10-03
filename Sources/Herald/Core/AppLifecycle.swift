@@ -46,6 +46,10 @@ public enum AppLifecycle {
             let url = URL(fileURLWithPath: (icon as NSString).expandingTildeInPath).standardizedFileURL
             if url.path.hasPrefix(supportDirectory.standardizedFileURL.path + "/") { targets.append(url) }
         }
+        for p in [record?.customIcon, AutoIcon.file(for: app, in: supportDirectory).path].compactMap({ $0 }) {
+            let url = URL(fileURLWithPath: p).standardizedFileURL
+            if url.path.hasPrefix(supportDirectory.standardizedFileURL.path + "/") { targets.append(url) }
+        }
         var removed = 0
         for t in Set(targets) where fm.fileExists(atPath: t.path) {
             if (try? fm.removeItem(at: t)) != nil { removed += 1 }

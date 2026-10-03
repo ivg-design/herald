@@ -71,7 +71,7 @@ extension DesignerBackend {
                 found[r.app] = DesignerIssuer(id: r.app, name: r.appName ?? r.app, hasManifest: false)
             }
             for t in c.templateList(app: nil) where found[t.app] == nil {
-                found[t.app] = DesignerIssuer(id: t.app, name: c.registry.record(for: t.app)?.displayName ?? t.app, hasManifest: false)
+                found[t.app] = DesignerIssuer(id: t.app, name: c.registry.displayName(for: t.app), hasManifest: false)
             }
             return Array(found.values)
         }
@@ -148,7 +148,7 @@ enum DesignerWindow {
         m.chooseConflict = { preview in DesignerAlerts.chooseConflict(preview) }
         if quickSend { m.showQuickSend(app: app) }
         let root = DesignerView(model: m, controller: controller,
-                                iconFor: { AppIcons.icon(for: controller.registry.record(for: $0), app: $0) })
+                                iconFor: { AppIcons.icon(in: controller.registry, app: $0) })
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 820),
                          styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         w.title = m.mode.windowTitle

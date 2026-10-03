@@ -14,7 +14,7 @@ enum TemplateEditorWindow {
         if let existing = windows[app] { w = existing } else {
             w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 660),
                          styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-            w.title = "Templates \u{2014} \(controller.registry.record(for: app)?.displayName ?? app)"
+            w.title = "Templates \u{2014} \(controller.registry.displayName(for: app))"
             w.isReleasedWhenClosed = false
             w.tabbingMode = .disallowed
             w.contentView = NSHostingView(rootView: TemplateEditorView(controller: controller, app: app, initialName: template))

@@ -120,6 +120,9 @@ final class AppController {
         let migrated = HeraldMigrations.run(supportDirectory: supportDirectory, registry: registry, history: history, templates: templates,
                                             manifests: manifests, assets: AssetStore.shared, iconPNG: Self.appIconPNG())
         if !migrated.isEmpty { log("startup cleanup: \(migrated)") }
+        // Apps with no icon (connectors, agent keys) get the product's icon or a symbol tile; connectors are renamed once the relay's keys load.
+        let (reg, support) = (registry, supportDirectory)
+        Task.detached { if !AutoIcon.applyToIconless(registry: reg, supportDirectory: support).isEmpty { await MainActor.run { AppIcons.invalidate() } } }
         AppIcons.invalidate()
         startServer()
         restoreBanners()
@@ -217,220 +220,6 @@ final class AppController {
 
     /// Herald's own icon as a 256 px PNG (`IconArt.appIconPNG`: the bundle's AppIcon, never the system placeholder); nil when none is usable.
     static func appIconPNG() -> Data? { IconArt.appIconPNG() }
-
-    func register(_ r: HeraldAppRegistration) async throws { try await controller.register(r) }
-    func dismiss(app: String, id: String) async throws { await controller.dismissItem(app: app, id: id, action: nil) }
-    func dismissAll(app: String?) async throws { await controller.dismissAll(app: app) }
-    func dismissGroup(app: String, group: String) async throws { await controller.dismissGroup(app: app, group: group) }
-    func stacks(app: String?) async throws -> [HeraldStackInfo] { await controller.stackInfos(app: app) }
-    func expandStack(app: String, group: String, expanded: Bool) async throws {
-        try await controller.setStackExpanded(app: app, group: group, expanded: expanded)
-    }
-    func history(app: String?, limit: Int) async throws -> [HeraldHistoryItem] { await controller.historyItems(app: app, limit: limit) }
-    func clearHistory(app: String?) async throws { await controller.clearHistory(app: app) }
-    func apps() async throws -> [HeraldAppRegistration] { await controller.registeredApps() }
-    func deleteApp(app: String) async throws { try await controller.deleteApp(app) }
-    func templates(app: String?) async throws -> [HeraldTemplate] { await controller.templateList(app: app) }
-    func putTemplate(_ t: HeraldTemplate) async throws { try await controller.putTemplate(t) }
-    func deleteTemplate(app: String, name: String) async throws { try await controller.deleteTemplate(app: app, name: name) }
-    func compose() async throws { await controller.requestCompose() }
-    func manifests() async throws -> [HeraldManifest] { await controller.manifestList() }
-    func manifest(app: String) async throws -> HeraldManifest? { await controller.manifest(app: app) }
-    func putManifest(_ m: HeraldManifest) async throws { try await controller.putManifest(m) }
-    func deleteManifest(app: String) async throws { try await controller.deleteManifest(app: app) }
-    func shortcuts() async throws -> [String] { try await controller.shortcutNames() }
-    func preview(_ request: PreviewSpec) async throws -> Data { try await controller.previewPNG(request) }
-    func riveCheck(_ request: RiveCheckRequest) async throws -> RiveCheckReply { await controller.riveCheck(request) }
-    func designerSnapshot(app: String?, template: String?, select: String?, width: Int, height: Int) async throws -> Data {
-        try await controller.designerSnapshot(app: app, template: template, select: select, width: width, height: height)
-    }
-    func quietHours() async throws -> HeraldQuietReply { await MainActor.run { QuietHoursCoordinator.shared.reply() } }
-    func updateQuietHours(_ update: HeraldQuietUpdate) async throws -> HeraldQuietReply {
-        try await MainActor.run { try QuietHoursCoordinator.shared.apply(update) }
-    }
-    func stackingLevel() async throws -> StackingLevel { await controller.settings.stacking }
-    func setStackingLevel(_ level: StackingLevel) async throws -> StackingLevel {
-        await MainActor.run { controller.settings.stacking = level; return controller.settings.stacking }
-    }
-}
-
-@MainActor
-final class AppController {
-    static let shared = AppController()
-    /// Set by the app delegate: opens the Composer window (`POST /v1/compose`, i.e. `herald compose`).
-    var openComposer: (() -> Void)?
-    func requestCompose() { openComposer?() }
-    /// Set by the app delegate: opens the History window (the "+N more" pill uses it).
-    var openHistory: (() -> Void)?
-
-    static var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0" }
-
-    let supportDirectory = HeraldPaths.defaultSupportDirectory
-    let history: HistoryStore
-    let templates: TemplateStore
-    let manifests: ManifestStore
-    let registry: AppRegistry
-    /// What users typed into banners' inline Reply, waiting for an agent to read it (`GET /v1/replies`).
-    let replyQueue: ReplyQueue
-    let settings = AppSettings.shared
-    let sounds = SoundPlayer()
-    let reminders = ReminderService()
-    private(set) var banners: BannerCenter!
-    /// The inline confirmations (DESIGN 8): questions asked inside a banner, never in a modal alert.
-    private(set) var confirmations: ConfirmationFlow!
-    /// The MCP/API parity routes (settings, assets, bundles, History search, symbols...); see ParityService.
-    private(set) var parityService: ParityService!
-    /// The cloud relay: the outbound socket, agent keys and receipts (docs/CLOUD.md).
-    private(set) var relay: RelayController!
-    private var listener: HTTPLoopbackListener?
-    private var token = ""
-    private(set) var serverStatus = "Not started"
-    private(set) var serverRunning = false
-
-    private init() {
-        history = HistoryStore(directory: supportDirectory.appendingPathComponent("history", isDirectory: true), cap: HistoryCapSetting.value)
-        templates = TemplateStore(directory: supportDirectory.appendingPathComponent("templates", isDirectory: true))
-        manifests = ManifestStore(directory: supportDirectory.appendingPathComponent("manifests", isDirectory: true))
-        registry = AppRegistry(file: supportDirectory.appendingPathComponent("apps.json"))
-        replyQueue = ReplyQueue(file: supportDirectory.appendingPathComponent("replies.json"))
-        banners = BannerCenter(controller: self)
-        confirmations = ConfirmationFlow(registry: registry, approvals: commandApprovals) { [unowned self] in changed() }
-        confirmations.surface = banners
-        parityService = ParityService(templates: templates, manifests: manifests, history: history, registry: registry,
-                                      assets: AssetStore.shared, approvals: commandApprovals, host: AppParityHost(controller: self),
-                                      replies: replyQueue)
-        // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
-        // controller, which works out the origin itself and applies the permission each kind needs.
-        banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
-        relay = RelayController(controller: self)
-    }
-
-    var muted: Bool {
-        get { settings.muted }
-        set { settings.muted = newValue; changed() }
-    }
-
-    func start() {
-        do { token = try TokenStore.loadOrCreate(in: supportDirectory) }
-        catch { serverStatus = "Cannot create token: \(error.localizedDescription)"; return }
-        let voice = VoiceCoordinator.shared
-        voice.history = history
-        voice.showBanner = { [unowned self] item in
-            let record = registry.ensure(item.app)
-            banners.show(item, settings: EffectiveSettings.resolve(item.notification, record), record: record)
-            changed()
-        }
-        voice.onSpoken = { [unowned self] app, id in relay.speechFinished(app: app, id: id) }
-        voice.start()
-        // Installed agents (agent.claude-code, ...) get the current default manifest and template; the user's own edits stay.
-        AgentIssuer.refreshInstalled(supportDirectory: supportDirectory, registry: registry, manifests: manifests, templates: templates,
-                                     detectedHost: HeraldHostApp.detectCurrent())
-        // One Herald entry (name and icon), the old connectors app folded into it, no History for apps that are gone, and once the known
-        // test and demo leftovers removed.
-        let migrated = HeraldMigrations.run(supportDirectory: supportDirectory, registry: registry, history: history, templates: templates,
-                                            manifests: manifests, assets: AssetStore.shared, iconPNG: Self.appIconPNG())
-        if !migrated.isEmpty { log("startup cleanup: \(migrated)") }
-        AppIcons.invalidate()
-        startServer()
-        restoreBanners()
-        relay.start()
-        changed()
-    }
-
-    func startServer() {
-        listener?.stop(); listener = nil; serverRunning = false
-        let router = Router(token: token, backend: BackendAdapter(self, parity: parityService), version: Self.version)
-        // /v1/snooze and /v1/unsnooze are answered ahead of the router (see SnoozeRoutes); everything else falls through to it.
-        let snoozing = SnoozeRoutes.handler(token: token, backend: BackendAdapter(self, parity: parityService)) { await router.handle($0) }
-        let handler = RelayRoutes.handler(token: token, backend: relay, setup: relay, fallback: snoozing)
-        // The token is checked on the request head too, so an unauthenticated caller is turned away before
-        // any of its body is buffered (the router still checks it again).
-        let l = HTTPLoopbackListener(port: settings.effectivePort, headCheck: BearerAuth.headCheck(token: token), handler: handler)
-        do {
-            try l.start()
-            listener = l
-            try TokenStore.writePort(l.port, in: supportDirectory)
-            serverRunning = true
-            serverStatus = "Listening on 127.0.0.1:\(l.port)"
-        } catch {
-            serverStatus = "Server failed on port \(settings.effectivePort): \(error.localizedDescription)"
-        }
-        changed()
-    }
-
-    func stop() {
-        listener?.stop()
-        try? FileManager.default.removeItem(at: HeraldPaths.portURL(in: supportDirectory))
-    }
-
-    func changed() { NotificationCenter.default.post(name: .heraldChanged, object: nil) }
-
-    var unreadCount: Int { history.unreadCount() }
-
-    // MARK: Backend operations
-
-    func notify(_ n: HeraldNotification) async throws -> String {
-        // Resolve the named template before anything else (DESIGN section 6), so history, banner and
-        // sound all see the final payload. An unknown template name is not fatal while the payload
-        // has its own title: dropping a notification is worse than losing its styling.
-        // The issuer's manifest (DESIGN section 7.1) can name a default template for payloads that name none.
-        let manifest = manifests.get(app: n.app)
-        var named = n
-        if named.template?.isEmpty != false, let fallback = manifest?.defaultTemplate, !fallback.isEmpty,
-           templates.get(app: n.app, name: fallback) != nil {
-            named.template = fallback
-        }
-        // `actionIds` become the manifest's buttons now, so history and every later press see what was offered.
-        named = ActionResolver.materializingActionIDs(named, manifest: manifest)
-        let template = templates.template(for: named)
-        if template == nil, let name = named.template, !name.isEmpty { log("template \(name) not found for \(n.app)") }
-        let n = TemplateResolver.resolve(named, with: template)
-        guard !n.app.isEmpty else { throw BackendError(400, "app is required") }
-        guard !n.title.isEmpty else {
-            throw BackendError(400, n.template == nil ? "title is required" : "title is required (template \(n.template ?? "") has none or does not exist)")
-        }
-        // Size limits come before anything is stored: a record, a cached image or a history entry.
-        try PayloadLimits.validate(n)
-        guard registry.hasRoom(for: n.app) else { throw BackendError(429, "too many apps (at most \(AppRegistry.maxApps))") }
-        var note = n
-        let id = (n.id?.isEmpty == false) ? n.id! : UUID().uuidString
-        note.id = id
-        // Caching the image suspends this call. A newer notify or a dismiss for the same id that runs meanwhile
-        // supersedes it, and the stale one is dropped when it resumes instead of overwriting or resurrecting.
-        let key = BannerCenter.key(n.app, id)
-        let ticket = pendingNotifies.begin(key)
-        defer { pendingNotifies.finish(key, ticket) }
-        let record = registry.ensure(n.app)
-        var imagePath: String?
-        if let spec = n.image, !spec.isEmpty { imagePath = await history.cacheImage(spec) }
-        guard pendingNotifies.isCurrent(key, ticket) else { return id }
-        // What a grid template binds to: payload fields, then metadata, plus the template's own `extra` values
-        // and the delivery time (the manifest's samples are for the designer only).
-        let delivered = Date()
-        let fields = TemplateResolver.fields(for: note, manifest: manifest, extra: template?.extra ?? [:], deliveredAt: delivered)
-        let item = HeraldHistoryItem(id: id, app: n.app, notification: note, deliveredAt: delivered, imagePath: imagePath, fields: fields)
-        history.upsert(item)
-        let eff = EffectiveSettings.resolve(note, record)
-        // Voice (DESIGN section 7.9): speech is queued here; a voice-only notification gets no banner and no chime.
-        // Quiet hours (DESIGN section 7.9.1) may silence speech, the chime and the banner; `priority: urgent` can
-        // break through when the app allows it.
-        let quiet = QuietHoursCoordinator.shared.state(for: note)
-        let voiceOnly = VoiceCoordinator.shared.handle(notification: note, historyItem: item, quiet: quiet)
-        if !voiceOnly {
-            if quiet.active && quiet.banners { banners.deferBanner(key: key, corner: eff.corner) }
-            else { banners.show(item, settings: eff, record: record) }
-            if !(quiet.active && quiet.sounds) { playSound(eff, record: record) }
-        }
-        changed()
-        return id
-    }
-
-    /// The app icon from the asset catalog, as PNG: exported once into the support folder so Herald's own entry has an icon like agents do.
-    static func appIconPNG() -> Data? {
-        let image = NSApp?.applicationIconImage ?? NSImage(named: "AppIcon")
-        guard let image, let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-        return rep.representation(using: .png, properties: [:])
-    }
 
     func register(_ r: HeraldAppRegistration) throws {
         try PayloadLimits.validate(r)
@@ -617,7 +406,7 @@ final class AppController {
         let m = DesignerModel(backend: .live(self), app: app, template: template)
         if let select { m.select(cell: select) }
         let view = DesignerView(model: m, controller: self,
-                                iconFor: { [registry] in AppIcons.icon(for: registry.record(for: $0), app: $0) })
+                                iconFor: { [registry] in AppIcons.icon(in: registry, app: $0) })
             .environment(\.colorScheme, .light)
         let host = NSHostingView(rootView: view)
         host.appearance = NSAppearance(named: .aqua)
@@ -791,7 +580,7 @@ final class AppController {
         }
         // A destructive button is asked about first (inline, never an alert); its own gate follows.
         if ActionRunner.confirmsBeforeRunning(action) {
-            let name = registry.record(for: app)?.displayName ?? app
+            let name = registry.displayName(for: app)
             confirmations.askDestructive(app: app, id: id, label: ctxLabel(action, item: item), name: name, run: go)
         } else {
             go()
@@ -1040,7 +829,7 @@ final class AppController {
         if registry.record(for: item.app)?.callbackHostApproved == host {
             send()
         } else {
-            let name = registry.record(for: item.app)?.displayName ?? item.app
+            let name = registry.displayName(for: item.app)
             confirmations.askCallbackHost(app: item.app, id: item.id, name: name, host: host, url: url.absoluteString,
                                           send: send)
         }
@@ -1098,7 +887,7 @@ final class AppController {
             let all = template.map { actionRunner.templateApprovalKeys(of: $0) } ?? [key]
             let replaced = ActionRunner.replacedIssuerLabel(for: action, notification: item.notification,
                                                             manifest: manifest, template: template)
-            let name = registry.record(for: item.app)?.displayName ?? item.app
+            let name = registry.displayName(for: item.app)
             confirmations.askTemplateCommand(app: item.app, id: item.id, template: templateName, name: name,
                                              kind: action.kind, pressedText: actionRunner.confirmationText(for: action),
                                              approvalKey: key, all: all, replacedIssuerLabel: replaced, run: proceed)

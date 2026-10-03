@@ -115,24 +115,51 @@ final class RelayController: RelayHost, RelayBackend {
 
     func relayEnsureIssuer(_ key: RelayKeyRef) async {
         guard !issuerKeys.contains(key.id) else { return }
-        await registerIssuer(name: key.name, client: key.client)
+        var info = keys.first { $0.id == key.id }
+        if info == nil { await refreshKeys(); info = keys.first { $0.id == key.id } }
+        await registerIssuer(name: key.name, client: key.client, info: info)
         issuerKeys.insert(key.id)
     }
 
-    private func registerIssuer(name: String, client: String) async {
-        guard let agent = AgentIdentity(cloudKeyName: name, client: client) else { return }
+    /// The connector's own name (its OAuth `client_name`) for an oauth key; nil for a static key.
+    private func clientName(of key: RelayKeyInfo?) -> String? { key.flatMap { $0.isOAuth ? $0.displayName : nil } }
+
+    private func registerIssuer(name: String, client: String, info: RelayKeyInfo? = nil, source known: AutoIcon.Source? = nil) async {
+        let clientName = clientName(of: info)
+        guard let agent = AgentIdentity(cloudKeyName: name, client: client, clientName: clientName) else { return }
         let custom = RelayIcon.customFile(slug: agent.slug, folder: AgentIssuer.iconsFolder(in: controller.supportDirectory))
         var png = try? Data(contentsOf: custom)
         if png == nil { png = await AgentInstall.iconPNG(for: agent, picked: nil) }
         _ = try? AgentIssuer.register(agent, iconPNG: png, supportDirectory: controller.supportDirectory, registry: controller.registry,
                                       manifests: controller.manifests, templates: controller.templates)
+        // No icon of its own: the product's icon on this Mac (ChatGPT.app, Claude, Codex), else a cloud / key tile.
+        let flavor = AutoIcon.flavor([clientName, name, client == "other" ? nil : client])
+        let source: AutoIcon.Source = known ?? info.map { $0.isOAuth ? .connector : .staticKey } ?? .connector
+        let support = controller.supportDirectory, registry = controller.registry
+        await Task.detached {
+            if let auto = AutoIcon.png(flavor: flavor, source: source) {
+                AutoIcon.assign(app: agent.appID, png: auto, supportDirectory: support, registry: registry)
+            }
+        }.value
         controller.changed()
+    }
+
+    /// Apps of the relay's keys: connectors take the client's name, and an app without an icon gets the automatic one.
+    func reconcileCloudApps() {
+        let keys = self.keys, registry = controller.registry, manifests = controller.manifests, support = controller.supportDirectory
+        guard !keys.isEmpty else { return }
+        Task.detached { [weak controller] in
+            let renamed = CloudApps.reconcile(keys: keys, registry: registry, manifests: manifests, supportDirectory: support)
+            await MainActor.run { _ = renamed; AppIcons.invalidate(); controller?.changed() }
+        }
     }
 
     /// The icon a notification brought, applied once per distinct value for this key. The user's own icon (set in Settings) wins:
     /// `AgentIssuer.register` leaves one that does not live in Herald's icon folder alone.
     func relayApplyIcon(_ source: String, for key: RelayKeyRef) async {
-        guard appliedIcons[key.id] != source, let agent = AgentIdentity(cloudKeyName: key.name, client: key.client) else { return }
+        let info = keys.first { $0.id == key.id }
+        guard appliedIcons[key.id] != source,
+              let agent = AgentIdentity(cloudKeyName: key.name, client: key.client, clientName: clientName(of: info)) else { return }
         appliedIcons[key.id] = source
         guard let data = await RelayIcon.bytes(from: source), let png = RelayIcon.png(from: data) else { return }
         let folder = AgentIssuer.iconsFolder(in: controller.supportDirectory)
@@ -335,6 +362,7 @@ final class RelayController: RelayHost, RelayBackend {
         do {
             keys = try await api.listKeys()
             lastError = nil
+            reconcileCloudApps()
         } catch { lastError = error.localizedDescription }
         controller.changed()
     }
@@ -342,7 +370,7 @@ final class RelayController: RelayHost, RelayBackend {
     func relayCreateKey(name: String, client kind: String) async throws -> RelayKeyCreated {
         guard let api = client.api, isPaired else { throw RelayError.notPaired }
         let made = try await api.createKey(name: name, client: kind)
-        await registerIssuer(name: made.name, client: made.client)
+        await registerIssuer(name: made.name, client: made.client, source: .staticKey)
         issuerKeys.insert(made.id)
         await refreshKeys()
         return RelayKeyCreated(id: made.id, name: made.name, client: made.client, scope: made.scope, key: made.key,
