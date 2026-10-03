@@ -23,7 +23,7 @@ export default function Actions() {
         <h2 className="display text-[clamp(40px,6vw,72px)]">
           <span className="sr-only">Buttons that do things.</span>
           <span aria-hidden>
-            Buttons that <span className="block md:inline"><em><WordSwapper words={WORDS} staticWord="do things" onIndex={setActive} /></em>.</span>
+            Buttons that <span className="block md:inline"><em><WordSwapper words={WORDS} staticWord="do things" onIndex={setActive} /></em></span>
           </span>
         </h2>
         <div className="mt-5 flex flex-wrap items-center gap-2" aria-hidden>
@@ -31,8 +31,8 @@ export default function Actions() {
           {WORDS.map((w, i) => (
             <span
               key={w}
-              className="mono rounded-md px-2.5 py-1 text-[11px] text-accent transition-[opacity,background-color] duration-300"
-              style={{ background: i === active ? "var(--accent-soft)" : "transparent", opacity: i === active ? 1 : 0.6, boxShadow: "inset 0 0 0 1px var(--accent-soft)" }}
+              className="mono rounded-md px-2.5 py-1 text-[12px] text-accent transition-[opacity,background-color] duration-300"
+              style={{ background: i === active ? "var(--accent-soft)" : "transparent", opacity: i === active ? 1 : 0.8, boxShadow: "inset 0 0 0 1px var(--accent-soft)" }}
             >
               {w}
             </span>

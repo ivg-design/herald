@@ -1,4 +1,5 @@
 "use client";
+import MiniIcon from "./MiniIcon";
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { EASE } from "@/lib/config";
@@ -29,7 +30,7 @@ export function StackMock() {
   }, [reduced, seen]);
 
   const card = "absolute inset-x-0 flex h-[40px] items-center gap-3 rounded-lg border border-paper-line bg-white px-3 text-[13px]";
-  const tile = <span aria-hidden className="size-4 shrink-0 rounded bg-[#e3e6ea]" />;
+  const tile = <MiniIcon size={18} />;
   const t = { duration: 0.6, ease: EASE.quint };
   return (
     <div ref={ref} className={PANEL}>

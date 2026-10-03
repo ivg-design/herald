@@ -1,4 +1,5 @@
 "use client";
+import MiniIcon from "./MiniIcon";
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { useInViewOnce } from "./b-hooks";
@@ -37,7 +38,7 @@ export default function ConfirmDemo() {
   return (
     <div ref={box} className="relative rounded-xl border border-line bg-surface p-4 max-w-[440px]">
       <div className="flex items-center gap-3">
-        <span aria-hidden className="size-6 shrink-0 rounded-md bg-surface-2" />
+        <MiniIcon size={24} />
         <p className="m-0 text-[15px] font-semibold">Deploy build 4f2a to production?</p>
       </div>
       <p className="mt-3 mb-4 text-[13px] leading-snug text-muted">Inline confirmation replaces the button row. No dialog, no focus change.</p>

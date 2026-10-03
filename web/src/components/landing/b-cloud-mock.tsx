@@ -1,4 +1,5 @@
 "use client";
+import MiniIcon from "./MiniIcon";
 import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "framer-motion";
 import { Mic } from "lucide-react";
@@ -24,7 +25,7 @@ export default function CloudMock() {
     <div ref={ref} className="w-full max-w-[480px] lg:ml-auto">
       <div aria-hidden className="rounded-xl border border-line bg-surface p-4">
         <div className="flex items-start gap-3">
-          <span className="size-9 shrink-0 rounded-lg bg-surface-2" />
+          <MiniIcon size={36} />
           <div className="min-w-0 flex-1">
             <p className="m-0 text-[11px] text-muted">Claude · cloud session</p>
             <p className="m-0 text-[16px] font-semibold">Deploy to production now?</p>

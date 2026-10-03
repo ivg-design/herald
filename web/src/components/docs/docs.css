@@ -58,6 +58,7 @@ kbd {
 @media (min-width: 1024px) {
   .docs-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); }
   .docs-scrim { display: none; }
+  .docs-iconbtn.lg\:hidden, .docs-sidebar-top { display: none; }
   .docs-sidebar {
     position: sticky; top: var(--docs-header); height: calc(100dvh - var(--docs-header)); width: auto; z-index: auto;
     transform: none; visibility: visible; transition: none; padding: 28px 12px 40px 24px;
@@ -119,7 +120,7 @@ kbd {
 .docs-img-alt { color: var(--muted); font-style: italic; }
 .docs-prose :not(pre) > code {
   font-family: var(--font-mono); font-size: 0.86em; color: var(--ink); background: var(--surface-2);
-  border-radius: 5px; padding: 2px 6px; overflow-wrap: anywhere;
+  border-radius: 5px; padding: 1px 4px; overflow-wrap: anywhere;
 }
 .docs-prose a:not(.anchor) :not(pre) > code, .docs-prose a:not(.anchor) > code { color: inherit; }
 

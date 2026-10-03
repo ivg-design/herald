@@ -71,7 +71,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
             tabIndex={0}
             aria-label="Example command"
           >
-            <code>
+            <code className="whitespace-pre-wrap break-words sm:whitespace-nowrap">
               <span aria-hidden>$ </span>herald send --app ci.bot --title &quot;Build passed&quot; --body &quot;142 tests&quot;
             </code>
           </pre>

@@ -1,4 +1,5 @@
 "use client";
+import MiniIcon from "./MiniIcon";
 import { useRef } from "react";
 import { useScroll } from "framer-motion";
 import { ArrowDown, ArrowRight } from "lucide-react";
@@ -117,7 +118,7 @@ export default function Flow() {
               <Step n="3" title="Banner" />
               <div className={`${well} min-h-[150px]`}>
                 <Lit from={0.66} to={0.72} dim={0} rise={8} className="flex items-center gap-2">
-                  <span aria-hidden className="h-5 w-5 rounded-[5px] bg-surface-2" />
+                  <MiniIcon size={20} />
                   <span className="text-[12px] font-semibold text-ink">Build passed</span>
                   <span className="rounded-full bg-[#2fbf71] px-2 py-px text-[9px] font-bold text-bg">OK</span>
                 </Lit>
