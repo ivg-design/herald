@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
 import EasterEgg from "@/components/motion/EasterEgg";
+import StructuredData from "@/components/StructuredData";
 import { SITE_URL, asset } from "@/lib/config";
 import "./globals.css";
 
@@ -17,6 +18,8 @@ export const metadata: Metadata = {
   title: { default: TITLE, template: "%s | Herald" },
   description: DESC,
   applicationName: "Herald",
+  keywords: ["macOS notifications", "notification service", "Growl alternative", "custom notification banners", "macOS menu bar app", "agent notifications", "MCP", "open source"],
+  robots: { index: true, follow: true },
   authors: [{ name: "IVG Design" }],
   icons: { icon: asset("/icon.png"), apple: asset("/herald-icon.png") },
   openGraph: { title: TITLE, description: DESC, type: "website", siteName: "Herald", images: [{ url: asset("/og.png"), width: 1200, height: 630, alt: "Herald: notifications you'd actually design" }] },
@@ -31,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${instrument.variable} ${dmSans.variable} ${jetbrains.variable}`}>
       <body>
         {children}
+        <StructuredData />
         <EasterEgg />
       </body>
     </html>
