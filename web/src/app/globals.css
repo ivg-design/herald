@@ -124,3 +124,31 @@ img { max-width: 100%; }
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
+
+/* Mock Herald banner (shared by the hero, Actions, Living, Cloud). Dark by default, white on paper sections. */
+.mb {
+  --mb-bg: var(--surface); --mb-line: var(--line); --mb-ink: var(--ink); --mb-muted: var(--muted);
+  --mb-btn: var(--surface-2); --mb-field: var(--bg);
+  background: var(--mb-bg); border: 1px solid var(--mb-line); color: var(--mb-ink); border-radius: 12px; position: relative;
+}
+.on-paper .mb { --mb-bg: #fff; --mb-line: var(--paper-line); --mb-ink: var(--paper-ink); --mb-muted: var(--paper-muted); --mb-btn: #e8edf2; --mb-field: #f3f6f9; }
+.mb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 7px;
+  background: var(--mb-btn); color: var(--mb-ink); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: transform 140ms var(--ease-quart), background-color 140ms var(--ease-quart), opacity 140ms;
+}
+.mb-btn:hover { background: color-mix(in srgb, var(--mb-btn) 82%, var(--mb-ink)); }
+.mb-btn:active { transform: translateY(1px); }
+.mb-btn:disabled { opacity: 0.45; cursor: default; }
+.mb-btn.is-primary { background: var(--accent); color: var(--accent-ink); }
+.mb-btn.is-primary:hover { background: #5aaeef; }
+.on-paper .mb-btn.is-primary:hover { background: #2d82cf; }
+.mb-btn.is-danger { background: var(--signal); color: #fff5f2; }
+.mb-x { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--mb-muted); cursor: pointer; }
+.mb-x:hover { background: var(--mb-btn); color: var(--mb-ink); }
+.mb-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--mb-line); background: var(--mb-field); color: var(--mb-ink); font: inherit; font-size: 13px; }
+.mb-input::placeholder { color: var(--mb-muted); }
+
+/* Header brand: the icon fills the header height minus 5 px top and bottom. */
+.site-brand { padding-block: 5px; }
+.site-brand-icon { height: 100%; width: auto; aspect-ratio: 1; border-radius: 22%; }

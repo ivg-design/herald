@@ -4,27 +4,31 @@ import { AnimatePresence } from "framer-motion";
 import { History } from "lucide-react";
 import LiveBanner from "@/components/mock/LiveBanner";
 
-export default function CloudMock() {
+/** The Deploy action of a real banner: press it and the button row becomes an inline Yes/Cancel strip. */
+export default function ActionsDemo() {
   const [shown, setShown] = useState(true);
   const [run, setRun] = useState(0);
   return (
-    <div className="w-full max-w-[480px] lg:ml-auto">
-      <div className="min-h-[200px]">
+    <div className="w-full max-w-[460px]">
+      <div className="min-h-[148px]">
         <AnimatePresence>
           {shown && (
             <LiveBanner
               key={run}
-              app="Claude · cloud session"
-              items={[{ id: "c", title: "Deploy to production now?", body: "All 214 tests passed on main. Say the word and I’ll ship 4f2a to prod." }]}
-              reply={{ transcript: "Yes, ship it to production." }}
+              app="CI Bot"
+              items={[{ id: "d", title: "Build 4f2a passed", body: "All 214 tests passed on main." }]}
+              buttons={[
+                { label: "Open log", role: "open", url: "ci.example.com/4f2a" },
+                { label: "Deploy", role: "deploy", primary: true },
+                { label: "Dismiss", role: "dismiss" },
+              ]}
+              confirmText="Deploy 4f2a to production?"
               onClose={() => setShown(false)}
             />
           )}
         </AnimatePresence>
       </div>
-      {shown ? (
-        <p className="mt-3 mb-0 text-right text-[12px] text-muted">Type a reply or press Record. Nothing leaves this page.</p>
-      ) : (
+      {!shown && (
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
           <History size={15} aria-hidden /> Re-show from History
         </button>

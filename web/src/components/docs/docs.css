@@ -1,6 +1,6 @@
 /* Docs and changelog styles. Tokens come from globals.css; everything here is dark. */
 
-.docs-root { --docs-body: #cdd4db; --docs-header: 64px; min-height: 100dvh; background: var(--bg); }
+.docs-root { --docs-body: #cdd4db; --docs-header: 64px; --docs-max: 1440px; min-height: 100dvh; background: var(--bg); }
 kbd {
   font-family: var(--font-mono); font-size: 11px; line-height: 1; color: var(--muted);
   border: 1px solid var(--line); background: var(--surface-2); border-radius: 4px; padding: 3px 6px;
@@ -8,7 +8,11 @@ kbd {
 
 /* ---------- Header ---------- */
 .docs-header { position: sticky; top: 0; z-index: 40; background: var(--bg); border-bottom: 1px solid var(--line); }
-.docs-header-in { height: var(--docs-header); display: flex; align-items: center; gap: 12px; padding-inline: 16px; }
+.docs-header-in { height: var(--docs-header); display: flex; align-items: center; gap: 12px; padding-inline: 16px; max-width: var(--docs-max); margin-inline: auto; }
+.docs-brand { display: flex; align-items: center; gap: 12px; height: var(--docs-header); padding-block: 5px; }
+.docs-brand-icon { height: 100%; width: auto; aspect-ratio: 1; border-radius: 22%; }
+.docs-doclink { font-size: 15px; color: var(--muted); padding: 8px 4px; transition: color 150ms var(--ease-quart); }
+.docs-doclink:hover { color: var(--ink); }
 @media (min-width: 768px) { .docs-header-in { display: grid; grid-template-columns: 1fr minmax(0, 360px) 1fr; gap: 24px; padding-inline: 24px; } .docs-header-in > nav { justify-self: end; } }
 .docs-iconbtn {
   display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none;
@@ -29,7 +33,7 @@ kbd {
 .docs-searchbtn kbd { margin-left: auto; }
 
 /* ---------- Sidebar + drawer ---------- */
-.docs-body { display: block; }
+.docs-body { display: block; max-width: var(--docs-max); margin-inline: auto; }
 .docs-main { min-width: 0; }
 .docs-sidebar {
   position: fixed; z-index: 60; top: 0; bottom: 0; left: 0; width: min(300px, 86vw); overflow-y: auto; overscroll-behavior: contain;
@@ -73,7 +77,7 @@ kbd {
 .docs-rail { display: none; }
 @media (min-width: 1024px) { .docs-grid { padding: 48px 48px 120px; } }
 @media (min-width: 1280px) {
-  .docs-grid { display: grid; grid-template-columns: minmax(0, 832px) 200px; column-gap: 64px; }
+  .docs-grid { display: grid; grid-template-columns: minmax(0, 832px) 200px; column-gap: 64px; justify-content: center; }
   .docs-rail { display: block; }
 }
 .docs-crumbs { display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 20px; }

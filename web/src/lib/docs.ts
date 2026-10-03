@@ -4,6 +4,7 @@ import { DOC_TREE, ISSUE_URL } from "./docs-tree";
 import { firstParagraph, headingsOf, renderTree, sliceMarkdown, type Heading, type LinkResolver } from "./markdown";
 import type { Root } from "hast";
 import { REPO_URL } from "./config";
+import { decodeEntities } from "./entities";
 
 export interface DocPage {
   group: string;
@@ -47,14 +48,14 @@ export function getPages(): DocPage[] {
     for (const e of g.items) {
       const source = e.file ? sliceMarkdown(read(e.file), e.slice) : REPORT_ISSUE_MD;
       pages.push({
-        group: g.title,
+        group: decodeEntities(g.title),
         groupId: g.id,
         slug: e.slug,
-        title: e.title,
+        title: decodeEntities(e.title),
         href: `/docs/${g.id}/${e.slug}`,
         file: e.file,
         source,
-        description: e.description || firstParagraph(source) || e.title,
+        description: decodeEntities(e.description || firstParagraph(source) || e.title),
         headings: headingsOf(source),
         note: e.note,
         editUrl: e.file ? `${REPO_URL}/blob/main/${e.file}` : null,
@@ -108,7 +109,7 @@ export function searchIndex(): SearchItem[] {
   const out: SearchItem[] = [];
   for (const p of getPages()) {
     out.push({ title: p.title, group: p.group, href: p.href });
-    for (const h of p.headings) out.push({ title: p.title, group: p.group, href: `${p.href}#${h.id}`, heading: h.text });
+    for (const h of p.headings) out.push({ title: p.title, group: p.group, href: `${p.href}#${h.id}`, heading: decodeEntities(h.text) });
   }
   return out;
 }

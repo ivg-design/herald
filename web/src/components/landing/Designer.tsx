@@ -1,6 +1,6 @@
-import DesignerShowcase from "@/components/motion/DesignerShowcase";
+import DesignerShowcase, { type ShotDims } from "@/components/motion/DesignerShowcase";
 
-export default function Designer({ hasShots }: { hasShots: { light: boolean; dark: boolean } }) {
+export default function Designer({ shots }: { shots: { light?: ShotDims; dark?: ShotDims } }) {
   return (
     <section id="designer" className="section section-paper on-paper">
       <div className="shell">
@@ -14,7 +14,7 @@ export default function Designer({ hasShots }: { hasShots: { light: boolean; dar
           whether an empty field collapses or holds its place.
         </p>
         <div className="mt-12">
-          <DesignerShowcase hasShots={hasShots} />
+          <DesignerShowcase shots={shots} />
         </div>
       </div>
     </section>

@@ -18,10 +18,9 @@ import { getRelease } from "@/lib/release";
 export default async function Home() {
   const release = await getRelease();
   const pub = path.join(process.cwd(), "public");
-  const hasShots = {
-    light: fs.existsSync(path.join(pub, "designer-light.png")),
-    dark: fs.existsSync(path.join(pub, "designer-dark.png")),
-  };
+  const manifest = path.join(pub, "shots", "manifest.json");
+  const dims: Record<string, { w: number; h: number }> = fs.existsSync(manifest) ? JSON.parse(fs.readFileSync(manifest, "utf8")) : {};
+  const shots = { light: dims["designer-light"], dark: dims["designer-dark"] };
   return (
     <>
       <Header downloadUrl={release.dmgUrl} />
@@ -29,7 +28,7 @@ export default async function Home() {
         <Hero release={release} />
         <Why />
         <Flow />
-        <Designer hasShots={hasShots} />
+        <Designer shots={shots} />
         <Actions />
         <Living />
         <CloudRelay />

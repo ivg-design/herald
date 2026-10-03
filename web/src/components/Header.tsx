@@ -30,8 +30,8 @@ export default function Header({ downloadUrl }: { downloadUrl: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="shell flex h-[68px] items-center justify-between gap-6">
-        <SiteLink href="/" className="flex items-center gap-3 font-semibold" aria-label="Herald home">
-          <Image src={asset("/herald-icon.png")} alt="" width={26} height={26} className="rounded-[6px]" unoptimized />
+        <SiteLink href="/" className="site-brand flex h-full items-center gap-3 font-semibold" aria-label="Herald home">
+          <Image src={asset("/herald-icon.png")} alt="" width={64} height={64} className="site-brand-icon" unoptimized />
           <span className="text-[17px]">Herald</span>
         </SiteLink>
 

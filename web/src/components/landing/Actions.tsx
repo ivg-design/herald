@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { AlarmClock, Link2, SquareTerminal, Undo2, Workflow } from "lucide-react";
 import WordSwapper from "@/components/motion/WordSwapper";
-import ConfirmDemo from "./b-confirm-demo";
+import ActionsDemo from "./b-actions-demo";
 
 const WORDS = ["run a script", "open the app", "archive the mail", "ask before deploying", "call your app back", "run a Shortcut", "snooze till 9"];
 
@@ -31,7 +31,7 @@ export default function Actions() {
           {WORDS.map((w, i) => (
             <span
               key={w}
-              className="mono rounded-md px-2.5 py-1 text-[12px] text-accent transition-[opacity,background-color] duration-300"
+              className="mono rounded-md px-2.5 py-1 text-[12px] text-accent"
               style={{ background: i === active ? "var(--accent-soft)" : "transparent", opacity: i === active ? 1 : 0.8, boxShadow: "inset 0 0 0 1px var(--accent-soft)" }}
             >
               {w}
@@ -55,11 +55,11 @@ export default function Actions() {
         </ul>
 
         <div className="mt-14 grid gap-8 md:grid-cols-[minmax(0,440px)_1fr] md:items-center md:gap-14">
-          <ConfirmDemo />
+          <ActionsDemo />
           <div>
             <h3 className="m-0 text-[clamp(20px,2vw,24px)] font-medium">Confirmation gates, per app or per template</h3>
             <p className="mt-3 max-w-[62ch] text-[16px] leading-relaxed text-muted">
-              Mark an action as needing confirmation and Herald swaps the button row for a yes/no strip inside the banner. Callbacks report success, failure or still-running, so a banner is only dismissed when the thing actually happened.
+              Mark an action as needing confirmation and Herald swaps the button row for a yes/no strip inside the banner. Press Deploy on the banner to see it. Callbacks report success, failure or still-running, so a banner is only dismissed when the thing actually happened.
             </p>
           </div>
         </div>

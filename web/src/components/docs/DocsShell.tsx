@@ -90,11 +90,11 @@ export default function DocsShell({ tree, index, children }: { tree: NavGroup[];
             >
               <Menu size={18} />
             </button>
-            <SiteLink href="/docs" className="flex items-center gap-3" aria-label="Herald docs home">
-              <Image src={asset("/herald-icon.png")} alt="" width={26} height={26} className="rounded-[6px]" unoptimized />
+            <SiteLink href="/" className="docs-brand" aria-label="Herald home">
+              <Image src={asset("/herald-icon.png")} alt="" width={64} height={64} className="docs-brand-icon" unoptimized />
               <span className="text-[17px] font-semibold">Herald</span>
-              <span className="hidden text-[15px] text-muted min-[420px]:inline">/ Docs</span>
             </SiteLink>
+            <SiteLink href="/docs" className="docs-doclink hidden min-[420px]:inline" aria-label="Docs home">/ Docs</SiteLink>
           </div>
 
           <button type="button" className="docs-searchbtn" onClick={openSearch} aria-label="Search docs" aria-keyshortcuts="Control+K Meta+K /">

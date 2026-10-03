@@ -1,3 +1,4 @@
+import { decodeEntities } from "./entities";
 import { unified } from "unified";
 import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
@@ -113,7 +114,7 @@ function rehypeHeadings() {
     const heads: Heading[] = [];
     visit(tree, "element", (el: Element) => {
       if (/^h[2-3]$/.test(el.tagName) && el.properties?.id) {
-        heads.push({ depth: Number(el.tagName[1]), text: toString(el).replace(/#$/, "").trim(), id: String(el.properties.id) });
+        heads.push({ depth: Number(el.tagName[1]), text: decodeEntities(toString(el).replace(/#$/, "").trim()), id: String(el.properties.id) });
       }
     });
     file.data.headings = heads;
