@@ -25,7 +25,7 @@ export default function Download({ release }: { release: ReleaseInfo }) {
             {REQS.map((r) => (
               <li key={r} className="flex items-start gap-2.5">
                 <Check aria-hidden className="mt-0.5 size-4 shrink-0" />
-                {nowrapText(r)}
+                <span>{nowrapText(r)}</span>
               </li>
             ))}
           </ul>
