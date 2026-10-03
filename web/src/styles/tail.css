@@ -1,1 +1,46 @@
 /* Tail sections (Agents, Integrate, Download, Changelog), not-found. Imported from globals.css. */
+
+/* Download band: the template again, on the 12/6/4 grid. Content is sized to its cell (cqw), never parked in a corner. */
+#download .dl-cell { container-type: inline-size; min-width: 0; padding: 30px 16px 16px; display: flex; flex-direction: column; }
+#download .dl-fill { justify-content: flex-end; }
+#download .dl-icon { padding: 0; aspect-ratio: 1; }
+#download .dl-icon img { position: absolute; inset: 24px; width: calc(100% - 48px); height: calc(100% - 48px); object-fit: contain; display: block; }
+#download .dl-num { margin: 0; white-space: nowrap; font-variation-settings: "wdth" 132; letter-spacing: -0.04em; line-height: 0.95; font-size: clamp(28px, 28cqw, 150px); }
+#download .dl-num-size { font-size: clamp(24px, 18cqw, 110px); }
+#download .dl-cap { margin: 12px 0 0; color: var(--muted); }
+#download .dl-sha > div { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+#download .dl-sha > div > span.mono { flex: 1 0 100%; order: 2; font-size: clamp(11px, 8cqw, 44px); line-height: 1.1; letter-spacing: -0.02em; color: #fff; }
+#download .dl-sha > div > a, #download .dl-sha > div > span:first-child { order: 1; }
+#download .dl-sha > div > button { order: 3; }
+#download .dl-actions { gap: 12px; }
+#download .dl-actions .btn { width: 100%; max-width: 100%; white-space: normal; text-align: center; }
+#download .dl-actions .dl-dl { flex: 1 1 auto; min-height: 60px; max-height: 140px; height: auto; padding: 10px 20px; font-size: 16px; }
+
+/* 4 columns (< 640): icon beside version, then everything full width. */
+#download .dl-icon { grid-column: span 2; order: 1; }
+#download .dl-version { grid-column: span 2; order: 2; }
+#download .dl-title { grid-column: span 4; order: 3; }
+#download .dl-size { grid-column: span 4; order: 4; }
+#download .dl-sha { grid-column: span 4; order: 5; }
+#download .dl-reqs { grid-column: span 4; order: 6; }
+#download .dl-actions { grid-column: span 4; order: 7; }
+
+/* 6 columns (640-1023): icon spans title + version; size/sha and requirements/actions pair up. */
+@media (min-width: 640px) {
+  #download .dl-icon { grid-column: span 2; grid-row: span 2; order: 1; }
+  #download .dl-title { grid-column: span 4; order: 2; }
+  #download .dl-version { grid-column: span 4; order: 3; }
+  #download .dl-num { font-size: clamp(28px, 20cqw, 120px); }
+  #download .dl-size, #download .dl-sha, #download .dl-reqs, #download .dl-actions { grid-column: span 3; }
+}
+
+/* 12 columns (>= 1024): icon 1-4 over two rows | title 5-12 ; version 5-8 | size 9-12 ; sha 1-4 | requirements 5-8 | actions 9-12. */
+@media (min-width: 1024px) {
+  #download .dl-icon { grid-column: 1 / span 4; }
+  #download .dl-title { grid-column: 5 / span 8; }
+  #download .dl-version { grid-column: 5 / span 4; }
+  #download .dl-size { grid-column: 9 / span 4; }
+  #download .dl-sha, #download .dl-reqs, #download .dl-actions { grid-column: span 4; }
+  #download .dl-num { font-size: clamp(28px, 28cqw, 150px); }
+  #download .dl-num-size { font-size: clamp(24px, 18cqw, 110px); }
+}

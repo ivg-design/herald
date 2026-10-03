@@ -21,7 +21,13 @@ export function StackMock() {
   };
   return (
     <div>
-      <div className="min-h-[104px]">
+      <button type="button" className="btn btn-ghost btn-sm" onClick={add}>
+        <Plus size={14} aria-hidden /> +1 from the same sender
+      </button>
+      <p className="readout m-0 mt-3">The count goes up; click the banner to fan the stack out.</p>
+      {/* The stage is as tall as the banner's tallest state (fanned, three rows and a "+N more" line), so
+          nothing below it moves. It is last in the column, so its spare height reads as the section's padding. */}
+      <div className="hb-stage stage-stack mt-4">
         <AnimatePresence>
           {shown && items.length > 0 && (
             <LiveBanner
@@ -33,12 +39,8 @@ export function StackMock() {
             />
           )}
         </AnimatePresence>
-        {(!shown || items.length === 0) && <p className="readout m-0">Dismissed. It stays in History.</p>}
+        {(!shown || items.length === 0) && <p className="readout hb-stage-note">Dismissed. It stays in History.</p>}
       </div>
-      <button type="button" className="btn btn-ghost btn-sm mt-4" onClick={add}>
-        <Plus size={14} aria-hidden /> +1 from the same sender
-      </button>
-      <p className="readout m-0 mt-3">The count goes up; click the banner to fan the stack out.</p>
     </div>
   );
 }
@@ -106,7 +108,7 @@ export function QuietMock() {
         <h3 className="display display-m m-0">Quiet hours</h3>
         <p className="body mt-4 max-w-[44ch]">Pick windows where voice and sound stay off and, if you want, banners wait. Per app overrides for the ones that may wake you.</p>
       </div>
-      <p className="col-span-full m-0 min-w-0 text-[17px] font-medium lg:col-span-8 lg:self-end lg:text-right" role="status" aria-live="polite" id={id}>{sentence}</p>
+      <p className="col-span-full m-0 min-h-[2.8em] min-w-0 text-[17px] font-medium leading-[1.4] md:min-h-0 lg:col-span-8 lg:self-end lg:text-right" role="status" aria-live="polite" id={id}>{sentence}</p>
       <div className="col-span-full min-w-0">
         <div className="qh">
           {nowMin !== null && <div className="qh-now" style={{ left: pos(nowMin) }}><span>now {clock(T0 + nowMin)}</span></div>}
@@ -137,7 +139,7 @@ export function QuietMock() {
             </button>
           </div>
         </div>
-        <p className="readout m-0 mt-3 min-h-[1.4em]" role="status" aria-live="polite" aria-label="Quiet hours outcome">{outcome}</p>
+        <p className="readout m-0 mt-3 min-h-[3em] leading-[1.5] sm:min-h-[1.5em]" role="status" aria-live="polite" aria-label="Quiet hours outcome">{outcome}</p>
       </div>
     </div>
   );

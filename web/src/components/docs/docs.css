@@ -278,7 +278,3 @@ dialog.docs-search::backdrop { background: rgb(11 21 48 / 0.5); }
 }
 
 /* ---------- Changelog chrome ---------- */
-/* The shared site header's five links plus its right cluster are 9px wider than the viewport at exactly 1024; on the changelog page only, tighten the links. */
-@media (min-width: 1024px) and (max-width: 1120px) {
-  body:has(#main .docs-prose) header nav[aria-label="Primary"] a { padding-inline: 8px; }
-}

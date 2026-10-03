@@ -738,6 +738,34 @@ await section("stable", async () => {
   }
 });
 
+// ============ header and anchors ============
+await section("anchors", async () => {
+  for (const path of ["/", "/changelog", "/docs"]) {
+    await load(path, 1024, 768);
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    ok(over <= 0, `header 1024: no document overflow on ${path}`, String(over));
+  }
+  for (const [w, h] of [[1440, 900], [1865, 1030]]) {
+    await page.setViewport({ width: w, height: h });
+    for (const id of ["why", "designer", "actions", "agents", "integrate", "download"]) {
+      await page.goto(BASE + "/#" + id, { waitUntil: "load" });
+      await sleep(1600);
+      const r = await page.evaluate((id) => { const s = document.getElementById(id); const hd = document.querySelector("header").getBoundingClientRect().bottom; const cell = s.querySelector(".cell") || s.querySelector("h2"); const q = (x) => { const e = s.querySelector(x); return e ? e.getBoundingClientRect().bottom : 0; }; return { top: Math.round(cell.getBoundingClientRect().top - hd), frame: Math.round(q(".dz-frame")), legend: Math.round(q(".dz-legend")), frameW: Math.round(s.querySelector(".dz-frame")?.getBoundingClientRect().width || 0), vh: innerHeight }; }, id);
+      ok(r.top >= 0 && r.top <= 40, `anchor ${w}: #${id} lands with its title cell just under the header (${r.top} px)`);
+      if (id === "designer") {
+        ok(r.frame <= r.vh && r.legend <= r.vh, `anchor ${w}: #designer shows the whole capture and its six notes on one screen`, JSON.stringify(r));
+        ok(r.frameW >= 840, `anchor ${w}: the Designer capture is large (${r.frameW} px wide)`);
+      }
+    }
+  }
+  // brand link: back to the very top, hash cleared
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto(BASE + "/#actions", { waitUntil: "load" });
+  await sleep(1200);
+  await page.click('[data-testid="brand-home"]');
+  ok(await waitFor(() => page.evaluate(() => scrollY === 0 && location.hash === ""), 3000), "header: the brand link returns to the very top and clears the hash");
+});
+
 // ============ round 2 ============
 await section("round2", async () => {
   await load("/", 1440, 900);

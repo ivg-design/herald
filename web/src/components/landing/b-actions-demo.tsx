@@ -10,7 +10,9 @@ export default function ActionsDemo() {
   const [run, setRun] = useState(0);
   return (
     <div className="w-full max-w-[460px]">
-      <div className="min-h-[148px]">
+      {/* Reserved stage: as tall as the banner's tallest state (the Deploy confirmation wrapped onto two rows at 390 px),
+          top-anchored, so no click moves anything below it. The re-show button lands in the same stage. */}
+      <div className="hb-stage stage-actions">
         <AnimatePresence>
           {shown && (
             <LiveBanner
@@ -27,12 +29,12 @@ export default function ActionsDemo() {
             />
           )}
         </AnimatePresence>
+        {!shown && (
+          <button type="button" className="btn btn-ghost btn-sm hb-stage-note" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
+            <History size={15} aria-hidden /> Re-show from History
+          </button>
+        )}
       </div>
-      {!shown && (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
-          <History size={15} aria-hidden /> Re-show from History
-        </button>
-      )}
     </div>
   );
 }

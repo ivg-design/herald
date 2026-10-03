@@ -78,6 +78,26 @@
 
 @media (max-width: 639px) { header .hb-dl { display: none; } }
 
+/* Reserved stages: a demo banner grows and shrinks inside one of these and nothing outside moves. The height is the
+   tallest state, measured from the real paddings and line heights, plus a few px. Content is top-anchored. */
+.hb-stage { position: relative; min-height: var(--stage, 0px); }
+/* what lands in the stage after the banner leaves (re-show, "dismissed"): over the exiting banner, after it fades */
+.hb-stage-note { position: absolute; top: 0; left: 0; margin: 0; animation: hb-fade var(--t-state) var(--ease-quint) 400ms both; }
+@keyframes hb-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .hb-stage-note { animation: none; } }
+/* Actions: CI Bot; confirmation strip on two rows at 390 px is the tallest (about 185 px) */
+.stage-actions { --stage: 204px; }
+/* Living: the fanned stack, three rows and a "+N more" line */
+.stage-stack { --stage: 252px; }
+/* Cloud: reply banner with the transcript and receipts lines, wrapped at 390 px */
+.stage-cloud { --stage: 396px; }
+@media (min-width: 640px) { .stage-cloud { --stage: 276px; } }
+@media (min-width: 1024px) { .stage-cloud { --stage: 304px; } }
+@media (pointer: coarse) {
+  .stage-actions { --stage: 212px; }
+  .stage-stack { --stage: 300px; }
+}
+
 /* stack counter chip: the counter itself is red, so the hover ring is too (no glow: a flat 2 px hairline) */
 .hb-chip { border: 0; background: transparent; padding: 0; font: inherit; cursor: pointer; border-radius: 999px; display: inline-grid; place-items: center; flex: none; }
 .hb-chip:hover { outline: 1px solid var(--red); outline-offset: 2px; }

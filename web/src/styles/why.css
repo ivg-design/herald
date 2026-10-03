@@ -19,7 +19,8 @@
     radial-gradient(90% 100% at 100% 100%, #b848c8 0%, rgba(184,72,200,0) 60%),
     linear-gradient(135deg, #f08a63 0%, #e0518a 60%, #d9418f 100%);
 }
-.sbs-out { margin: 8px 0 0; min-height: 1.5em; color: var(--accent-text); }
+/* two reserved lines at every width: the Open outcome lands here and nothing below moves (the Apple side keeps the same height) */
+.sbs-out { margin: 8px 0 0; min-height: 3.2em; line-height: 1.5; color: var(--accent-text); }
 
 /* faithful Notification Center alert, drawn at 1 css px = 1 pt of the 460-wide frame */
 .mac-alert {
@@ -40,7 +41,7 @@
 /* the Herald banner at the same position and width as the Apple alert */
 .herald-alert {
   position: absolute; left: 12.6%; top: 50%; transform: translateY(-50%); width: 74.8%;
-  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px 14px 12px; border-radius: 14px;
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px 16px 12px; border-radius: 14px;
   font-family: var(--font-sans); font-size: inherit;
 }
 .herald-alert .mac-title { color: var(--mb-ink); font-weight: 600; }

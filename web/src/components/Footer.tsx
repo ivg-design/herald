@@ -60,7 +60,7 @@ export default function Footer() {
       <div className="shell">
         <div className="g py-16 md:py-20">
           <div className="col-span-4 sm:col-span-6 lg:col-span-4">
-            <Image src={asset("/herald-icon.png")} alt="" width={36} height={36} className="rounded-[8px]" unoptimized />
+            <Image src={asset("/herald-icon.png")} alt="" width={36} height={36} unoptimized />
             <p className="m-0 mt-3 text-[17px] font-semibold">Herald</p>
             <p className="m-0 mt-3 max-w-[30ch] text-[14px] leading-[1.5] text-muted">{nowrapText("A notification service for macOS by IVG Design.")}</p>
           </div>

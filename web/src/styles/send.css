@@ -9,3 +9,6 @@
 .wave-bar { transform-origin: bottom; }
 .wave-on .wave-bar { animation: wave-bar 900ms var(--ease-quart) infinite; }
 @media (prefers-reduced-motion: reduce) { .wave-on .wave-bar { animation: none; } }
+
+/* Agents: the shared output stage under the tool list; sized for the render_preview figure (300 px image 124 + frame 18 + caption up to 2 lines 44) plus the cell's padding */
+.cell.tool-stage { min-height: 244px; padding: 32px 14px 14px; }

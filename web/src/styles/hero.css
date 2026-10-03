@@ -3,44 +3,52 @@
    only, inside a stage of reserved height, so a layout change never shifts anything on the page. */
 .hero { --hero-title-size: clamp(54px, min(9vw, 14.5vh), 124px); padding-block: clamp(14px, 2.4vh, 28px) clamp(36px, 6vh, 64px); }
 .hero[data-layout="compact"] { --hero-title-size: clamp(40px, min(6.9vw, 12vh), 100px); }
+/* Above 1440 the canvas widens to 82 % of the window and the headline takes the height the fixtures leave:
+   three lines (2.76 × the size) fill what is left of the first screen under the header, bar, ruler and the two lower rows. */
+@media (min-width: 1441px) {
+  .hero { --hero-title-size: max(124px, min(calc((100vh - 64px - 532px * var(--kf)) / 2.76), 13.2vw)); }
+  .hero[data-layout="compact"] { --hero-title-size: max(100px, calc(max(124px, min(calc((100vh - 64px - 532px * var(--kf)) / 2.76), 13.2vw)) * 0.8)); }
+}
 @media (min-width: 1024px) {
   .hero { min-height: calc(100dvh - 64px); display: flex; flex-direction: column; justify-content: flex-start; }
 }
-.hero-shell { width: 100%; }
+.hero .hero-shell { width: 100%; max-width: calc(max(var(--shell), 82vw) + 2 * var(--gutter)); }
 .hero-stage { position: relative; }
-@media (min-width: 1024px) { .hero-stage { padding-right: 22px; } }
+@media (min-width: 1024px) { .hero-stage { padding-right: calc(22px * var(--kf)); } }
 .hero-canvas { position: relative; max-width: 100%; }
-.hero-grid { grid-auto-rows: auto; align-items: stretch; --gap: 16px; }
+.hero-grid { grid-auto-rows: auto; align-items: stretch; --gap: calc(16px * var(--kf)); }
 @media (max-width: 639px) { .hero-grid, .hero-ruler { --gap: 12px; } }
 
 /* toolbar: the layout picker sits where the Designer's sits, above the canvas */
-.hero-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-bottom: clamp(12px, 2vh, 20px); }
-.hero-pick { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.hero-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-bottom: calc(clamp(12px, 2vh, 20px) * var(--kf)); }
+.hero-pick { display: inline-flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); border-radius: calc(10px * var(--kf)); padding: calc(3px * var(--kf)); }
 .hero-pick-btn {
-  display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border: 0; border-radius: 7px; background: transparent; color: var(--ink);
-  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.02em; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: calc(8px * var(--kf)); height: calc(38px * var(--kf)); padding: 0 calc(14px * var(--kf)); border: 0; border-radius: calc(7px * var(--kf)); background: transparent; color: var(--ink);
+  font-family: var(--font-mono); font-size: calc(13px * var(--kf)); letter-spacing: 0.02em; cursor: pointer; white-space: nowrap;
   transition: background-color var(--t-state) var(--ease-quint), color var(--t-state) var(--ease-quint), transform var(--t-press) var(--ease-quart);
 }
 .hero-pick-btn:hover { background: var(--surface); }
 .hero-pick-btn:active { transform: translateY(1px); }
 .hero-pick-btn[aria-pressed="true"] { background: #fff; color: var(--bp); }
-.hero-replay { color: var(--muted); margin-left: 6px; border-left: 1px solid var(--line); border-radius: 0 7px 7px 0; padding-left: 16px; }
+.hero-replay { color: var(--muted); margin-left: calc(6px * var(--kf)); border-left: 1px solid var(--line); border-radius: 0 calc(7px * var(--kf)) calc(7px * var(--kf)) 0; padding-left: calc(16px * var(--kf)); }
+.hero-pick-btn svg { width: calc(24px * var(--kf)); height: calc(16px * var(--kf)); }
+.hero .readout { font-size: calc(12px * var(--kf)); }
 @media (max-width: 639px) { .hero-pick-btn { padding: 0 9px; gap: 6px; font-size: 12px; height: 40px; } .hero-pick-btn svg { display: none; } }
 .hero-readout { margin: 0; margin-left: auto; color: var(--muted); }
 @media (min-width: 1024px) { .hero-readout::after { content: " · drag the right edge"; } }
 
 /* column ruler: one bracket per track with its width; the brackets move by transform as the grid is resized */
-.hero-ruler { position: relative; height: 22px; margin-bottom: 8px; }
-.hero-ruler > span { position: absolute; left: 0; top: 0; display: block; height: 22px; padding-top: 10px; font-family: var(--font-mono); font-size: 10.5px; line-height: 1; letter-spacing: 0.02em; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; }
-.hero-ruler > span::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 6px; border: 1px solid var(--line); border-bottom: 0; }
+.hero-ruler { position: relative; height: calc(22px * var(--kf)); margin-bottom: calc(8px * var(--kf)); }
+.hero-ruler > span { position: absolute; left: 0; top: 0; display: block; height: calc(22px * var(--kf)); padding-top: calc(10px * var(--kf)); font-family: var(--font-mono); font-size: calc(10.5px * var(--kf)); line-height: 1; letter-spacing: 0.02em; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; overflow: hidden; }
+.hero-ruler > span::before { content: ""; position: absolute; inset: 0 0 auto 0; height: calc(6px * var(--kf)); border: 1px solid var(--line); border-bottom: 0; }
 .hero-ruler > span:not([style]) { position: static; display: none; }
 
 /* cells (both the solver's and the visible ones) */
-.hero-grid > .cell, .hero-cell { padding: 30px 16px 16px; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; }
+.hero-grid > .cell, .hero-cell { padding: calc(30px * var(--kf)) calc(16px * var(--kf)) calc(16px * var(--kf)); min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; }
 .hero-grid > .cell > .hero-field, .hero-cell > .hero-field { width: 100%; }
-.hero .cell { border-style: dashed; border-color: var(--line); border-radius: 10px; }
-.hero .cell > .slot { opacity: 1; color: #e6effd; }
-.hero-c-image { min-height: 72px; }
+.hero .cell { border-style: dashed; border-color: var(--line); border-radius: calc(10px * var(--kf)); min-height: calc(48px * var(--kf)); }
+.hero .cell > .slot { opacity: 1; color: #e6effd; font-size: calc(11px * var(--kf)); top: calc(6px * var(--kf)); left: calc(8px * var(--kf)); }
+.hero .hero-c-image { min-height: calc(72px * var(--kf)); }
 
 /* the solver */
 .hero[data-ready="true"] .hero-ghost { visibility: hidden; pointer-events: none; }
@@ -119,14 +127,16 @@
 }
 
 /* fields */
-.hero-icon { display: block; width: min(100%, 104px); aspect-ratio: 1; border-radius: 22%; background: var(--bone); transition: width var(--t-layout) var(--ease-expo); }
-.hero[data-layout="imageLeft"] .hero-icon { width: min(100%, 220px); }
-.hero[data-layout="compact"] .hero-icon { width: min(100%, 52px); }
+.hero-icon { display: block; width: min(100%, calc(104px * var(--k))); aspect-ratio: 1; transition: width var(--t-layout) var(--ease-expo); }
+.hero[data-layout="imageLeft"] .hero-icon { width: min(100%, calc(220px * var(--k))); }
+.hero[data-layout="compact"] .hero-icon { width: min(100%, calc(52px * var(--kf))); }
 .hero-icon-img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* the ping sits on the app icon's red dot */
+.hero-icon .hb-logo-ping { left: 68.5%; top: 23.5%; width: 21%; margin: -10.5% 0 0 -10.5%; }
 @media (max-width: 639px) { .hero .hero-icon { width: 56px; } }
 
 .hero-c-time { container-type: inline-size; }
-.hero-time { display: block; font-family: var(--font-mono); font-size: clamp(14px, 27cqw, 30px); letter-spacing: 0.02em; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hero-time { display: block; font-family: var(--font-mono); font-size: clamp(14px, 27cqw, calc(30px * var(--kf))); letter-spacing: 0.02em; line-height: 1.1; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .hero .hero-title { font-size: calc(var(--hero-title-size) * var(--fit, 1)); font-weight: 800; font-variation-settings: "wdth" 100; white-space: nowrap; text-wrap: nowrap; }
 .hero-cell .hero-title { transition: font-variation-settings var(--t-layout) var(--ease-expo); }
@@ -137,19 +147,21 @@
 .hero-measure > .display { display: block; width: max-content; font-size: 100px; }
 .hero-size { display: block; font-size: var(--hero-title-size); }
 
-.hero .hero-lede { margin: 0; max-width: 58ch; color: var(--muted); }
+.hero .hero-lede { margin: 0; max-width: 58ch; color: var(--muted); font-size: calc(clamp(17px, 1.4vw, 20px) * var(--kf)); }
 
-.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
-.hero-status { margin: 0; min-height: 18px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: calc(10px * var(--kf)) calc(12px * var(--kf)); }
+.hero-actions .btn { height: calc(44px * var(--kf)); padding: 0 calc(20px * var(--kf)); border-radius: calc(10px * var(--kf)); font-size: calc(15px * var(--kf)); gap: calc(8px * var(--kf)); }
+.hero-actions .btn svg { width: calc(18px * var(--kf)); height: calc(18px * var(--kf)); }
+.hero-status { margin: 0; min-height: calc(18px * var(--kf)); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 @media (max-width: 639px) { .hero-actions .btn { max-width: 100%; } .hero-actions > .btn-primary { width: 100%; } }
 
 /* width handle (desktop) and range (touch) */
-.hero-handle { position: absolute; top: 30px; bottom: 0; left: -22px; width: 44px; cursor: ew-resize; touch-action: none; display: none; align-items: center; justify-content: center; }
+.hero-handle { position: absolute; top: calc(30px * var(--kf)); bottom: 0; left: calc(-22px * var(--kf)); width: calc(44px * var(--kf)); cursor: ew-resize; touch-action: none; display: none; align-items: center; justify-content: center; }
 @media (min-width: 1024px) { .hero-handle { display: flex; } }
 .hero-handle-bar { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: #fff; opacity: 0.55; transition: opacity var(--t-state) var(--ease-quint); }
-.hero-handle-grip { position: relative; width: 14px; height: 56px; border-radius: 7px; background: #fff; box-shadow: inset 5px 0 0 -4px var(--bp), inset -5px 0 0 -4px var(--bp); transition: transform var(--t-state) var(--ease-quint); }
-.hero-handle-grip::before { content: ""; position: absolute; left: 50%; top: 18px; bottom: 18px; width: 4px; margin-left: -2px; border-inline: 1px solid var(--bp); }
-.hero-handle-tag { position: absolute; top: calc(50% + 38px); left: 50%; transform: translateX(-50%); padding: 3px 6px; border-radius: 5px; background: #fff; color: var(--bp); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; white-space: nowrap; opacity: 0; transition: opacity var(--t-state) var(--ease-quint); }
+.hero-handle-grip { position: relative; width: calc(14px * var(--kf)); height: calc(56px * var(--kf)); border-radius: calc(7px * var(--kf)); background: #fff; box-shadow: inset 5px 0 0 -4px var(--bp), inset -5px 0 0 -4px var(--bp); transition: transform var(--t-state) var(--ease-quint); }
+.hero-handle-grip::before { content: ""; position: absolute; left: 50%; top: 32%; bottom: 32%; width: calc(4px * var(--kf)); margin-left: calc(-2px * var(--kf)); border-inline: 1px solid var(--bp); }
+.hero-handle-tag { position: absolute; top: calc(50% + 38px * var(--kf)); left: 50%; transform: translateX(-50%); padding: calc(3px * var(--kf)) calc(6px * var(--kf)); border-radius: calc(5px * var(--kf)); background: #fff; color: var(--bp); font-family: var(--font-mono); font-size: calc(11px * var(--kf)); letter-spacing: 0.02em; white-space: nowrap; opacity: 0; transition: opacity var(--t-state) var(--ease-quint); }
 .hero-handle:hover .hero-handle-bar, .hero-handle:focus-visible .hero-handle-bar, .hero[data-dragging="true"] .hero-handle-bar { opacity: 1; }
 .hero-handle:hover .hero-handle-grip, .hero[data-dragging="true"] .hero-handle-grip { transform: scaleY(1.12); }
 .hero-handle:hover .hero-handle-tag, .hero-handle:focus-visible .hero-handle-tag, .hero[data-dragging="true"] .hero-handle-tag { opacity: 1; }

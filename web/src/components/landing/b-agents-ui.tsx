@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
 import { Check } from "lucide-react";
 import { asset } from "@/lib/config";
@@ -44,7 +44,7 @@ export function McpMock() {
           </li>
         ))}
       </ul>
-      <p className="readout m-0 mt-3" role="status" aria-live="polite">
+      <p className="readout m-0 mt-3 min-h-[4.5em] leading-[1.5] sm:min-h-[3em]" role="status" aria-live="polite">
         {failed ? "Copy is not available in this browser." : copied ? "Copied the herald-mcp config." : "How to install opens the steps for that client in the docs. The app does the same in one click."}
       </p>
     </div>
@@ -65,8 +65,11 @@ const DEMOS: Record<string, Demo> = { "send_test / speak": "send", render_previe
 
 export function ToolList() {
   const herald = useHerald();
-  const [preview, setPreview] = useState(false);
-  const [state, setState] = useState(false);
+  /* One output stage under the list: the answer to "try" lands there, so no row grows. */
+  const [out, setOut] = useState<"preview" | "state" | null>(null);
+  const preview = out === "preview";
+  const state = out === "state";
+  const stageId = useId();
 
   const act = (d: Demo) => {
     if (d === "send") {
@@ -82,12 +85,12 @@ export function ToolList() {
         ],
         speak: true,
       });
-    } else if (d === "preview") setPreview((v) => !v);
-    else setState((v) => !v);
+    } else setOut((v) => (v === d ? null : d));
   };
 
   const readout = JSON.stringify({ onScreen: herald.onScreen, stacks: herald.pending, history: herald.history, snoozed: herald.snoozed }).replace(/,/g, ", ").replace(/:/g, ": ");
   return (
+    <>
     <ul className="mono m-0 mt-5 flex list-none flex-col border-t border-line p-0 text-[13px] leading-snug text-muted">
       {TOOLS.map(([name, desc]) => {
         const demo = DEMOS[name];
@@ -106,6 +109,7 @@ export function ToolList() {
                     className="tool-try btn btn-ghost btn-sm ml-3 shrink-0 !h-7 !px-3 !text-[13px]"
                     aria-label={`Try ${name}`}
                     aria-expanded={open}
+                    aria-controls={demo === "send" ? undefined : stageId}
                     onClick={() => act(demo)}
                   >
                     {open ? "hide" : "try"}
@@ -113,20 +117,26 @@ export function ToolList() {
                 )}
               </span>
             </div>
-            {demo === "preview" && preview && (
-              <figure className="m-0 ml-[26px] mt-3 max-w-[460px]">
-                <div className="overflow-hidden rounded-xl border border-line bg-bg p-2">
-                  <Image src={asset("/shots/banner-plain.png")} alt="Banner rendered by render_preview" width={920} height={406} unoptimized className="h-auto w-full" />
-                </div>
-                <figcaption className="readout mt-2">render_preview returns a PNG from the real renderer, no window</figcaption>
-              </figure>
-            )}
-            {demo === "state" && state && (
-              <p className="m-0 ml-[26px] mt-3 readout rounded-lg border border-line bg-surface px-3 py-2 text-ink" role="status" aria-live="polite" aria-label="Herald state readout">{readout}</p>
-            )}
           </li>
         );
       })}
     </ul>
+    {/* Reserved output stage: the tallest answer is the render_preview figure (about 190 px with its caption);
+        the state readout is shorter. A dashed cell like the page's other slots, so empty it reads as where the answer lands. */}
+    <div id={stageId} className="cell tool-stage mt-5" data-filled={out ? "true" : "false"}>
+      <span className="slot" aria-hidden>result</span>
+      {preview && (
+        <figure className="m-0 max-w-[300px]">
+          <div className="overflow-hidden rounded-xl border border-line bg-bg p-2">
+            <Image src={asset("/shots/banner-plain.png")} alt="Banner rendered by render_preview" width={920} height={406} unoptimized className="h-auto w-full" />
+          </div>
+          <figcaption className="readout mt-2">A PNG from the real renderer, no window.</figcaption>
+        </figure>
+      )}
+      {state && (
+        <p className="m-0 readout rounded-lg border border-line bg-surface px-3 py-2 text-ink" role="status" aria-live="polite" aria-label="Herald state readout">{readout}</p>
+      )}
+    </div>
+    </>
   );
 }

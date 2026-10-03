@@ -1,0 +1,7 @@
+/* Anchor landings: the title cell lands 16 px under the 64 px sticky header (html scroll-padding-top is 80 px), so a
+   section's own top padding is cancelled with a negative scroll-margin of the same clamp. Spacing is unchanged.
+   #designer is fitted in designer.css. */
+#why, #flow, #actions, #agents, #integrate, #changelog, #download { scroll-margin-top: calc(-1 * clamp(64px, 8vw, 112px)); }
+#living { scroll-margin-top: calc(-1 * clamp(64px, 8vw, 112px)); }
+#cloud { scroll-margin-top: calc(-0.5 * clamp(64px, 8vw, 112px)); } /* night.css halves its top padding */
+@media (max-width: 1023px) { #designer { scroll-margin-top: calc(-1 * clamp(64px, 8vw, 112px)); } }

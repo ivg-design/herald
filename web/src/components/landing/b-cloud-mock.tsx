@@ -9,7 +9,8 @@ export default function CloudMock() {
   const [run, setRun] = useState(0);
   return (
     <div className="w-full xl:min-w-[520px]">
-      <div className="min-h-[200px]">
+      {/* Reserved stage: the reply banner's tallest state (transcript line plus receipts, wrapped at 390 px). */}
+      <div className="hb-stage stage-cloud">
         <AnimatePresence>
           {shown && (
             <LiveBanner
@@ -21,14 +22,13 @@ export default function CloudMock() {
             />
           )}
         </AnimatePresence>
+        {!shown && (
+          <button type="button" className="btn btn-ghost btn-sm hb-stage-note" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
+            <History size={15} aria-hidden /> Re-show from History
+          </button>
+        )}
       </div>
-      {shown ? (
-        <p className="readout mt-3 mb-0">Type a reply or press Record. Nothing leaves this page.</p>
-      ) : (
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setRun((r) => r + 1); setShown(true); }}>
-          <History size={15} aria-hidden /> Re-show from History
-        </button>
-      )}
+      <p className={`readout mb-0 mt-3 min-h-[3em] leading-[1.5]${shown ? "" : " invisible"}`} aria-hidden={!shown}>Type a reply or press Record. Nothing leaves this page.</p>
     </div>
   );
 }

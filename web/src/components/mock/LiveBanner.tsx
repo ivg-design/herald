@@ -38,6 +38,7 @@ export default function LiveBanner({
   onSnoozeChange,
   speak,
   onToggleVoice,
+  fanMax = 3,
 }: {
   app: string;
   items: BItem[];
@@ -60,6 +61,8 @@ export default function LiveBanner({
   onToggleVoice?: () => void;
   /** Standalone banners: same meaning as HeraldSend.speak. `true` plays voice-sample, a string plays /audio/<string>.mp3. */
   speak?: boolean | string;
+  /** How many stacked items the fan shows; the rest collapse into a "+N more" line so the banner has a known tallest height. */
+  fanMax?: number;
 }) {
   const voiceKey = useId();
   const playingKey = usePlayingKey();
@@ -77,6 +80,12 @@ export default function LiveBanner({
   const [note, setNote] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  /** The fan clips only while its height animates, so a focus ring on a row's x is never cut. */
+  const [settled, setSettled] = useState(true);
+  const toggle = () => {
+    setSettled(false);
+    setExpanded((v) => !v);
+  };
   const listId = useId();
   const timers = useRef<number[]>([]);
   const later = (fn: () => void, ms: number) => {
@@ -98,6 +107,7 @@ export default function LiveBanner({
   const top = items[0];
   const count = items.length;
   const stacked = count > 1;
+  const rest = items.slice(1);
   const dur = reduce ? 0 : 0.32;
 
   const flash = (text: string, ms = 2600) => {
@@ -161,7 +171,7 @@ export default function LiveBanner({
   const send = () => {
     const v = text.trim();
     if (!v) return;
-    setSent(v);
+    setSent(v.length > 56 ? `${v.slice(0, 55)}…` : v);
     setText("");
     setHeard(null);
   };
@@ -201,14 +211,14 @@ export default function LiveBanner({
             <div className="flex items-start gap-2.5">
               <HeraldMark icon={icon} size={32} />
               {stacked ? (
-                <button type="button" className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
+                <button type="button" className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit" aria-expanded={expanded} aria-controls={listId} onClick={toggle}>
                   <Head app={app} title={top.title} speaking={speaking} status={status} />
                 </button>
               ) : (
                 <div className="min-w-0 flex-1"><Head app={app} title={top.title} speaking={speaking} status={status} /></div>
               )}
               {stacked && (
-                <button type="button" className="hb-chip" aria-label={`${count} banners in this stack`} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
+                <button type="button" className="hb-chip" aria-label={`${count} banners in this stack`} aria-expanded={expanded} aria-controls={listId} onClick={toggle}>
                   <motion.span
                     key={count}
                     initial={reduce ? false : { scale: 1.6 }}
@@ -222,7 +232,7 @@ export default function LiveBanner({
                 </button>
               )}
               {stacked && (
-                <button type="button" className="hb-chip hb-chip-chev" aria-label={expanded ? "Collapse stack" : "Expand stack"} aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)}>
+                <button type="button" className="hb-chip hb-chip-chev" aria-label={expanded ? "Collapse stack" : "Expand stack"} aria-expanded={expanded} aria-controls={listId} onClick={toggle}>
                   <ChevronDown aria-hidden size={14} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 200ms" }} />
                 </button>
               )}
@@ -241,19 +251,26 @@ export default function LiveBanner({
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: dur, ease: EASE.quint }}
-                  className="m-0 mt-2 list-none overflow-hidden p-0 pl-[42px]"
+                  onAnimationComplete={() => setSettled(true)}
+                  className="m-0 mt-2 list-none p-0 pl-[42px]"
+                  style={{ overflow: settled || reduce ? "visible" : "hidden" }}
                 >
-                  {items.slice(1).map((it) => (
-                    <li key={it.id} className="flex items-center gap-2 border-t py-1.5" style={{ borderColor: "var(--mb-line)" }}>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-medium">{it.title}</span>
-                        <span className="block truncate text-[11.5px]" style={{ color: "var(--mb-muted)" }}>{it.body}</span>
+                  {rest.slice(0, fanMax).map((it) => (
+                    <li key={it.id} className="flex items-center gap-2 border-t py-1" style={{ borderColor: "var(--mb-line)" }}>
+                      <span className="min-w-0 flex-1 truncate text-[13px]">
+                        <span className="font-medium">{it.title}</span>
+                        <span className="ml-2 text-[11.5px]" style={{ color: "var(--mb-muted)" }}>{it.body}</span>
                       </span>
-                      <button type="button" className="mb-x" aria-label={`Dismiss ${it.title}`} onClick={() => onDismissItem?.(it.id)}>
+                      <button type="button" className="mb-x shrink-0" aria-label={`Dismiss ${it.title}`} onClick={() => onDismissItem?.(it.id)}>
                         <X size={13} aria-hidden />
                       </button>
                     </li>
                   ))}
+                  {rest.length > fanMax && (
+                    <li className="border-t py-1.5 text-[12px]" style={{ borderColor: "var(--mb-line)", color: "var(--mb-muted)" }}>
+                      +{rest.length - fanMax} more, dismiss one to see the next
+                    </li>
+                  )}
                 </motion.ul>
               )}
             </AnimatePresence>

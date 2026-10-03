@@ -39,7 +39,7 @@ export default function SideBySide() {
           </div>
         </div>
         <p className="sbs-out readout" role="status" aria-live="polite" aria-label="Open outcome">
-          {opened ? "Opened the site. The banner stays, and focus stays where it was." : " "}
+          {opened ? "Opened the site. The banner stays and focus stays put." : " "}
         </p>
       </figure>
     </div>

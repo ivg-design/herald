@@ -46,21 +46,21 @@ export default function DesignerShowcase({ shots, head }: { shots: { light?: Sho
   };
 
   return (
-    <div ref={root} className="g">
+    <div ref={root} className="g dz">
       {head}
 
-      {both && (
-        <div className="dz-toggle col-span-full" role="group" aria-label="Screenshot appearance">
-          {(["dark", "light"] as const).map((m) => (
-            <button key={m} type="button" className="btn btn-ghost btn-sm" onClick={() => setMode(m)} aria-pressed={mode === m}>
-              {m === "dark" ? "Dark" : "Light"}
-            </button>
-          ))}
-        </div>
-      )}
-
       {dims && (
-        <div className="dz-frame col-span-full">
+        <div className="dz-stage col-span-full">
+        <div className="dz-frame">
+          {both && (
+            <div className="dz-toggle" role="group" aria-label="Screenshot appearance">
+              {(["dark", "light"] as const).map((m) => (
+                <button key={m} type="button" className="btn btn-ghost btn-sm" onClick={() => setMode(m)} aria-pressed={mode === m}>
+                  {m === "dark" ? "Dark" : "Light"}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="dz-clip">
             <Image
               src={asset(mode === "dark" && shots.dark ? "/designer-dark.png" : "/designer-light.png")}
@@ -102,6 +102,7 @@ export default function DesignerShowcase({ shots, head }: { shots: { light?: Sho
               <p>{activeSpot.body}</p>
             </div>
           )}
+        </div>
         </div>
       )}
 

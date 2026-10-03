@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { Download as DownloadIcon } from "lucide-react";
 import SiteLink from "@/components/SiteLink";
 import { nowrapText } from "@/lib/nowrap";
@@ -16,8 +15,6 @@ function isoDate(d: string): string {
   return /^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10) : d;
 }
 
-const CELL = { padding: "30px 16px 16px" } as const;
-
 function Slot({ name }: { name: string }) {
   return <span className="slot" aria-hidden>{name}</span>;
 }
@@ -26,13 +23,12 @@ export default function Download({ release }: { release: ReleaseInfo }) {
   return (
     <section id="download" className="section blueprint">
       <div className="shell g">
-        <div className="cell col-span-full sm:col-span-2 lg:col-span-2" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-icon" data-filled="false">
           <Slot name="icon" />
-          <span className="grid size-[88px] place-items-center rounded-[22px] bg-white">
-            <Image src={asset("/herald-logo.svg")} alt="" width={60} height={60} unoptimized />
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={asset("/herald-icon.png")} srcSet={`${asset("/herald-icon.png")} 512w, ${asset("/herald-icon-1024.webp")} 1024w`} sizes="(min-width: 1024px) 340px, (min-width: 640px) 26vw, 42vw" alt="" width={512} height={512} loading="lazy" />
         </div>
-        <div className="cell col-span-full min-w-0 sm:col-span-4 lg:col-span-10" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-title" data-filled="false">
           <Slot name="title" />
           <h2 className="display display-l">Ready when you are.</h2>
           <p className="body m-0 mt-5">
@@ -40,24 +36,24 @@ export default function Download({ release }: { release: ReleaseInfo }) {
           </p>
         </div>
 
-        <div className="cell col-span-full min-w-0 sm:col-span-3 lg:col-span-5" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-fill dl-version" data-filled="false">
           <Slot name="version" />
-          <p className="display m-0 text-[clamp(52px,7vw,104px)]" style={{ fontVariationSettings: '"wdth" 132', letterSpacing: "-0.04em" }}>{release.version}</p>
-          <p className="mono m-0 mt-3 text-muted">
+          <p className="display dl-num">{release.version}</p>
+          <p className="mono dl-cap">
             <span className="nowrap">build {release.build} · {isoDate(release.date)}</span>
           </p>
         </div>
-        <div className="cell col-span-full min-w-0 sm:col-span-3 lg:col-span-3" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-fill dl-size" data-filled="false">
           <Slot name="size" />
-          <p className="display display-m m-0">≈ {release.sizeMB} MB</p>
-          <p className="mono m-0 mt-3 text-muted">DMG</p>
+          <p className="display dl-num dl-num-size">≈ {release.sizeMB} MB</p>
+          <p className="mono dl-cap">DMG</p>
         </div>
-        <div className="cell col-span-full min-w-0 lg:col-span-4" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-fill dl-sha" data-filled="false">
           <Slot name="sha" />
           {release.sha256 ? <ShaCopy sha={release.sha256} href={release.shaUrl} /> : <span className="mono text-muted">SHA-256 is listed with the release.</span>}
         </div>
 
-        <div className="cell col-span-full min-w-0 lg:col-span-7" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-reqs" data-filled="false">
           <Slot name="requirements" />
           <ul className="m-0 list-none border-t border-line p-0 text-[15px]">
             {REQS.map((r) => (
@@ -65,15 +61,13 @@ export default function Download({ release }: { release: ReleaseInfo }) {
             ))}
           </ul>
         </div>
-        <div className="cell col-span-full min-w-0 lg:col-span-5" data-filled="false" style={CELL}>
+        <div className="cell dl-cell dl-actions" data-filled="false">
           <Slot name="actions" />
-          <SiteLink href={release.dmgUrl} className="btn btn-primary !h-[52px] max-w-full !px-5 !text-[16px]">
+          <SiteLink href={release.dmgUrl} className="btn btn-primary dl-dl">
             <DownloadIcon aria-hidden className="size-[18px] shrink-0" />
             Download for Mac · DMG · ≈ {release.sizeMB} MB
           </SiteLink>
-          <div className="mt-4">
-            <SiteLink href={RELEASES_URL} className="btn btn-ghost">All releases on GitHub</SiteLink>
-          </div>
+          <SiteLink href={RELEASES_URL} className="btn btn-ghost">All releases on GitHub</SiteLink>
         </div>
       </div>
     </section>

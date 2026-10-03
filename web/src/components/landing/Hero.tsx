@@ -31,7 +31,6 @@ const STRINGS = [...new Set([...L1, ...L2, ...L3])];
 /** Georama's width axis. */
 const AXIS = [62.5, 100, 150] as const;
 const MIN_W = 58;
-const GUTTER = 22;
 
 const clamp = (lo: number, hi: number, v: number) => Math.min(hi, Math.max(lo, v));
 const clock = () => {
@@ -113,6 +112,8 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
   const [reserve, setReserve] = useState(0);
   const [canvasW, setCanvasW] = useState(0);
   const [cols, setCols] = useState(12);
+  const [gap, setGap] = useState(16);
+  const [head, setHead] = useState(30);
   const [room, setRoom] = useState(0);
   const [size, setSize] = useState(0);
   const [table, setTable] = useState<Table | null>(null);
@@ -315,8 +316,11 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     const gh = Math.round(g.getBoundingClientRect().height);
     setGridH(gh);
     // The stage keeps the height of the tallest layout (hero, at full width) so nothing below it ever moves.
-    if (g.closest("section")?.getAttribute("data-layout") === "hero" && c.style.getPropertyValue("--tpl-w") === "100" && gh > 0) setReserve(gh);
+    const lineCount = gt?.querySelectorAll(".hero-title > span").length ?? 0;
+    if (g.closest("section")?.getAttribute("data-layout") === "hero" && c.style.getPropertyValue("--tpl-w") === "100" && gh > 0 && lineCount === 3) setReserve(gh);
     setCanvasW(Math.round(cr.width));
+    setGap(parseFloat(getComputedStyle(g).columnGap) || 16);
+    setHead(g.offsetTop);
     const w = window.innerWidth;
     setCols(w < 640 ? 4 : w < 1024 ? 6 : 12);
     if (gt) setRoom(Math.floor(gt.getBoundingClientRect().width) - 2);
@@ -344,7 +348,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     const s = stageRef.current;
     if (!s) return;
     const r = s.getBoundingClientRect();
-    const avail = Math.max(1, s.clientWidth - GUTTER);
+    const avail = Math.max(1, s.clientWidth - (parseFloat(getComputedStyle(s).paddingRight) || 0));
     setWidth(Math.round(clamp(MIN_W, 100, ((clientX - r.left) / avail) * 100)));
   };
   const onDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -371,7 +375,6 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
   const on = (s: Slot) => taken.includes(s);
   const rows = compact ? 2 : 3;
   const live = dragging || gliding;
-  const gap = cols === 4 ? 12 : 16;
   const colF = canvasW ? Math.max(0, (canvasW - gap * (cols - 1)) / cols) : 0;
   const stageH = Math.max(reserve, gridH);
   const lift = ready && stageH > gridH ? Math.round((stageH - gridH) / 2) : 0;
@@ -388,7 +391,15 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
         return (
           <span className="hb-logo hero-icon">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={asset("/herald-logo.svg")} alt={ghost ? "" : "Herald"} className="hero-icon-img" />
+            <img
+              src={asset("/herald-icon.png")}
+              srcSet={`${asset("/herald-icon.png")} 512w, ${asset("/herald-icon-1024.webp")} 1024w`}
+              sizes="(min-width: 1441px) 22vw, 220px"
+              alt={ghost ? "" : "Herald app icon"}
+              width={512}
+              height={512}
+              className="hero-icon-img"
+            />
             {!ghost && ring > 0 && <span key={ring} aria-hidden className="hb-logo-ping" />}
           </span>
         );
@@ -498,7 +509,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
           <div
             ref={canvasRef}
             className="hero-canvas"
-            style={{ ["--tpl-w" as string]: width, width: `calc(var(--tpl-w) * 1%)`, minHeight: reserve ? reserve + 30 : undefined }}
+            style={{ ["--tpl-w" as string]: width, width: `calc(var(--tpl-w) * 1%)`, minHeight: reserve ? reserve + head : undefined }}
           >
             {/* column tracks, as the Designer's ruler draws them */}
             <div className="hero-ruler" aria-hidden data-cols={cols}>

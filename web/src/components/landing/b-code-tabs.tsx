@@ -55,6 +55,10 @@ await new Herald().notify('ci.bot', 'Build passed', {
   },
 ];
 
+/** The longest snippet by line count sizes the block, so a tab switch never changes its height. */
+const TALLEST = TABS.reduce((a, t) => (t.code.split("\n").length > a.split("\n").length ? t.code : a), "");
+const MONO = { fontFamily: "var(--font-mono)", letterSpacing: "0.02em", color: "var(--bone)" } as const;
+
 export default function CodeTabs() {
   const [i, setI] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -99,7 +103,7 @@ export default function CodeTabs() {
     <div className="min-w-0">
       <div className="night overflow-hidden rounded-xl border border-line">
         <div className="flex items-center justify-between gap-2 border-b border-line px-2 py-2">
-          <div role="tablist" aria-label="Language" className="flex gap-1 overflow-x-auto" onKeyDown={onKey}>
+          <div role="tablist" aria-label="Language" className="-m-1.5 flex gap-1 overflow-x-auto p-1.5" onKeyDown={onKey}>
             {TABS.map((t, n) => (
               <button
                 key={t.id}
@@ -131,11 +135,15 @@ export default function CodeTabs() {
             </button>
           </div>
         </div>
-        {TABS.map((t, n) => (
-          <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={n !== i} tabIndex={0}>
-            <pre className="m-0 overflow-x-auto p-5 text-[13px] leading-[1.7]" style={{ fontFamily: "var(--font-mono)", letterSpacing: "0.02em", color: "var(--bone)" }}><code>{t.code}</code></pre>
-          </div>
-        ))}
+        <div className="grid grid-cols-[minmax(0,1fr)]">
+          {/* invisible sizer: the tallest snippet; the visible panel fills the same cell and scrolls sideways inside it */}
+          <pre aria-hidden className="invisible m-0 min-w-0 overflow-hidden p-5 text-[13px] leading-[1.7] [grid-area:1/1]" style={MONO}>{TALLEST}</pre>
+          {TABS.map((t, n) => (
+            <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={n !== i} tabIndex={0} className="relative min-w-0 [grid-area:1/1] focus-visible:outline-offset-[-3px]">
+              <pre className="absolute inset-0 m-0 overflow-x-auto overflow-y-hidden p-5 text-[13px] leading-[1.7]" style={MONO}><code>{t.code}</code></pre>
+            </div>
+          ))}
+        </div>
         <p className="sr-only" role="status" aria-live="polite">{copied ? "Copied to clipboard" : ""}</p>
       </div>
       <p className="readout m-0 mt-3 min-h-[1.5em]" role="status" aria-live="polite" aria-label="Run outcome">
