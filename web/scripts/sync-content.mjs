@@ -1,6 +1,6 @@
 // Copies the repo's Markdown (README, CHANGELOG, docs/**, clients/README) into web/content so the
 // site builds from web/ alone (Vercel root = web). Skips silently when the repo root is not above us.
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync, copyFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

@@ -45,9 +45,9 @@ export function StackMock() {
       <p className={`m-0 mt-3 ${SMALL}`}>
         <span className="sr-only">Stack counter shows 7 banners from the same issuer. </span>
         Group by:{" "}
-        <label className="mr-2"><input type="radio" disabled name="grp" className="mr-1 align-middle accent-[#1b6fb8]" />app</label>
-        <label className="mr-2"><input type="radio" disabled defaultChecked name="grp" className="mr-1 align-middle accent-[#1b6fb8]" />issuer</label>
-        <label className="mr-2"><input type="radio" disabled name="grp" className="mr-1 align-middle accent-[#1b6fb8]" />sender</label>
+        <label className="mr-2"><span aria-hidden className="mr-1 text-[#1b6fb8]">○</span>app</label>
+        <label className="mr-2"><span aria-hidden className="mr-1 text-[#1b6fb8]">◉</span>issuer</label>
+        <label className="mr-2"><span aria-hidden className="mr-1 text-[#1b6fb8]">○</span>sender</label>
         · click to expand
       </p>
     </div>
@@ -79,9 +79,9 @@ export function QuietMock() {
       <p className={`m-0 mt-1 sm:hidden ${SMALL}`}>voice muted, banners silent</p>
       <p className={`m-0 mt-3 ${SMALL}`}>
         Per app:{" "}
-        <label className="mr-2 inline-block"><input type="checkbox" disabled defaultChecked className="mr-1 align-middle accent-[#1b6fb8]" />mute sound</label>
-        <label className="mr-2 inline-block"><input type="checkbox" disabled defaultChecked className="mr-1 align-middle accent-[#1b6fb8]" />no voice</label>
-        <label className="inline-block"><input type="checkbox" disabled className="mr-1 align-middle accent-[#1b6fb8]" />hold banners until morning</label>
+        <label className="mr-2 inline-block"><span aria-hidden className="mr-1 text-[#1b6fb8]">☑</span>mute sound</label>
+        <label className="mr-2 inline-block"><span aria-hidden className="mr-1 text-[#1b6fb8]">☑</span>no voice</label>
+        <label className="inline-block"><span aria-hidden className="mr-1 text-[#1b6fb8]">☐</span>hold banners until morning</label>
       </p>
     </div>
   );

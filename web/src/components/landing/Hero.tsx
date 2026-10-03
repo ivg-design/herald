@@ -26,7 +26,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     <section
       id="top"
       className="section section-dark relative overflow-hidden"
-      style={{ paddingTop: "clamp(96px, 11vh, 132px)", paddingBottom: "clamp(56px, 8vh, 96px)" }}
+      style={{ paddingTop: "clamp(56px, 7vh, 88px)", paddingBottom: "clamp(56px, 8vh, 96px)" }}
     >
       <GhostGrid />
       <div className="shell relative grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_520px] lg:gap-8">

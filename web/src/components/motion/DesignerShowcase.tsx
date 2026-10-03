@@ -121,8 +121,8 @@ export default function DesignerShowcase({ hasShots }: { hasShots: { light: bool
         {none ? (
           <>
             <Placeholder dark={mode === "dark"} />
-            <p className="absolute inset-x-0 top-[9%] mx-auto max-w-[80%] text-center font-mono text-[10px] uppercase tracking-wide sm:text-xs" style={{ color: "var(--signal)" }}>
-              REAL DESIGNER SCREENSHOT GOES HERE (public/designer-light.png / designer-dark.png)
+            <p className="absolute bottom-[4%] left-1/2 w-max max-w-[88%] -translate-x-1/2 rounded-md px-3 py-1.5 text-center font-mono text-[10px] tracking-wide sm:text-xs" style={{ color: "var(--ink)", background: "var(--surface-2)", border: "1px solid var(--line)" }}>
+              PLACEHOLDER: real Designer screenshot goes here (public/designer-light.png, designer-dark.png)
             </p>
           </>
         ) : (
