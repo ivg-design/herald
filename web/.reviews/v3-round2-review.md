@@ -118,3 +118,61 @@ capture with Dark / Light, the drum (per-character 3D, each phrase in its own fa
 Deploy → Yes → outcome, quiet hours hold and release, the waveform (click-only, Kokoro mp3, no speechSynthesis
 anywhere in `src`), cloud reply and receipts, code tabs Run. No console errors. CLS 0.0001 on load.
 No "5 s" claim. Proper nouns do not wrap at any of the four widths. `scrollbar-gutter: stable` is set.
+
+---
+
+## After (same day, measured on the final build)
+
+Evidence: `t-*` (hero tour frames), `a-*` / `z-*` (sections at 1440 / 1280 / 834 / 390), `j-*` (interactions) in
+`web/.screenshots/r2/`.
+
+| Finding | Before | After |
+| --- | --- | --- |
+| B1 type shared with WebWatcher | Archivo 800, titles at wdth 68 | Georama (wdth 62.5–150); titles wide at wdth 132; hero bound to the cell, 143 at rest on 1440 |
+| B2 version | 1.6.4 / build 14 | 1.6.5 / build 15 in the hero button and Download; fallback carries the real size and digest; a live answer can no longer downgrade it; changelog content synced |
+| B3 hero needs a click | static until clicked | sent at 1.4 s, then tours imageLeft → compact → hero and the handle glides to 70 % and back, once; any input ends it. Measured CLS through load + tour + glide: 0.0001 (1440), 0.0001 (390), 0.007 (834, buttons re-wrapping inside the actions cell) |
+| M1 timid hero | navy on bone | blueprint ground (#1554c0), white wide headline at 124 px on three lines, column ruler with live track widths, layout picker with glyphs above the canvas, labelled grip |
+| M2 step-down | 124 → 102 px at 702 pt | size constant; the axis runs 143 → 62.5 across the whole drag range (suite asserts it) |
+| M3 compact empty | 70 px strip | one line across twelve columns at 99 px, second row icon / time / actions, centred in the reserved canvas |
+| M4 time overflow | clipped | sized from its cell (container query); asserted at the narrow end |
+| M5 Flow | three baselines, empty cells | one baseline, cells show `{title}` … `{action}`, hot cell fills, switch under the template |
+| M6 grid only in copy | plain heads | every section head is a `title` cell and a `body` cell; Download is the closing blueprint template (icon, title, version, size, sha, requirements, actions); changelog has a head and wide version numerals |
+| M7 1280 gutter | 12 px | fluid gutter, 41 px at 1280 |
+| M8 docs index | left 60 %, eyebrow | centred, no eyebrow |
+| M9 404 | Next's black page | the site's own, Day ground, header and footer |
+| M10 Cloud | small low card | banner is the figure in cols 7–12, ruled capability list in 1–6 |
+| M11 Rive piece | white card, green pill | night card, blue pill and button; rebuilt locally with `rive --once` |
+| m1 drum faces | two synthesised | mono at 400, "open the app." upright wide Georama |
+| m2 status wrap | wrapped | one line with ellipsis |
+| m3 Why on a phone | 3 371 px | 2 529 px, every row kept |
+| m4 agents list | typed in late | present at first paint |
+
+Not changed: m5 (PNG icon in header and footer: transparent, left as is), m6 (wallpaper gradients behind the real
+captures stay).
+
+Also changed: section rhythm tightened (`clamp(64px, 8vw, 112px)`); Changelog now precedes Download so the page
+ends on the blueprint band; banner primary buttons moved from `--blue` to `--blue-ink` and the Record button to a
+darker red (white text was 2.98:1 and 4.33:1); quiet-hours "now" label lightened on Night.
+
+### Numbers (final build)
+
+- Suite: 195 passed, 0 failed (was 164; 31 added for the tour, real-mouse drag, CLS, blueprint, section heads,
+  Flow baseline and tokens, version, 404, docs index, 1280 gutter).
+- ESLint: 0 errors, 4 warnings (unused helpers in `scripts/test-demos.mjs`, there before this round).
+- `next build`: clean, 68 static pages.
+- Lighthouse desktop: performance 99, accessibility 100, best practices 100, SEO 100; LCP 1.0 s, CLS 0, TBT 0 ms.
+- Lighthouse mobile: performance 90, accessibility 100, best practices 100, SEO 100; LCP 3.7 s, CLS 0, TBT 10 ms.
+
+### Still weak or unverified
+
+- Mobile LCP 3.7 s: the headline is the LCP element and waits for the Georama file. Not tuned this round.
+- 834: the tour costs 0.007 CLS (action buttons re-wrap when their cell narrows). Under the 0.01 the suite
+  allows, but not zero.
+- On a phone the hero is 1 046 px tall, so the Download button is below the first screen at 390 × 844.
+- 834 uses the phone ledger in Why rather than the table; readable, but a table would fit.
+- The blueprint blue and Georama are this reviewer's call; the owner has not seen them.
+- The Rive piece's small mark is a blue tile with two dots, not the real Herald mark.
+- Hotspots, waveform play and cloud Record were exercised headless only; audio output itself was not heard.
+- `/changelog` and docs article pages were looked at once after the type change (1440 and 390), not at 834 / 1280.
+- The drum's Georama phrase and the two long phrases at 390 were checked by the suite's overflow test, not by eye
+  in every phase of the flip.

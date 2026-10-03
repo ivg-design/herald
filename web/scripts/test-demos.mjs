@@ -28,6 +28,7 @@ page.on("console", (m) => {
   if (m.type() !== "error") return;
   const url = m.location()?.url || "";
   if (/favicon/i.test(url) || /favicon/i.test(m.text())) return;
+  if (/\/docs\/guides\/nope$/.test(url)) return; // the 404 the round-2 section asks for
   errors.push(`console: ${m.text()} ${url}`);
 });
 
@@ -103,8 +104,12 @@ await section("hero", async () => {
   // record the earliest hero state from inside the page (a MutationObserver installed before any script runs)
   const probe = await page.evaluateOnNewDocument(() => {
     window.__early = null;
+    window.__cls = 0;
+    window.__layouts = [];
+    new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true });
     const snap = () => {
       const t = document.querySelector("section#top"), o = document.querySelector("#herald-overlay");
+      if (t && window.__layouts[window.__layouts.length - 1] !== t.dataset.layout) window.__layouts.push(t.dataset.layout);
       if (!t || t.dataset.layout !== "hero" || window.__early) return;
       window.__early = { l: t.dataset.layout, d: t.dataset.done, bell: document.querySelector(".hb-bell")?.getAttribute("aria-label") || "", ov: o ? o.innerText : "", ovExists: !!o, dock: !!document.querySelector("#top .hd, [aria-label='Herald banners']"), t: performance.now() };
     };
@@ -113,6 +118,7 @@ await section("hero", async () => {
   });
   await page.goto(BASE + "/", { waitUntil: "load" });
   await page.removeScriptToEvaluateOnNewDocument(probe.identifier);
+  await page.mouse.move(2, 2);
   await waitFor(() => page.evaluate(() => !!window.__early), 5000, 20);
   const first = await page.evaluate(() => window.__early);
   ok(!!first, "hero: the load sequence is observable (section#top reaches data-layout=hero after hydration)");
@@ -125,8 +131,46 @@ await section("hero", async () => {
   ok(await waitFor(() => exists('#herald-overlay .hb-arrival[data-open="true"]'), 2000), "hero: auto-send shows one arrival card");
   ok((await page.$$eval('#herald-overlay .hb-arrival [aria-label$=" banner"]', (n) => n.length)) === 1, "hero: exactly one arrival banner card");
   ok(await has("#top [role=status]", "Sent"), "hero: status reads 'Sent' after the auto-send", await text("#top [role=status]"));
-  ok((await st()).l === "hero", "hero: the layout rests at hero (no unprompted re-layout)", JSON.stringify(await st()));
+  // round 2: the template tours its three layouts once, by transform only, then the handle glides; nothing shifts
+  const ptNow = async () => Number((/(\d+)\s*pt/.exec((await text(".hero-readout")).replace(/\u2007/g, "")) || [])[1] || 0);
+  const pt0 = await ptNow();
+  ok(await waitFor(async () => (await st()).l === "imageLeft", 4000, 50), "hero tour: the template moves to imageLeft by itself", JSON.stringify(await st()));
+  ok(await waitFor(async () => (await st()).l === "compact", 3000, 50), "hero tour: then to compact", JSON.stringify(await st()));
+  ok(await page.$eval("#top h1.hero-title", (e) => e.querySelectorAll("span").length === 1), "hero tour: in compact the headline is one line");
+  ok(await waitFor(async () => (await st()).l === "hero", 3000, 50), "hero tour: and back to hero", JSON.stringify(await st()));
+  ok(await waitFor(async () => (await ptNow()) < pt0 - 100, 4000, 30), "hero tour: the handle glides, the canvas narrows", `${pt0} -> ${await ptNow()}`);
+  ok(await waitFor(async () => (await ptNow()) === pt0, 4000, 50), "hero tour: the canvas comes back to full width", `${pt0} -> ${await ptNow()}`);
+  await sleep(400);
+  const tourEnd = await page.evaluate(() => ({ cls: +window.__cls.toFixed(4), layouts: window.__layouts }));
+  ok(tourEnd.layouts.join(">") === "hero>imageLeft>compact>hero", "hero tour: hero > imageLeft > compact > hero, once", tourEnd.layouts.join(">"));
+  ok(tourEnd.cls < 0.01, `hero tour: cumulative layout shift stays under 0.01 through load, tour and glide (${tourEnd.cls})`);
+  await sleep(1500);
+  ok((await st()).l === "hero" && (await page.evaluate(() => window.__layouts.length)) === 4, "hero tour: it does not loop", JSON.stringify(await st()));
+  ok((await page.$$eval("h1", (h) => h.length)) === 1, "hero: exactly one h1 in the document once the canvas is live");
+  ok(await page.$eval("#top h1.hero-title", (e) => e.querySelectorAll("span").length === 3), "hero: the headline is set on three lines in the hero layout");
+  ok(await page.$eval("#top", (e) => e.classList.contains("blueprint") && getComputedStyle(e).backgroundColor === "rgb(21, 84, 192)"), "hero: the canvas is on the blueprint ground");
+  const ruler = await page.$$eval("#top .hero-ruler > span", (s) => s.map((e) => e.textContent.trim()));
+  ok(ruler.length === 12 && ruler.every((x) => /^\d+$/.test(x)), "hero: the column ruler shows 12 track widths", ruler.join(","));
+  // a real pointer drag on the handle
+  const hb = await page.$eval(".hero-handle", (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const wdDrag0 = await page.$eval("#top h1.hero-title", (e) => parseFloat((e.style.fontVariationSettings.match(/"wdth"\s*([\d.]+)/) || [])[1]));
+  await page.mouse.move(hb.x, hb.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(hb.x - i * 40, hb.y); await sleep(20); }
+  await sleep(200);
+  const dragMid = { pt: await ptNow(), wd: await page.$eval("#top h1.hero-title", (e) => parseFloat((e.style.fontVariationSettings.match(/"wdth"\s*([\d.]+)/) || [])[1])), fs: await page.$eval("#top h1.hero-title", (e) => getComputedStyle(e).fontSize), ruler: await page.$eval("#top .hero-ruler > span", (e) => Number(e.textContent)) };
+  ok(dragMid.pt < pt0 - 300, "hero drag: dragging the handle with the mouse narrows the canvas", `${pt0} -> ${dragMid.pt}`);
+  ok(dragMid.wd < wdDrag0 && dragMid.wd >= 62.5, "hero drag: the headline condenses on the width axis instead of shrinking", `${wdDrag0} -> ${dragMid.wd}`);
+  ok(dragMid.fs === (await page.$eval(".hero-size", (e) => getComputedStyle(e).fontSize)), "hero drag: the headline keeps its size while it condenses", dragMid.fs);
+  ok(dragMid.ruler < Number(ruler[0]), "hero drag: the ruler follows the tracks", `${ruler[0]} -> ${dragMid.ruler}`);
+  const tcell = await page.evaluate(() => { const t = document.querySelector("#top .hero-live .hero-c-time"), x = t.querySelector(".hero-time"); const a = t.getBoundingClientRect(), b = x.getBoundingClientRect(); return { cell: Math.round(a.right), text: Math.round(b.left + x.scrollWidth) }; });
+  ok(tcell.text <= tcell.cell, "hero drag: the time stays inside its cell at the narrow end", JSON.stringify(tcell));
+  for (let i = 10; i >= -1; i--) { await page.mouse.move(hb.x - i * 40, hb.y); await sleep(15); }
+  await page.mouse.up();
+  await page.mouse.move(2, 2);
   await sleep(500);
+  ok((await ptNow()) === pt0, "hero drag: dragging back restores the full width", `${await ptNow()}`);
+  await sleep(300);
   await clickBtn("#top .hero-pick", "imageLeft");
   await sleep(700);
 
@@ -141,7 +185,7 @@ await section("hero", async () => {
   ok(["imageLeft", "hero", "compact", "Replay"].every((n) => btns.some((b) => b[0] === n)), "hero: layout buttons imageLeft / hero / compact and Replay", JSON.stringify(btns));
   ok(btns.find((b) => b[0] === "imageLeft")?.[1] === "true", "hero: imageLeft is aria-pressed once picked", JSON.stringify(btns));
   ok(await exists(".hero-handle[role=slider]"), "hero: width handle is a slider at 1440");
-  ok(/grid · 12 × 3 · \d+ pt/.test(await text(".hero-readout")), "hero: readout reads 'grid · 12 × 3 · N pt'", await text(".hero-readout"));
+  ok(/grid · 12 × 3 · \s*\d+ pt/.test(await text(".hero-readout")), "hero: readout reads 'grid · 12 × 3 · N pt'", await text(".hero-readout"));
 
   // layouts at 1440: wdth differs, compact removes the body
   const wd = () => page.$eval("#top h1.hero-title", (e) => Number((e.style.fontVariationSettings.match(/"wdth"\s*(\d+)/) || [])[1]));
@@ -155,8 +199,10 @@ await section("hero", async () => {
   ok(wHero !== wImg && wHero > 0 && wImg > 0, "hero: wdth differs between hero and imageLeft at 1440", `${wHero} vs ${wImg}`);
   await clickBtn("#top .hero-pick", "compact");
   await sleep(900);
-  ok(!(await exists("#top .hero-c-body")), "hero: compact removes the body cell");
-  ok(await has("#top .hero-readout", "12 × 1"), "hero: compact reads 12 × 1 at 1440", await text(".hero-readout"));
+  ok(!(await exists("#top .hero-ghost .hero-c-body")) && (await exists('#top .hero-live .hero-c-body[data-here="false"][inert]')), "hero: compact collapses the body cell (out of the grid, hidden and inert)");
+  ok(await has("#top .hero-readout", "12 × 2"), "hero: compact reads 12 × 2 at 1440", await text(".hero-readout"));
+  const cfill = await page.evaluate(() => { const h = document.querySelector("#top h1.hero-title"), c = h.closest(".cell"); return { spans: h.querySelectorAll("span").length, w: Math.round(h.querySelector("span").getBoundingClientRect().width), cell: Math.round(c.getBoundingClientRect().width) }; });
+  ok(cfill.spans === 1 && cfill.w > cfill.cell * 0.85, "hero: compact sets the headline on one line across the canvas", JSON.stringify(cfill));
   await clickBtn("#top .hero-pick", "imageLeft");
   await sleep(700);
 
@@ -187,7 +233,7 @@ await section("hero", async () => {
   await page.goto(BASE + "/", { waitUntil: "load" });
   await waitFor(async () => (await st()).d === "true", 6000, 100);
   await sleep(700);
-  const pt = async () => Number((/(\d+) pt/.exec(await text(".hero-readout")) || [])[1] || 0);
+  const pt = async () => Number((/(\d+)\s*pt/.exec((await text(".hero-readout")).replace(/\u2007/g, "")) || [])[1] || 0);
   const w0 = await pt(), wd0 = await wd();
   await page.focus(".hero-handle");
   for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowLeft");
@@ -500,7 +546,7 @@ await section("round2", async () => {
   await load("/", 1440, 900);
   ok((await page.$$eval(".eyebrow", (e) => e.length)) === 0, "v3: no .eyebrow elements on /");
   const ff = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
-  ok(/^["']?Archivo/i.test(ff), "v3: body font-family starts with Archivo", ff);
+  ok(/^["']?Georama/i.test(ff), "v3: body font-family starts with Georama (not WebWatcher's Archivo)", ff);
   ok((await page.$$eval(".section-dark, .section-paper", (e) => e.length)) === 0, "v3: no element with class section-dark / section-paper");
   // proper nouns never wrap
   for (const [w, h] of [[1440, 900], [834, 1100], [390, 844]]) {
@@ -580,6 +626,45 @@ await section("header", async () => {
   ok(m.sw <= 390, `mobile 390: no horizontal overflow (scrollWidth ${m.sw})`);
   ok(m.bell && m.burger, "mobile 390: header shows bell and hamburger", JSON.stringify(m));
   ok(m.links.length === 0 && !m.nav, "mobile 390: header shows nothing else (no GitHub, Download, nav)", JSON.stringify(m.links));
+});
+
+// ============ round 2 ============
+await section("round2", async () => {
+  await load("/", 1440, 900);
+  await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 700) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 30)); } window.scrollTo(0, 0); });
+  // type: wide titles
+  const titles = await page.$$eval("main section:not(#top):not(#download) .sec-head .display-l", (h) => h.map((e) => ({ t: e.innerText.slice(0, 24), v: getComputedStyle(e).fontVariationSettings })));
+  ok(titles.length === 9 && titles.every((t) => /"wdth" 132/.test(t.v)), "round2: nine section titles, all set wide (wdth 132)", JSON.stringify(titles));
+  const heads = await page.$$eval(".sec-head", (h) => h.map((e) => [...e.querySelectorAll(":scope > .cell > .slot")].map((s) => s.textContent)));
+  ok(heads.length === 9 && heads.every((s) => s[0] === "title"), "round2: every section head is a title field in a cell", JSON.stringify(heads));
+  // flow: three heads on one baseline
+  const fh = await page.$$eval("#flow article > h3", (h) => h.map((e) => Math.round(e.getBoundingClientRect().top)));
+  ok(fh.length === 3 && Math.max(...fh) - Math.min(...fh) <= 1, "round2 flow: manifest / template / banner heads share a baseline", fh.join(","));
+  const tokens = await page.$$eval("#flow article:nth-of-type(2) .cell", (c) => c.map((e) => e.innerText.replace(/\s+/g, " ").trim()));
+  ok(["{title}", "{status}", "{body}", "{log}", "{action}"].every((t) => tokens.some((x) => x.includes(t))), "round2 flow: template cells show the tokens they bind", tokens.join(" | "));
+  // version
+  const ver = await page.evaluate(() => ({ hero: document.querySelector("#top .hero-live .btn-primary")?.innerText || "", dl: document.querySelector("#download")?.innerText || "" }));
+  const vnum = (/(\d+)\.(\d+)\.(\d+)/.exec(ver.hero) || []).slice(1).map(Number);
+  ok(vnum.length === 3 && (vnum[0] * 1e6 + vnum[1] * 1e3 + vnum[2]) >= 1006005, "round2: the hero download button shows 1.6.5 or later", ver.hero);
+  ok(new RegExp(vnum.join("\\.")).test(ver.dl) && /build \d+/i.test(ver.dl), "round2: Download shows the same version and its build", ver.dl.slice(0, 160).replace(/\n/g, " "));
+  // download is the closing blueprint band
+  const dl = await page.evaluate(() => { const d = document.querySelector("#download"); return { bp: d.classList.contains("blueprint"), last: d === document.querySelector("main").lastElementChild, slots: [...d.querySelectorAll(".cell > .slot")].map((s) => s.textContent) }; });
+  ok(dl.bp && dl.last, "round2: Download is the closing blueprint band", JSON.stringify(dl));
+  ok(["icon", "title", "version", "size", "sha", "requirements", "actions"].every((x) => dl.slots.includes(x)), "round2: Download is laid out as the template (seven named cells)", dl.slots.join(","));
+  ok(await page.$eval("#changelog h2", (e) => e.innerText.trim().length > 0), "round2: the changelog preview has a title");
+  // gutters at 1280
+  await load("/", 1280, 800);
+  const gut = await page.$eval("#why .sec-head", (e) => Math.round(e.getBoundingClientRect().left));
+  ok(gut >= 32, `round2: the page keeps a gutter at 1280 (${gut} px)`);
+  // not-found
+  const res = await page.goto(BASE + "/docs/guides/nope", { waitUntil: "load" });
+  await sleep(600);
+  const nf = await page.evaluate(() => ({ h1: document.querySelector("h1")?.innerText || "", bg: getComputedStyle(document.body).backgroundColor, home: !!document.querySelector('header a[aria-label="Herald home"]') }));
+  ok(res.status() === 404 && /Nothing at this address/.test(nf.h1) && nf.bg !== "rgb(0, 0, 0)" && nf.home, "round2: unknown URLs get the site's own 404 on the Day ground", JSON.stringify(nf));
+  // docs index centred, no eyebrow
+  await load("/docs", 1440, 900);
+  const di = await page.evaluate(() => { const i = document.querySelector(".docs-index"), m = i.parentElement; const a = i.getBoundingClientRect(), b = m.getBoundingClientRect(); return { l: Math.round(a.left - b.left), r: Math.round(b.right - a.right), eyebrow: document.querySelectorAll(".eyebrow").length }; });
+  ok(Math.abs(di.l - di.r) <= 2 && di.eyebrow === 0, "round2 docs: the index is centred in its column and has no eyebrow", JSON.stringify(di));
 });
 
 // ============ errors ============

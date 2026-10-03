@@ -13,7 +13,7 @@
 
 /* template: a real 4 x 3 grid of Designer cells */
 .tgrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 8px; transition: grid-template-rows var(--t-layout) var(--ease-expo); }
-.tgrid > .gcell { min-width: 0; min-height: 0; overflow: hidden; display: flex; align-items: center; padding: 8px 0 0 10px; background: var(--surface); border-style: solid; outline: 1px solid transparent; outline-offset: -1px; transition: opacity var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), background-color var(--t-state) var(--ease-quint); }
+.tgrid > .gcell { min-width: 0; min-height: 0; overflow: hidden; display: flex; align-items: flex-end; padding: 0 0 9px 9px; background: var(--surface); border-style: solid; outline: 1px solid transparent; outline-offset: -1px; transition: opacity var(--t-state) var(--ease-quint), outline-color var(--t-state) var(--ease-quint), border-color var(--t-state) var(--ease-quint), background-color var(--t-state) var(--ease-quint); }
 .tgrid > .gcell[data-empty="true"] { border-style: dashed; background: transparent; }
 .tgrid > .gcell[data-hot="true"] { outline-color: var(--blue); background: var(--accent-soft); }
 .tgrid > .gcell.icell { align-items: flex-start; padding-top: 28px; }

@@ -163,7 +163,7 @@ export default function Flow() {
                 <div className="min-w-0 flex-1">
                   <motion.div layout transition={layoutT} className="flex items-center gap-2.5" style={{ minHeight: 32 }}>
                     <span className={`${s.bel} min-w-0 flex-1 truncate text-[15px] font-semibold`} {...hh("title")}>{isEmpty("title") ? (collapse ? "" : <Hold w={110} />) : "Build passed"}</span>
-                    {!isEmpty("status") ? <span className={`${s.bel} rounded-full px-2 py-px text-[10px] font-bold`} {...hh("status")} style={{ background: "var(--blue)", color: "#fff" }}>OK</span> : !collapse && <Hold w={28} />}
+                    {!isEmpty("status") ? <span className={`${s.bel} rounded-full px-2 py-px text-[10px] font-bold`} {...hh("status")} style={{ background: "var(--blue-ink)", color: "#fff" }}>OK</span> : !collapse && <Hold w={28} />}
                   </motion.div>
                   <Row show={!rowGone(1)} t={layoutT}>{isEmpty("body") ? <Hold w={180} h={16} /> : <p className={`${s.bel} m-0 mt-2 text-[13px]`} {...hh("body")} style={{ color: "var(--mb-muted)" }}>142 tests, 0 failures · main</p>}</Row>
                   <Row show={!rowGone(2)} t={layoutT}>

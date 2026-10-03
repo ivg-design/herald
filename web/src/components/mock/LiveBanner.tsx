@@ -320,7 +320,7 @@ export default function LiveBanner({
                   {RECEIPTS.map((r, i) => {
                     const lit = i < 3 || !!sent;
                     return (
-                      <span key={r} style={{ color: lit ? "var(--mb-ink)" : undefined, opacity: lit ? 1 : 0.55, transition: "opacity 300ms, color 300ms" }}>
+                      <span key={r} style={{ color: lit ? "var(--mb-ink)" : undefined, opacity: lit ? 1 : 0.85, transition: "opacity 300ms, color 300ms" }}>
                         {r}{i < 3 ? " · " : ""}
                       </span>
                     );

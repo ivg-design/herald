@@ -217,7 +217,7 @@ img { max-width: 100%; }
 
 /* Mini banner buttons (mocks) */
 .mini-btn { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; font-weight: 600; background: var(--surface-2); color: var(--ink); border: 0; }
-.mini-btn.is-primary { background: var(--blue); color: #fff; }
+.mini-btn.is-primary { background: var(--blue-ink); color: #fff; }
 
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
@@ -246,9 +246,9 @@ img { max-width: 100%; }
 .mb-btn:hover { background: color-mix(in srgb, var(--mb-btn) 78%, var(--mb-ink)); }
 .mb-btn:active { transform: translateY(1px); }
 .mb-btn:disabled { opacity: 0.45; cursor: default; }
-.mb-btn.is-primary { background: var(--blue); color: #fff; }
-.mb-btn.is-primary:hover { background: #5aaeef; }
-.mb-btn.is-danger { background: var(--red); color: #fff5f2; }
+.mb-btn.is-primary { background: var(--blue-ink); color: #fff; }
+.mb-btn.is-primary:hover { background: #2380cf; }
+.mb-btn.is-danger { background: #c9301a; color: #fff; }
 .mb-x { width: 28px; height: 28px; display: inline-grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--mb-muted); cursor: pointer; }
 .mb-x:hover { background: var(--mb-btn); color: var(--mb-ink); }
 .mb-input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--mb-line); background: var(--mb-field); color: var(--mb-ink); font: inherit; font-size: 13px; }

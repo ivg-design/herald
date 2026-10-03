@@ -15,7 +15,7 @@
 .qh-tick::before { content: ""; width: 1px; height: 6px; background: var(--line); }
 @media (max-width: 639px) { .qh-tick[data-minor] { display: none; } }
 .qh-now { position: absolute; top: 0; bottom: 30px; width: 1px; background: var(--red); transform: translateX(-0.5px); pointer-events: none; z-index: 1; }
-.qh-now span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: var(--red); }
+.qh-now span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: #ff7257; }
 .qh-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; appearance: none; background: transparent; pointer-events: none; }
 .qh-range::-webkit-slider-runnable-track { height: 100%; background: transparent; }
 .qh-range::-moz-range-track { height: 100%; background: transparent; }

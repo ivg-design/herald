@@ -20,7 +20,7 @@ export default function Integrate() {
           lede="Loopback HTTP + JSON on 127.0.0.1 with a bearer token Herald writes for you. Clients for Swift, Python and Node; a CLI for everything else."
         />
         <div className="col-span-full min-w-0 lg:col-span-8">
-          <h3 className="display display-m m-0 mb-5">Send from your language</h3>
+          <h3 className="display display-m !mb-5">Send from your language</h3>
           <CodeTabs />
         </div>
         <div className="col-span-full mt-6 min-w-0 lg:col-span-4 lg:col-start-9 lg:mt-0">

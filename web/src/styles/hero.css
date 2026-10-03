@@ -39,7 +39,7 @@
 .hero-grid > .cell, .hero-cell { padding: 30px 16px 16px; min-width: 0; display: flex; flex-direction: column; justify-content: flex-start; }
 .hero-grid > .cell > .hero-field, .hero-cell > .hero-field { width: 100%; }
 .hero .cell { border-style: dashed; border-color: var(--line); border-radius: 10px; }
-.hero .cell > .slot { opacity: 1; color: var(--muted); }
+.hero .cell > .slot { opacity: 1; color: #e6effd; }
 .hero-c-image { min-height: 72px; }
 
 /* the solver */
