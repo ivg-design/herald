@@ -251,7 +251,7 @@ revoke itself (`POST /revoke`, RFC 7009).
 | `GET /` | A small plain page: what this is, links to the `.well-known` documents and `/activate`. (`/health` is the JSON check.) |
 | `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`), `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code` (+ `device_code`). Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
 | `POST /revoke` | RFC 7009. |
-| `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
+| `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"\|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
 
 With several Macs paired to one relay (see [Several Macs](#several-macs)) the consent page names the Mac the approval goes to and links the
 others; `device=<n>` (1-based, in pairing order) chooses explicitly.
@@ -332,7 +332,7 @@ Besides the text, a cloud notification may set how it looks and sounds. All opti
 | `priority` | `low`, `normal`, `high`, `urgent` (urgent breaks quiet hours only if you allowed it). |
 | `group` | Notifications with the same group stack into one banner. |
 | `subtitle` | A second line. |
-| `icon` | The sender's icon for this key: an https image URL or a `data:image/png|jpeg|gif|webp;base64,...` image up to 256 KB. Your own icon (Settings) wins. |
+| `icon` | The sender's icon for this key: an https image URL or a `data:image/png\|jpeg\|gif\|webp;base64,...` image up to 256 KB. Your own icon (Settings) wins. |
 | `imageURL` | An https preview image. |
 | `tags` | Up to 10 short labels, stored with the notification for templates and search. |
 

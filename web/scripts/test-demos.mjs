@@ -556,12 +556,12 @@ await section("round2", async () => {
       ok(bad.length === 0, `nowrap: no proper noun / version / key combo breaks across lines at ${w} on ${path}`, bad.join(" | "));
     }
   }
-  // docs: solo grid without a rail, tables scroll inside the article
+  // docs: solo grid without a rail, tables fit the article (no horizontal scroll anywhere; see scripts/test-docs-hscroll.mjs)
   await load("/docs/getting-started/install", 1440, 900);
   ok(await page.$eval(".docs-grid", (g) => g.classList.contains("docs-grid--solo") && !document.querySelector(".docs-rail")), "docs: a page without headings drops the empty rail column");
   await load("/docs/reference/http-api", 1440, 900);
   const tbl = await page.evaluate(() => { const a = document.querySelector("#docs-main article, #docs-main").getBoundingClientRect(); return [...document.querySelectorAll(".docs-table")].map((t) => Math.round(t.getBoundingClientRect().right - a.right)); });
-  ok(tbl.length > 0 && tbl.every((d) => d <= 1), "docs: every wide table scrolls inside the article instead of overflowing it", tbl.join("/"));
+  ok(tbl.length > 0 && tbl.every((d) => d <= 1), "docs: every table fits inside the article (no scroller, no overflow)", tbl.join("/"));
   await load("/docs/reference/http-api", 390, 844);
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "docs 390: the API reference has no horizontal page overflow");
   ok(await page.evaluate(() => !!document.querySelector("html") && getComputedStyle(document.documentElement).scrollbarGutter.includes("stable")), "layout: html has scrollbar-gutter: stable (no shift when a scrollbar appears)");
@@ -626,6 +626,116 @@ await section("header", async () => {
   ok(m.sw <= 390, `mobile 390: no horizontal overflow (scrollWidth ${m.sw})`);
   ok(m.bell && m.burger, "mobile 390: header shows bell and hamburger", JSON.stringify(m));
   ok(m.links.length === 0 && !m.nav, "mobile 390: header shows nothing else (no GitHub, Download, nav)", JSON.stringify(m.links));
+});
+
+// ============ large monitors: only the hero scales ============
+await section("large", async () => {
+  const base = {};
+  for (const [w, h] of [[1440, 900], [1920, 1080], [2560, 1440], [2681, 1589], [3440, 1440]]) {
+    await page.setViewport({ width: w, height: h });
+    const probe = await page.evaluateOnNewDocument(() => { window.__cls = 0; new PerformanceObserver((l) => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__cls += e.value; }).observe({ type: "layout-shift", buffered: true }); });
+    await page.goto(BASE + "/", { waitUntil: "load" });
+    await page.removeScriptToEvaluateOnNewDocument(probe.identifier);
+    await page.mouse.move(2, 2);
+    await waitFor(() => page.$eval("#top", (e) => e.dataset.ready === "true"), 5000, 50);
+    await sleep(900);
+    const m = () => page.evaluate(() => {
+      const c = document.querySelector(".hero-canvas").getBoundingClientRect();
+      const cells = [...document.querySelectorAll('.hero-live .hero-cell[data-here="true"]')].map((e) => e.getBoundingClientRect());
+      const h1 = document.querySelector("#top h1"), cell = h1.closest(".cell").getBoundingClientRect();
+      const px = (sel, prop) => parseFloat(getComputedStyle(document.querySelector(sel))[prop]);
+      const hd = document.querySelector("header > .shell"), hs = getComputedStyle(hd);
+      return {
+        wShare: c.width / innerWidth, bottom: Math.max(...cells.map((r) => r.bottom)) / innerHeight, heroH: document.querySelector("#top").getBoundingClientRect().height + 64 - innerHeight,
+        over: document.documentElement.scrollWidth - document.documentElement.clientWidth, title: px("#top h1", "fontSize"), lede: px("#top .hero-live .hero-lede", "fontSize"), btn: px("#top .hero-live .btn-primary", "height"), slot: px("#top .hero-live .slot", "fontSize"),
+        inCell: Math.max(...[...h1.querySelectorAll("span")].map((s) => s.getBoundingClientRect().right)) <= cell.right + 1,
+        pt: Number((/(\d+)\s*pt/.exec(document.querySelector(".hero-readout").innerText.replace(/\u2007/g, "")) || [])[1]), cw: Math.round(c.width),
+        col: Number(document.querySelector(".hero-ruler span").textContent), gap: parseFloat(getComputedStyle(document.querySelector(".hero-ghost")).columnGap),
+        hdr: Math.round(hd.getBoundingClientRect().left + parseFloat(hs.paddingLeft)) - Math.round(c.left),
+        why: px("#why .display-l", "fontSize"), dl: px("#download .display-l", "fontSize"), nav: px("header nav a", "fontSize"), body: px("body", "fontSize"),
+      };
+    });
+    const r = await m();
+    if (w === 1440) Object.assign(base, r);
+    const tag = `large ${w}×${h}`;
+    ok(r.over <= 0, `${tag}: no horizontal overflow`, String(r.over));
+    ok(r.pt === r.cw && Math.abs(r.col - (r.cw - 11 * r.gap) / 12) <= 1, `${tag}: the readout and the ruler state the real canvas (${r.pt} pt, ${r.col} per column)`, JSON.stringify({ pt: r.pt, cw: r.cw, col: r.col }));
+    ok(r.inCell, `${tag}: the headline stays inside its cell`);
+    ok(Math.abs(r.heroH) <= 1, `${tag}: the hero is exactly the first screen`, String(r.heroH));
+    if (w > 1440) {
+      ok(r.wShare >= 0.78 && r.wShare <= 0.86, `${tag}: the canvas takes about 80 % of the window (${(r.wShare * 100).toFixed(1)} %)`);
+      ok(r.bottom >= 0.9 && r.bottom <= 1, `${tag}: the template reaches the bottom of the first screen (${(r.bottom * 100).toFixed(1)} %)`);
+      ok(r.title > base.title * 1.25, `${tag}: the headline grows (${base.title} → ${r.title.toFixed(0)} px)`);
+      ok(r.lede <= base.lede * 1.31 && r.btn <= base.btn * 1.31 && r.slot <= base.slot * 1.31 && r.lede >= base.lede, `${tag}: lede, buttons and labels grow by at most 1.3`, JSON.stringify({ lede: r.lede, btn: r.btn, slot: r.slot }));
+      ok(r.why <= 66 && r.dl <= 66 && r.nav === base.nav && r.body === base.body && (await page.evaluate(() => [...document.querySelectorAll("main > section:not(.hero), body > footer")].every((e) => (getComputedStyle(e).zoom || "1") === "1"))), `${tag}: nothing outside the hero is scaled`, JSON.stringify({ why: r.why, dl: r.dl, nav: r.nav, body: r.body }));
+      ok(Math.abs(r.hdr) <= 1, `${tag}: the header's content edge is the canvas's edge`, String(r.hdr));
+    } else {
+      ok(Math.abs(r.title - 124) < 0.5 && r.lede === 20 && r.btn === 44 && r.slot === 11 && r.cw === 1178, `${tag}: unchanged at 1440 (124 px headline, 1178 pt canvas, 44 px buttons)`, JSON.stringify({ t: r.title, l: r.lede, b: r.btn, s: r.slot, cw: r.cw }));
+    }
+    // the tour, then each layout by hand
+    ok(await waitFor(() => page.$eval("#top", (e) => e.dataset.layout === "compact"), 7000, 50), `${tag}: the tour still runs (reaches compact)`);
+    await waitFor(() => page.$eval("#top", (e) => e.dataset.layout === "hero"), 4000, 50);
+    await sleep(3600);
+    const cls = await page.evaluate(() => +window.__cls.toFixed(4));
+    ok(cls < 0.01, `${tag}: load, tour and glide shift nothing (CLS ${cls})`);
+    for (const l of ["imageLeft", "compact"]) {
+      await jsClick("#top .hero-pick", l);
+      await sleep(800);
+      const q = await m();
+      ok(q.inCell && q.over <= 0 && q.bottom <= 1.001 && q.bottom >= (l === "compact" ? 0.62 : 0.88), `${tag}: ${l} fits its cells and stays filled (bottom at ${(q.bottom * 100).toFixed(0)} %)`, JSON.stringify({ inCell: q.inCell, over: q.over }));
+    }
+  }
+  ok(await page.$eval("#top .hero-live .hero-icon-img", (e) => /herald-icon/.test(e.currentSrc) && !/\.svg/.test(e.currentSrc) && e.alt === "Herald app icon" && getComputedStyle(e.parentElement).backgroundColor === "rgba(0, 0, 0, 0)"), "hero: the icon cell shows the real app icon (PNG/WebP), with no tile behind it");
+  ok(await page.$eval("#top .hero-live .hero-icon-img", (e) => e.naturalWidth >= e.getBoundingClientRect().width), "hero: the icon source is at least as large as it is drawn at 3440");
+});
+
+// ============ demos never move the page ============
+await section("stable", async () => {
+  const IDS = ["why", "flow", "actions", "living", "cloud", "agents", "integrate"];
+  for (const [w, h] of [[1440, 900], [390, 844]]) {
+    await load("/", w, h);
+    await page.mouse.move(2, 2);
+    await page.keyboard.press("Escape");
+    await sleep(11500); // let the hero tour end so only the demo under test changes anything
+    for (const id of IDS) {
+      await scrollToSel("#" + id, "start");
+      const geo = () => page.evaluate((id) => { const s = document.getElementById(id); const n = s.nextElementSibling; return { h: Math.round(s.getBoundingClientRect().height), next: Math.round(n.getBoundingClientRect().top + scrollY), doc: document.documentElement.scrollHeight }; }, id);
+      const g0 = await geo();
+      let worst = 0, worstAt = "", clicks = 0;
+      const check = async (label) => { const g = await geo(); const d = Math.max(Math.abs(g.h - g0.h), Math.abs(g.next - g0.next), Math.abs(g.doc - g0.doc)); if (d > worst) { worst = d; worstAt = label; } };
+      if (id === "cloud") { const inp = await page.$("#cloud input"); if (inp) { await inp.type("Ship it, and tell me when it is live so I can check the page myself"); await check("typed reply"); } }
+      for (let pass = 0; pass < 3; pass++) {
+        const n = await page.$$eval(`#${id} button:not([disabled])`, (b) => b.length);
+        for (let i = 0; i < n; i++) {
+          const label = await page.evaluate((id, i) => { const b = [...document.querySelectorAll(`#${id} button:not([disabled])`)][i]; if (!b) return null; b.scrollIntoView({ block: "center", behavior: "instant" }); b.click(); return (b.getAttribute("aria-label") || b.innerText || "").trim().slice(0, 30); }, id, i);
+          if (label === null) break;
+          clicks++;
+          await sleep(120); await check(label + " (during)");
+          await sleep(650); await check(label);
+        }
+      }
+      await sleep(1500); await check("settled");
+      ok(worst <= 1, `stable ${w}: no click in #${id} changes its height, the next section's top or the document height (${clicks} clicks)`, `${worst} px at "${worstAt}"`);
+      await page.keyboard.press("Escape");
+    }
+    // focus rings: no clipping ancestor cuts the 5 px a ring needs around a banner button
+    const clipped = await page.evaluate(() => {
+      const bad = [];
+      for (const b of document.querySelectorAll("main .mb button, main .mb a, main .mb input")) {
+        const r = b.getBoundingClientRect();
+        if (!r.width || getComputedStyle(b).visibility === "hidden") continue;
+        for (let p = b.parentElement; p && p.tagName !== "SECTION"; p = p.parentElement) {
+          const cs = getComputedStyle(p);
+          if (!/(hidden|clip|auto|scroll)/.test(cs.overflowY + cs.overflowX)) continue;
+          const pr = p.getBoundingClientRect();
+          if (r.bottom + 5 > pr.bottom + 0.5 || r.top - 5 < pr.top - 0.5 || r.left - 5 < pr.left - 0.5 || r.right + 5 > pr.right + 0.5) bad.push(`${(b.innerText || b.getAttribute("aria-label") || b.tagName).trim().slice(0, 18)} in #${b.closest("section")?.id} by .${String(p.className).slice(0, 30)}`);
+          break;
+        }
+      }
+      return bad;
+    });
+    ok(clipped.length === 0, `stable ${w}: every banner control has room for its focus ring inside any clipping box`, clipped.slice(0, 6).join(" | "));
+  }
 });
 
 // ============ round 2 ============

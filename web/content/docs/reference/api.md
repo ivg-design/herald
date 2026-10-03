@@ -150,7 +150,7 @@ unless `template` supplies one.
 | `sound` | string | `default` (the app's), a system sound name (`Glass`), a file path, or `none`. |
 | `persistent`, `timeout` | bool, number | Stay until dismissed; `timeout` > 0 auto-dismisses after N seconds, hover pauses it. |
 | `priority` | string | `low`, `normal`, `high`, `urgent` (urgent breaks quiet hours only for apps that opted in). |
-| `buttons` | array (8, 64 KB) | `{label, style?, url|command|callback}`. `actions` is accepted as an alias (`buttons` wins when both are sent). An explicit `[]` means no buttons. |
+| `buttons` | array (8, 64 KB) | `{label, style?, url\|command\|callback}`. `actions` is accepted as an alias (`buttons` wins when both are sent). An explicit `[]` means no buttons. |
 | `actionIds` | array of string | Ids of actions the manifest declares, instead of repeating the buttons. |
 | `snooze` | bool | Adds the clock menu (5 min, 15 min, 1 h, Tomorrow 9:00). |
 | `reminder` | object | Adds Add to Reminders: `{title?, due?}` (ISO 8601). |

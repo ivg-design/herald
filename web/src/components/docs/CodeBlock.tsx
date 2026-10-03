@@ -58,7 +58,7 @@ export default function CodeBlock({ children, "data-raw": raw = "", "data-lang":
           {state === "copied" ? "Copied to clipboard" : state === "failed" ? "Copy failed" : ""}
         </span>
       </div>
-      <pre tabIndex={0}>{children}</pre>
+      <pre>{children}</pre>
     </div>
   );
 }

@@ -38,7 +38,7 @@ and how empty rows and columns collapse. Per-component sizing is on each compone
 | `priority` | string | none | `low`, `normal`, `high` (and `urgent`, see [quiet-hours.md](quiet-hours.md)). |
 | `reminder` | object | none | Default "Add to Reminders": `{title?, due?}`. |
 | `title`, `subtitle`, `body`, `image`, `url` | string | none | Default content with `{tokens}`, used when the payload leaves the field out. |
-| `buttons` | array | `[]` | Legacy default buttons `{label, style, url|command|callback}`. Prefer `actionRules`. A default button that runs a shell command is the template's own code and needs a one-time confirmation (the validator warns). |
+| `buttons` | array | `[]` | Legacy default buttons `{label, style, url\|command\|callback}`. Prefer `actionRules`. A default button that runs a shell command is the template's own code and needs a one-time confirmation (the validator warns). |
 | `layout`, `showSubtitle`, `showBody`, `showTimestamp`, `maxBodyLines` | v1 | | The v1 look flags. `maxBodyLines` also sets the default line limit of `body` text (default 8). |
 
 Templates are stored one file each at `~/Library/Application Support/Herald/templates/<app>/<name>.json`
