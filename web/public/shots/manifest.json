@@ -1,0 +1,58 @@
+{
+  "banner-confirm": {
+    "w": 920,
+    "h": 510
+  },
+  "banner-plain": {
+    "w": 920,
+    "h": 406
+  },
+  "banner-reply": {
+    "w": 920,
+    "h": 444
+  },
+  "designer-dark": {
+    "w": 2000,
+    "h": 1341
+  },
+  "designer-light": {
+    "w": 2000,
+    "h": 1341
+  },
+  "history": {
+    "w": 1800,
+    "h": 1365
+  },
+  "quick-send": {
+    "w": 1800,
+    "h": 1207
+  },
+  "settings-apps": {
+    "w": 1680,
+    "h": 1464
+  },
+  "settings-cloud": {
+    "w": 1680,
+    "h": 1464
+  },
+  "settings-general": {
+    "w": 1680,
+    "h": 1464
+  },
+  "settings-mcp": {
+    "w": 1680,
+    "h": 1464
+  },
+  "settings-quiet-hours": {
+    "w": 1680,
+    "h": 984
+  },
+  "settings-voice": {
+    "w": 1680,
+    "h": 1464
+  },
+  "symbol-browser": {
+    "w": 1800,
+    "h": 1293
+  }
+}
