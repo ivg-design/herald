@@ -12,7 +12,7 @@ import type { ReleaseInfo } from "@/lib/release";
 type Layout = "imageLeft" | "hero" | "compact";
 type Slot = "icon" | "title" | "time" | "body" | "actions";
 
-const LAYOUTS: Layout[] = ["imageLeft", "hero", "compact"];
+const LAYOUTS: Layout[] = ["hero", "imageLeft", "compact"];
 const ORDER: Slot[] = ["icon", "time", "title", "body", "actions"];
 const EASE = [0.16, 1, 0.3, 1] as const;
 const APP = { app: "herald.site", appName: "Herald · this page" };
@@ -35,7 +35,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
   const { ring } = h;
   const reduced = useReducedMotion();
 
-  const [layout, setLayout] = useState<Layout>("imageLeft");
+  const [layout, setLayout] = useState<Layout>("hero");
   const [taken, setTaken] = useState<Slot[]>(ORDER);
   const [done, setDone] = useState(false);
   const [sent, setSent] = useState("");
@@ -69,8 +69,10 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     setSent(held ? `Sent · held until ${h.heldUntil}` : stack ? `Sent · stacked with ${APP.appName} (${stack.items.length + 1})` : "Sent");
   };
   const runRef = useRef(run);
+  const compactRef = useRef(h.compact);
   useEffect(() => {
     runRef.current = run;
+    compactRef.current = h.compact;
   });
 
   const clear = useCallback(() => {
@@ -81,12 +83,13 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     timers.current.push(window.setTimeout(fn, ms));
   }, []);
 
-  /** The load sequence: cells only, fields take their cells, hero to imageLeft, then send once. */
+  /** The load sequence: cells only, fields take their cells, then the template is sent once. Layout changes are the
+   *  visitor's (an unprompted re-layout would be a layout shift for everyone who did not ask for it). */
   const play = useCallback(() => {
     clear();
     setSent("");
     if (reduced) {
-      setLayout("imageLeft");
+      setLayout("hero");
       setTaken(ORDER);
       setDone(true);
       return;
@@ -95,9 +98,12 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
     setLayout("hero");
     setTaken([]);
     ORDER.forEach((s, i) => at(400 + 90 * i, () => setTaken((t) => (t.includes(s) ? t : [...t, s]))));
-    at(1900, () => setLayout("imageLeft"));
-    at(2600, () => runRef.current());
-    at(2700, () => setDone(true));
+    // The template is sent once. On narrow screens the arrival card would cover the headline, so only the bell counts.
+    at(1900, () => {
+      runRef.current();
+      if (window.innerWidth < 1024) compactRef.current();
+    });
+    at(2000, () => setDone(true));
   }, [at, clear, reduced]);
 
   const started = useRef(false);

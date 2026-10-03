@@ -12,13 +12,13 @@ export default function CloudRelay() {
   return (
     <section id="cloud" className="section night">
       <div className="shell g">
-        <div className="col-span-full min-w-0 lg:col-span-7">
+        <div className="col-span-full min-w-0 lg:col-span-6">
           <h2 className="display display-l">Let your agent speak to you.</h2>
           <p className="lede">
             An agent running in the cloud, <span className="nowrap">ChatGPT</span>, <span className="nowrap">Codex</span>, <span className="nowrap">Claude</span>, can reach your Mac even when you&rsquo;re not looking at it. It sends a banner that reads itself aloud, asks you a question, and waits for your answer: typed, or spoken into the banner with one press.
           </p>
         </div>
-        <ul className="col-span-full m-0 mt-6 flex min-w-0 list-none flex-col gap-5 p-0 lg:col-span-6 lg:row-start-2 lg:mt-8 lg:self-center">
+        <ul className="col-span-full m-0 mt-6 flex min-w-0 list-none flex-col gap-5 p-0 lg:col-span-6 lg:row-start-2 lg:mt-8 lg:self-start">
           {POINTS.map(({ icon: Icon, text }) => (
             <li key={text} className="flex max-w-[56ch] gap-4 text-[16px] leading-snug">
               <Icon aria-hidden className="mt-0.5 size-[18px] shrink-0 text-blue" />
@@ -26,7 +26,7 @@ export default function CloudRelay() {
             </li>
           ))}
         </ul>
-        <div className="col-span-full mt-6 min-w-0 lg:col-span-6 lg:col-start-7 lg:row-start-2 lg:mt-8 lg:self-center"><CloudMock /></div>
+        <div className="col-span-full mt-6 min-w-0 lg:col-span-6 lg:col-start-7 lg:row-start-2 lg:mt-8 lg:self-start"><CloudMock /></div>
       </div>
     </section>
   );

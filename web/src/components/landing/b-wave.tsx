@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { getPlayback, loadWaveform } from "@/components/herald/voice";
 
 const BARS = 96;
-const H = 56;
+const H = 72;
 /** Static fallback silhouette (also the first paint), shaped like a spoken sentence. */
 const SEED = [0.3, 0.55, 0.4, 0.8, 1, 0.6, 0.35, 0.7, 0.9, 0.5, 0.65, 0.95, 0.45, 0.3, 0.75, 0.55, 0.85, 0.4, 0.6, 0.3, 0.5];
 export const WAVE = Array.from({ length: BARS }, (_, i) => SEED[i % SEED.length] * (0.6 + 0.4 * Math.abs(Math.sin(i * 0.37))));

@@ -117,7 +117,7 @@ export default function DocsShell({ tree, index, children }: { tree: NavGroup[];
         <div className={`docs-scrim ${drawer ? "is-open" : ""}`} onClick={closeDrawer} aria-hidden />
         <aside id="docs-sidebar" className={`docs-sidebar ${drawer ? "is-open" : ""}`} aria-label="Docs navigation">
           <div className="docs-sidebar-top lg:hidden">
-            <span className="text-[13px] font-semibold uppercase tracking-[0.14em] text-muted">Docs</span>
+            <span className="font-mono text-[12px] text-muted">docs</span>
             <button ref={closeBtn} type="button" className="docs-iconbtn" aria-label="Close docs navigation" onClick={closeDrawer}>
               <X size={18} />
             </button>

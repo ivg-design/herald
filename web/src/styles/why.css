@@ -5,7 +5,7 @@
 .sbs { display: grid; gap: 20px; min-width: 0; width: 100%; }
 @media (min-width: 640px) and (max-width: 1023px) { .sbs { grid-template-columns: 1fr 1fr; gap: 24px; } }
 .sbs-fig { margin: 0; min-width: 0; }
-.sbs-cap { display: block; margin-bottom: 10px; }
+.sbs-cap { display: block; margin-bottom: 10px; text-transform: lowercase; }
 .sbs-cap-herald { color: var(--accent-text); }
 .sbs-frame {
   display: block; position: relative; width: 100%; aspect-ratio: 920 / 406; border-radius: 12px; overflow: hidden; container-type: inline-size;
@@ -50,9 +50,9 @@
 .herald-now { flex: none; font-size: .92em; color: var(--mb-muted); }
 
 /* ledger: the page's 12 columns, hairline rows. label 1-2, Notification Center 3-7, Herald 8-12 */
-.ledger { margin-top: clamp(56px, 7vw, 96px); font-size: 15px; line-height: 1.5; }
+.ledger { margin-top: 64px; font-size: 15px; line-height: 1.5; }
 .ledger-row { border-top: 1px solid var(--line); padding-block: 16px; align-items: start; }
-.ledger-head .ledger-row { border-top: 0; padding-block: 0 12px; }
+.ledger-head .ledger-row { border-top: 0; padding-block: 0 12px; align-items: baseline; }
 .ledger-h { font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: .02em; text-transform: lowercase; color: var(--muted); }
 .ledger-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; color: var(--muted); padding-top: 3px; grid-column: 1 / -1; }
 .ledger-c-mac, .ledger-c-herald { min-width: 0; grid-column: 1 / -1; }
@@ -60,7 +60,6 @@
 .ledger-herald { color: var(--ink); font-weight: 500; }
 .ledger-head .ledger-c-herald, .ledger-herald { border-left: 1px solid var(--blue); padding-left: 14px; }
 .ledger-head .ledger-c-herald { color: var(--accent-text); }
-.ledger-head .sr-only + .ledger-c-mac { grid-column: 1 / -1; }
 @media (max-width: 1023px) {
   .ledger-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .ledger-label { padding-bottom: 6px; }

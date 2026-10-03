@@ -3,25 +3,27 @@
 
 .night .btn[aria-pressed="true"] { border-color: var(--blue); color: var(--blue); background: var(--accent-soft); }
 
-/* Quiet-hours clock: 24 h bar, 18:00 to 18:00. --tw is the handle width; positions are corrected so a handle's centre is its time. */
+/* Quiet-hours clock: 24 h bar, 18:00 to 18:00, drawn as night (the muted window) inside day. --tw is the handle hit width; positions are corrected so a handle's centre is its time. */
 .qh { --tw: 14px; position: relative; padding-top: 24px; }
-.qh-bar { position: relative; height: 56px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
-.qh-band { position: absolute; top: 0; bottom: 0; background: var(--blue); border-radius: 10px; transition: left var(--t-state) var(--ease-quint), width var(--t-state) var(--ease-quint); }
-.qh-band span { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--night); pointer-events: none; }
-.qh-band span:first-child { left: calc(var(--tw) + 6px); }
-.qh-band span:last-child { right: calc(var(--tw) + 6px); }
+.qh-bar { position: relative; height: 88px; border-radius: 10px; background: var(--night-2); }
+.qh-band { position: absolute; top: 0; bottom: 0; background: var(--night); border: 1px solid var(--blue); border-radius: 10px; box-sizing: border-box; transition: left var(--t-state) var(--ease-quint), width var(--t-state) var(--ease-quint); }
+.qh-band span { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.02em; color: var(--blue); pointer-events: none; }
+.qh-band span:first-child { left: calc(var(--tw) + 4px); }
+.qh-band span:last-child { right: calc(var(--tw) + 4px); }
 .qh-ticks { position: relative; height: 26px; margin-top: 4px; }
 .qh-tick { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em; color: var(--muted); }
 .qh-tick::before { content: ""; width: 1px; height: 6px; background: var(--line); }
-.qh-now { position: absolute; top: 0; bottom: 30px; width: 2px; background: var(--ink); transform: translateX(-1px); pointer-events: none; }
-.qh-now span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: var(--ink); }
+@media (max-width: 639px) { .qh-tick[data-minor] { display: none; } }
+.qh-now { position: absolute; top: 0; bottom: 30px; width: 1px; background: var(--red); transform: translateX(-0.5px); pointer-events: none; z-index: 1; }
+.qh-now span { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 4px; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: var(--red); }
 .qh-range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; appearance: none; background: transparent; pointer-events: none; }
 .qh-range::-webkit-slider-runnable-track { height: 100%; background: transparent; }
 .qh-range::-moz-range-track { height: 100%; background: transparent; }
-.qh-range::-webkit-slider-thumb { appearance: none; pointer-events: auto; width: var(--tw); height: 56px; margin-top: -1px; border-radius: 6px; border: 3px solid var(--blue); background: var(--bone); cursor: ew-resize; box-sizing: border-box; }
-.qh-range::-moz-range-thumb { pointer-events: auto; width: var(--tw); height: 56px; border-radius: 6px; border: 3px solid var(--blue); background: var(--bone); cursor: ew-resize; box-sizing: border-box; }
+/* 4 px blue bar centred in the 14 px hit area (transparent side borders + content-box clip) */
+.qh-range::-webkit-slider-thumb { appearance: none; pointer-events: auto; width: var(--tw); height: 88px; margin-top: 0; border: 0 solid transparent; border-inline-width: 5px; border-radius: 0; background: var(--blue); background-clip: content-box; cursor: ew-resize; box-sizing: border-box; }
+.qh-range::-moz-range-thumb { pointer-events: auto; width: var(--tw); height: 88px; border: 0 solid transparent; border-inline-width: 5px; border-radius: 0; background: var(--blue); background-clip: content-box; cursor: ew-resize; box-sizing: border-box; }
 .qh-range:focus-visible { outline: none; }
-.qh-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--bone); outline-offset: 2px; }
-.qh-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--bone); outline-offset: 2px; }
+.qh-range:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
+.qh-range:focus-visible::-moz-range-thumb { outline: 2px solid var(--ink); outline-offset: 2px; }
 .qh-checks label { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; font-size: 14px; color: var(--ink); cursor: pointer; }
 .qh-checks input { accent-color: var(--blue); width: 16px; height: 16px; }

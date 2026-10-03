@@ -6,7 +6,7 @@ export default function Why() {
     <section id="why" className="section why">
       <div className="shell">
         <div className="g items-start">
-          <div className="col-span-full min-w-0 lg:col-span-7">
+          <div className="col-span-full min-w-0 lg:col-span-7 lg:col-start-1">
             <h2 className="display display-l">
               You can&rsquo;t restyle a macOS notification, and you can&rsquo;t get one back. Herald fixes both.
             </h2>

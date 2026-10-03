@@ -20,6 +20,7 @@ const FIELDS: { k: Key; json: string; label: string }[] = [
 /** Which row each field's cell sits in, and which cells share it. */
 const ROWS: Key[][] = [["title", "status"], ["body"], ["log", "deploy"]];
 const ROW_PX = [56, 52, 52];
+const GAP = 8;
 
 export default function Flow() {
   const reduce = useReducedMotion();
@@ -37,6 +38,10 @@ export default function Flow() {
     });
   const isEmpty = (k: Key) => empty.has(k);
   const rowGone = (i: number) => collapse && ROWS[i].every(isEmpty);
+  const vis = [0, 1, 2].map((i) => !rowGone(i));
+  const g1 = vis[0] && vis[1] ? GAP : 0;
+  const g2 = vis[2] && (vis[0] || vis[1]) ? GAP : 0;
+  const trackRows = [vis[0] ? ROW_PX[0] : 0, g1, vis[1] ? ROW_PX[1] : 0, g2, vis[2] ? ROW_PX[2] : 0].map((n) => `${n}px`).join(" ");
   const collapsedRows = ROWS.map((r, i) => (rowGone(i) ? i + 1 : 0)).filter(Boolean);
   const summary = empty.size === 0
     ? "Nothing is empty: all three rows are drawn."
@@ -87,26 +92,8 @@ export default function Flow() {
             An app registers a manifest once: the fields it can send, sample values, the actions it offers. You lay those fields out in the Designer. Every notification from then on is rendered through your template.
           </p>
 
-          <div role="group" aria-label="When a field is empty" className="col-span-full mt-6 flex flex-wrap items-center gap-3 text-[13px] text-muted">
-            When a field is empty:
-            <span className="inline-flex rounded-lg border border-line p-0.5">
-              {[true, false].map((v) => (
-                <button
-                  key={String(v)}
-                  type="button"
-                  aria-pressed={collapse === v}
-                  onClick={() => setCollapse(v)}
-                  className="h-9 cursor-pointer rounded-md px-3 text-[13px] font-medium"
-                  style={{ background: collapse === v ? "var(--surface-2)" : "transparent", color: collapse === v ? "var(--ink)" : "var(--muted)", transition: "background-color var(--t-state) var(--ease-quint)" }}
-                >
-                  {v ? "collapse" : "keep space"}
-                </button>
-              ))}
-            </span>
-          </div>
-
           {/* manifest */}
-          <article className="col-span-full min-w-0 lg:col-span-4">
+          <article className="col-span-full min-w-0 lg:col-span-4 lg:col-start-1 lg:mt-8">
             <h3 className={s.head}>manifest</h3>
             <div className={s.json}>
               <div className="text-muted">{"{ \"app\": \"ci.bot\","}</div>
@@ -132,18 +119,38 @@ export default function Flow() {
 
           {/* template */}
           <article className="col-span-full min-w-0 lg:col-span-4">
-            <h3 className={s.head}>template · 4 × 3</h3>
+            <div className={s.headrow}>
+              <h3 className={s.headt}>template · 4 × 3</h3>
+              <div role="group" aria-label="When a field is empty" className={s.sw}>
+                <span>when a field is empty:</span>
+                <span className="inline-flex rounded-md border border-line p-0.5">
+                  {[true, false].map((v) => (
+                    <button
+                      key={String(v)}
+                      type="button"
+                      aria-pressed={collapse === v}
+                      onClick={() => setCollapse(v)}
+                      className="h-7 cursor-pointer rounded px-2.5 text-[12px] font-medium"
+                      style={{ background: collapse === v ? "var(--surface-2)" : "transparent", color: collapse === v ? "var(--ink)" : "var(--muted)", transition: "background-color var(--t-state) var(--ease-quint)" }}
+                    >
+                      {v ? "collapse" : "keep space"}
+                    </button>
+                  ))}
+                </span>
+              </div>
+            </div>
             <div
               className={s.tgrid}
-              style={{ gridTemplateRows: ROW_PX.map((h, i) => `${rowGone(i) ? 0 : h}px`).join(" "), transition: reduce ? "none" : undefined }}
+              style={{ gridTemplateRows: trackRows, transition: reduce ? "none" : undefined }}
             >
-              <div className={`cell ${s.gcell}`} style={{ gridArea: "1 / 1 / 4 / 2" }}><span className="slot">icon</span></div>
+              <div className={`cell ${s.gcell}`} style={{ gridArea: "1 / 1 / 6 / 2" }}><span className="slot">icon</span></div>
               <Cell hh={hh("title")} area="1 / 2 / 2 / 4" name="title" empty={isEmpty("title")} />
               <Cell hh={hh("status")} area="1 / 4 / 2 / 5" name="status" empty={isEmpty("status")} />
-              <Cell hh={hh("body")} area="2 / 2 / 3 / 5" name="body" empty={isEmpty("body")} gone={rowGone(1)} />
-              <Cell hh={hh("log")} area="3 / 2 / 4 / 4" name="log" empty={isEmpty("log")} gone={rowGone(2)} />
-              <Cell hh={hh("deploy")} area="3 / 4 / 4 / 5" name="action" empty={isEmpty("deploy")} gone={rowGone(2)} />
+              <Cell hh={hh("body")} area="3 / 2 / 4 / 5" name="body" empty={isEmpty("body")} gone={rowGone(1)} />
+              <Cell hh={hh("log")} area="5 / 2 / 6 / 4" name="log" empty={isEmpty("log")} gone={rowGone(2)} />
+              <Cell hh={hh("deploy")} area="5 / 4 / 6 / 5" name="action" empty={isEmpty("deploy")} gone={rowGone(2)} />
             </div>
+            <p className="readout m-0 mt-3" role="status" aria-live="polite">{summary}</p>
           </article>
 
           {/* banner */}
@@ -155,7 +162,7 @@ export default function Flow() {
                 <div className="min-w-0 flex-1">
                   <motion.div layout transition={layoutT} className="flex items-center gap-2.5" style={{ minHeight: 32 }}>
                     <span className={`${s.bel} min-w-0 flex-1 truncate text-[15px] font-semibold`} {...hh("title")}>{isEmpty("title") ? (collapse ? "" : <Hold w={110} />) : "Build passed"}</span>
-                    {!isEmpty("status") ? <span className={`${s.bel} rounded-full px-2 py-px text-[10px] font-bold`} {...hh("status")} style={{ background: "#2fbf71", color: "#0b1530" }}>OK</span> : !collapse && <Hold w={28} />}
+                    {!isEmpty("status") ? <span className={`${s.bel} rounded-full px-2 py-px text-[10px] font-bold`} {...hh("status")} style={{ background: "var(--blue)", color: "#fff" }}>OK</span> : !collapse && <Hold w={28} />}
                   </motion.div>
                   <Row show={!rowGone(1)} t={layoutT}>{isEmpty("body") ? <Hold w={180} h={16} /> : <p className={`${s.bel} m-0 mt-2 text-[13px]`} {...hh("body")} style={{ color: "var(--mb-muted)" }}>142 tests, 0 failures · main</p>}</Row>
                   <Row show={!rowGone(2)} t={layoutT}>
@@ -174,7 +181,6 @@ export default function Flow() {
             </div>
           </article>
 
-          <p className="readout col-span-full m-0" role="status" aria-live="polite">{summary}</p>
           <p className="readout col-span-full m-0 min-h-[1.5em]" style={{ color: "var(--accent-text)" }} role="status" aria-live="polite" aria-label="Send test outcome">{sent && sent.sig === sig ? sent.msg : ""}</p>
         </div>
       </div>

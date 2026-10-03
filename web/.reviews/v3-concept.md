@@ -24,11 +24,11 @@ real Download button and the docs link into `actions`. The labels fade as their 
     Notifications you'd actually design.
 
 The headline is set in Archivo, a grotesk with a width axis, and the width axis is bound to the cell: the words
-expand or condense to fit the cell they are in. At 1.9 s the template switches once, from `hero` to
-`imageLeft`: every field moves to its new cell (FLIP, nothing fades), and the headline condenses from wide to
-normal as its cell narrows. Then it rests. At 2.6 s the template is sent: a banner with the same fields slides
-in under the bell at Mac size, the bell counts 1, and the poster's Send button reads "Sent". The thing you were
-looking at was a notification.
+expand or condense to fit the cell they are in. At 1.9 s the template is sent: a banner with the same fields
+slides in under the bell at Mac size, the bell counts 1, and the poster's Send button reads "Sent". The thing
+you were looking at was a notification. (As first built the template also switched layout by itself at 1.9 s;
+that moved every cell for a visitor who had not asked, measured as a 0.38 layout shift, so the re-layout is now
+only the visitor's.)
 
 Then it is yours. Three real Herald layouts (`imageLeft`, `hero`, `compact`) sit where the Designer's layout
 picker sits; click one and the fields move. `compact` collapses `body` (an empty field that collapses) and the
@@ -104,9 +104,8 @@ waveform moves only while a sample plays).
 
 Four motion pieces, each with a reason:
 
-1. **The template (time-driven, once, 2.6 s):** empty grid 0–400 ms; fields take cells from 400 ms at 90 ms
-   stagger; layout `hero` → `imageLeft` at 1.9 s (FLIP + width-axis re-fit); auto Send at 2.6 s (arrival under
-   the bell, bell rings, counter 1). Replay in the layout picker. Reduced motion: end state at t = 0, no auto
+1. **The template (time-driven, once, 1.9 s):** empty grid 0–400 ms; fields take cells from 400 ms at 90 ms
+   stagger; auto Send at 1.9 s (arrival under the bell above 1024 px, bell rings, counter 1). Replay in the layout picker. Reduced motion: end state at t = 0, no auto
    send.
 2. **Layout and width (answers to the user):** the three layouts FLIP the fields; the handle (or the Width
    slider on touch) reflows the grid and re-fits the headline on every frame of the drag; Send stacks the

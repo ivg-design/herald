@@ -10,7 +10,7 @@ export default function DocsIndex() {
   return (
     <div className="docs-index">
       <p className="eyebrow">Documentation</p>
-      <h1 className="display docs-h1">Design it, send it, <em>wire it up.</em></h1>
+      <h1 className="display docs-h1">Design it, send it, wire it up.</h1>
       <p className="docs-lead">
         Install Herald, send a banner from a terminal, then lay it out on the grid. Every page here is rendered from the Markdown in the repository.
       </p>

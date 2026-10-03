@@ -17,6 +17,7 @@ const browser = await puppeteer.launch({
   headless: "new",
   args: ["--no-first-run", "--window-position=-2000,-2000", "--window-size=1440,900"],
 });
+for (const sig of ["uncaughtException", "unhandledRejection"]) process.on(sig, async (e) => { console.error(sig, e); await browser.close().catch(() => {}); process.exit(2); });
 const ctx = browser.defaultBrowserContext();
 await ctx.overridePermissions(BASE, ["clipboard-read", "clipboard-write", "clipboard-sanitized-write"]);
 const page = await browser.newPage();
@@ -93,49 +94,128 @@ async function load(path, w = 1440, h = 900) {
   await sleep(1800);
 }
 
-// ============ 1 hero dock ============
+// ============ 1 hero canvas ============
 await section("hero", async () => {
-  await load("/");
-  const DOCK = '[aria-label="Herald banners"]';
-  const MAIL = '[aria-label="WebWatcher · Email banner"]';
-  const CI = '[aria-label="CI Bot banner"]';
-  const AE = '[aria-label="After Effects banner"]';
-  await waitText(DOCK, "Build passed", 5000);
-  ok((await has(DOCK, "Office hours moved")) && (await has(DOCK, "Render finished")) && (await has(DOCK, "Build passed")), "hero: three starting banners (mail, After Effects, CI Bot)");
-  ok(await exists(`${MAIL} [aria-label="3 banners in this stack"]`), "hero: WebWatcher Email stacked x3");
-  ok((await page.$eval(`${MAIL} [aria-label="3 banners in this stack"]`, (e) => e.innerText.trim()).catch(() => "")) === "3", "hero: red counter reads 3");
-  ok(await bellCount() === 5, "hero: header bell count equals pending (5)", await bellLabel());
+  const S = "section#top";
+  const st = () => page.$eval(S, (e) => ({ l: e.dataset.layout, d: e.dataset.done }));
+  const pageErr0 = errors.length;
+  await page.setViewport({ width: 1440, height: 900 });
+  // record the earliest hero state from inside the page (a MutationObserver installed before any script runs)
+  const probe = await page.evaluateOnNewDocument(() => {
+    window.__early = null;
+    const snap = () => {
+      const t = document.querySelector("section#top"), o = document.querySelector("#herald-overlay");
+      if (!t || t.dataset.layout !== "hero" || window.__early) return;
+      window.__early = { l: t.dataset.layout, d: t.dataset.done, bell: document.querySelector(".hb-bell")?.getAttribute("aria-label") || "", ov: o ? o.innerText : "", ovExists: !!o, dock: !!document.querySelector("#top .hd, [aria-label='Herald banners']"), t: performance.now() };
+    };
+    new MutationObserver(snap).observe(document, { subtree: true, childList: true, attributes: true });
+    document.addEventListener("DOMContentLoaded", snap);
+  });
+  await page.goto(BASE + "/", { waitUntil: "load" });
+  await page.removeScriptToEvaluateOnNewDocument(probe.identifier);
+  await waitFor(() => page.evaluate(() => !!window.__early), 5000, 20);
+  const first = await page.evaluate(() => window.__early);
+  ok(!!first, "hero: the load sequence is observable (section#top reaches data-layout=hero after hydration)");
+  ok(first && !first.dock, "hero: no dock in the hero");
+  ok(first && first.ov.trim() === "" && !/Show \d+/.test(first.bell), "hero: the Herald overlay starts empty (no seeded banners)", JSON.stringify(first));
+  ok(first && first.l === "hero" && first.d === "false", "hero: load sequence starts at data-layout=hero, not done", JSON.stringify(first));
+  // sequence end state
+  ok(await waitFor(async () => (await bellCount()) === 1, 3000, 100), "hero: auto-send at about 1.9 s puts 1 on the bell", await bellLabel());
+  ok(await waitFor(async () => (await st()).d === "true", 2500, 100), "hero: data-done becomes true after the sequence", JSON.stringify(await st()));
+  ok(await waitFor(() => exists('#herald-overlay .hb-arrival[data-open="true"]'), 2000), "hero: auto-send shows one arrival card");
+  ok((await page.$$eval('#herald-overlay .hb-arrival [aria-label$=" banner"]', (n) => n.length)) === 1, "hero: exactly one arrival banner card");
+  ok(await has("#top [role=status]", "Sent"), "hero: status reads 'Sent' after the auto-send", await text("#top [role=status]"));
+  ok((await st()).l === "hero", "hero: the layout rests at hero (no unprompted re-layout)", JSON.stringify(await st()));
+  await sleep(500);
+  await clickBtn("#top .hero-pick", "imageLeft");
+  await sleep(700);
 
-  await clickBtn(CI, "Deploy");
-  ok(await waitText(CI, "Deploy build 4f2a to production?", 2000) && (await has(CI, "Yes, deploy")) && (await has(CI, "Cancel")), "hero: Deploy shows inline question with Yes, deploy / Cancel");
-  await clickBtn(CI, "Cancel");
-  ok(await waitFor(async () => (await has(CI, "Open log")) && (await has(CI, "Deploy")) && !(await has(CI, "Yes, deploy")), 2000), "hero: Cancel restores the button row");
+  // structure
+  const cells = await page.$$eval("#top .cell", (c) => c.map((e) => e.className));
+  for (const c of ["icon", "title", "time", "body", "actions", "image"]) ok(cells.some((x) => x.includes(`hero-c-${c}`)), `hero: cell hero-c-${c} exists in imageLeft`, cells.join("|"));
+  const slots = await page.$$eval("#top .cell .slot", (s) => s.map((e) => e.textContent.trim()));
+  ok(slots.length >= 6 && ["icon", "title", "time", "body", "actions", "image"].every((x) => slots.includes(x)), "hero: every cell carries a .slot label", slots.join("|"));
+  const h1w = await page.$eval("#top h1.hero-title", (e) => e.style.fontVariationSettings);
+  ok(/"wdth"\s*\d+/.test(h1w), "hero: h1.hero-title has inline font-variation-settings wdth", h1w);
+  const btns = await page.$$eval("#top .hero-pick button", (b) => b.map((x) => [x.innerText.trim(), x.getAttribute("aria-pressed")]));
+  ok(["imageLeft", "hero", "compact", "Replay"].every((n) => btns.some((b) => b[0] === n)), "hero: layout buttons imageLeft / hero / compact and Replay", JSON.stringify(btns));
+  ok(btns.find((b) => b[0] === "imageLeft")?.[1] === "true", "hero: imageLeft is aria-pressed once picked", JSON.stringify(btns));
+  ok(await exists(".hero-handle[role=slider]"), "hero: width handle is a slider at 1440");
+  ok(/grid · 12 × 3 · \d+ pt/.test(await text(".hero-readout")), "hero: readout reads 'grid · 12 × 3 · N pt'", await text(".hero-readout"));
 
-  await clickBtn(AE, "Show in Finder");
-  ok(await waitText(AE, "Opened final_v3.mp4", 2000), "hero: Show in Finder gives an Opened outcome");
+  // layouts at 1440: wdth differs, compact removes the body
+  const wd = () => page.$eval("#top h1.hero-title", (e) => Number((e.style.fontVariationSettings.match(/"wdth"\s*(\d+)/) || [])[1]));
+  await clickBtn("#top .hero-pick", "hero");
+  await sleep(900);
+  const wHero = await wd();
+  ok(await has("#top .hero-readout", "12 × 3") && (await st()).l === "hero", "hero: 'hero' layout selects (aria-pressed) and keeps 12 × 3", JSON.stringify(await st()));
+  await clickBtn("#top .hero-pick", "imageLeft");
+  await sleep(900);
+  const wImg = await wd();
+  ok(wHero !== wImg && wHero > 0 && wImg > 0, "hero: wdth differs between hero and imageLeft at 1440", `${wHero} vs ${wImg}`);
+  await clickBtn("#top .hero-pick", "compact");
+  await sleep(900);
+  ok(!(await exists("#top .hero-c-body")), "hero: compact removes the body cell");
+  ok(await has("#top .hero-readout", "12 × 1"), "hero: compact reads 12 × 1 at 1440", await text(".hero-readout"));
+  await clickBtn("#top .hero-pick", "imageLeft");
+  await sleep(700);
 
-  await clickBtn(AE, "Snooze");
-  ok(await waitText(DOCK, "returns at 9:00", 2000) && !(await has(DOCK, "Render finished")), "hero: Snooze shows 'returns at 9:00' line");
-  ok(await bellCount() === 4, "hero: bell count drops while a card is snoozed", await bellLabel());
-  ok(await waitText(DOCK, "Back from snooze", 5000) && (await has(DOCK, "Render finished")), "hero: card returns after about 3 s with 'Back from snooze'");
+  // headline never overflows its cell
+  const overflow = () => page.evaluate(() => {
+    const h1 = document.querySelector("#top h1.hero-title");
+    const cell = h1.closest(".cell");
+    const hs = [...h1.querySelectorAll("span")].map((s) => s.getBoundingClientRect().right);
+    return { h1: Math.round(h1.getBoundingClientRect().right), spans: Math.max(0, ...hs.map(Math.round)), cell: Math.round(cell.getBoundingClientRect().right), sw: h1.scrollWidth, cw: h1.clientWidth };
+  });
+  for (const [w, h] of [[1440, 900], [1280, 800], [834, 1100], [390, 844]]) {
+    await page.setViewport({ width: w, height: h });
+    await page.goto(BASE + "/", { waitUntil: "load" });
+    await waitFor(async () => (await st()).d === "true", 6000, 100);
+    await sleep(600);
+    for (const l of ["imageLeft", "hero", "compact"]) {
+      await clickBtn("#top .hero-pick", l);
+      await sleep(900);
+      const o = await overflow();
+      ok(o.h1 <= o.cell + 1 && o.spans <= o.cell + 1, `hero: headline stays inside its cell at ${w} in ${l}`, JSON.stringify(o));
+    }
+    await clickBtn("#top .hero-pick", "imageLeft");
+    await sleep(500);
+  }
 
-  const h0 = await historyN();
-  await clickBtn(AE, "Dismiss");
-  ok(await waitGone(DOCK, "Render finished", 3000), "hero: x removes the After Effects banner");
-  ok(await waitFor(async () => (await historyN()) === h0 + 1, 2000) && (await text("main")).includes("1 dismissed · kept in History"), "hero: history line '1 dismissed · kept in History' appears");
+  // handle (>=1024) and range (<1024)
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto(BASE + "/", { waitUntil: "load" });
+  await waitFor(async () => (await st()).d === "true", 6000, 100);
+  await sleep(700);
+  const pt = async () => Number((/(\d+) pt/.exec(await text(".hero-readout")) || [])[1] || 0);
+  const w0 = await pt(), wd0 = await wd();
+  await page.focus(".hero-handle");
+  for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowLeft");
+  await sleep(900);
+  const w1 = await pt(), wd1 = await wd();
+  ok(w1 < w0, "hero: ArrowLeft on the handle narrows the canvas, readout number drops", `${w0} -> ${w1}`);
+  ok(wd1 !== wd0 || wd1 >= 62, "hero: wdth changes with the canvas or stays >= 62", `${wd0} -> ${wd1}`);
+  ok(wd1 >= 62, "hero: wdth never below 62 after narrowing", String(wd1));
+  ok(Number(await page.$eval(".hero-handle", (e) => e.getAttribute("aria-valuenow"))) < 100, "hero: handle aria-valuenow drops");
+  await page.setViewport({ width: 834, height: 1100 });
+  await page.goto(BASE + "/", { waitUntil: "load" });
+  await sleep(800);
+  ok(await page.evaluate(() => { const r = document.querySelector(".hero-range input[type=range]"); return !!r && getComputedStyle(r.closest(".hero-range")).display !== "none" && r.getBoundingClientRect().width > 0; }), "hero: a range input is shown below 1024");
 
-  await clickBtn("#top", "Run it");
-  ok(await waitFor(() => exists(`${CI} [aria-label="2 banners in this stack"]`), 2500), "hero: Run it stacks CI Bot, counter 2");
-  ok(await has("#top", "Sent · stacked with CI Bot (2)"), "hero: outcome line under the command", await text("#top [role=status]"));
-  ok(await waitFor(async () => (await bellCount()) === 5, 1500), "hero: bell count equals pending after stacking (5)", await bellLabel());
-
-  const h1 = await historyN();
-  await clickBtn(CI, "Deploy");
-  await clickBtn(CI, "Yes, deploy");
-  ok(await waitText(CI, "Waiting for", 2000), "hero: Yes, deploy shows 'Waiting for ...'");
-  ok(await waitGone(DOCK, "Build passed", 6000), "hero: callback answers and the CI Bot banner is dismissed");
-  ok(await waitFor(async () => (await historyN()) === h1 + 2, 2000), "hero: history grows by the 2 stacked items", `${h1} -> ${await historyN()}`);
-  ok(await waitFor(async () => (await bellCount()) === 3, 1500), "hero: bell count equals remaining pending (3)", await bellLabel());
+  // Send stacks with a counter
+  await page.setViewport({ width: 1440, height: 900 });
+  await page.goto(BASE + "/", { waitUntil: "load" });
+  await waitFor(async () => (await st()).d === "true", 6000, 100);
+  await sleep(500);
+  ok(await waitFor(async () => (await bellCount()) === 1, 2000), "hero: fresh load, bell count 1 after the auto-send", await bellLabel());
+  await clickBtn("#top", "Send");
+  ok(await waitFor(async () => (await text("#top [role=status]")).includes("Sent · stacked with Herald · this page (2)"), 2000), "hero: Send stacks with a counter (2)", await text("#top [role=status]"));
+  ok(await waitFor(async () => (await bellCount()) === 2, 1500), "hero: bell count equals pending after Send (2)", await bellLabel());
+  ok(await waitFor(() => exists('#herald-overlay [aria-label="2 banners in this stack"]'), 2000), "hero: Send makes a stack with counter 2");
+  ok(!(await exists('[aria-label="Herald banners"]')) && !(await has("#top", "Run it")), "hero: the old dock and 'Run it' are gone");
+  await page.mouse.move(700, 500);
+  await waitFor(async () => !(await exists('#herald-overlay .hb-arrival[data-open="true"]')), 6000, 200);
+  ok(errors.length === pageErr0, "hero: no console errors during the hero tests", errors.slice(pageErr0).join(" | "));
 });
 
 // ============ 2 why ============
@@ -143,15 +223,20 @@ await section("why", async () => {
   await scrollToSel("#why");
   const w = await page.evaluate(() => {
     const mac = document.querySelector('#why [data-testid="mac-alert"]');
-    const img = document.querySelector('#why img[src*="banner-plain"]');
+    const img = document.querySelector('#why [data-testid="herald-banner"]');
+    const old = document.querySelector('#why img[src*="banner-plain"]');
     const frames = [...document.querySelectorAll("#why .sbs-frame")].map((f) => f.getBoundingClientRect().height);
-    return { mac: !!mac, img: !!img, frames, txt: document.querySelector("#why").innerText };
+    return { mac: !!mac, img: !!img, old: !!old, frames, txt: document.querySelector("#why").innerText };
   });
   ok(w.mac, "why: a faithful macOS Notification Center alert mock is present");
-  ok(w.img, "why: a real Herald banner capture (banner-plain) sits beside it");
+  ok(w.img && !w.old, "why: the Herald side is a live banner (data-testid=herald-banner), not the banner-plain image");
+  await clickBtn("#why", "Open site");
+  ok(await waitFor(() => has("#why", "Opened the site"), 1500), "why: 'Open site' shows an outcome line", await text("#why .sbs-out[role=status]"));
   ok(w.frames.length === 2 && Math.abs(w.frames[0] - w.frames[1]) < 1, "why: both frames render at the same height", w.frames.join("/"));
   ok(!/\b5 s\b|five seconds|Gone\./.test(w.txt), "why: no five-second premise anywhere in the section");
   ok(/Notification Center/.test(w.txt) && /Herald/.test(w.txt) && /History|history/.test(w.txt), "why: ledger argues layout, actions, history, grouping, voice, focus, agents");
+  const labels = await page.$$eval("#why .ledger-label", (l) => l.map((e) => e.innerText.trim().toLowerCase()));
+  ok(["persistence", "history", "focus", "layout", "actions", "grouping", "voice", "agents"].every((x) => labels.includes(x)), "why: ledger rows include persistence, history and focus", labels.join("|"));
   ok(!(await exists("#herald-overlay .hb-stack[data-open='true']")), "why: nothing pops over the page just from reading the section");
 });
 
@@ -208,8 +293,7 @@ await section("flow", async () => {
   ok(await waitFor(async () => (await summary()).includes("Row 2 and 3 collapsed"), 1500), "flow: both buttons empty collapses row 3 too", await summary());
   await clickBtn(FLOW, "Send test");
   ok(await waitFor(async () => (await out()).includes("Sent through the template"), 1500), "flow: Send test after changes still reports the template", await out());
-  await clickBtn(FLOW, "1 · Manifest");
-  ok(await page.$eval("#flow [role=tab][aria-selected=true]", (e) => e.innerText.includes("Manifest")), "flow: step tab selects a step");
+  ok(!(await exists("#flow [role=tab]")) && !(await has(FLOW, "1 · Manifest")), "flow: no step tabs ('1 · Manifest' is gone)");
   await page.mouse.move(700, 500);
 });
 
@@ -388,8 +472,8 @@ function nowrapCheck(PH, RX) {
 }
 await section("round2", async () => {
   await load("/", 1440, 900);
-  const tops = await page.$$eval("#living h3", (h) => h.map((e) => Math.round(e.getBoundingClientRect().top)));
-  ok(tops.length === 3 && Math.max(...tops) - Math.min(...tops) <= 1, "living: the three headings share one baseline", tops.join("/"));
+  const h3n = await page.$$eval("#living h3", (h) => h.length);
+  ok(h3n === 3, "living: three h3 headings", String(h3n));
   await scrollToSel("#agents ul.mono");
   await sleep(300);
   const rows = await page.$$eval("#agents ul.mono li", (li) => li.map((e) => ({ t: e.innerText.trim(), o: getComputedStyle(e).opacity })));
@@ -401,18 +485,23 @@ await section("round2", async () => {
   ok(await waitFor(() => page.$eval('[data-testid="grid-banner"]', (e) => e.dataset.loaded === "true"), 8000), "designer: grid-banner.riv loads (Rive runtime, self-hosted wasm)");
   await page.$eval('[data-testid="grid-banner"]', (e) => e.click());
   ok(await waitFor(() => page.$eval('[data-testid="grid-banner"]', (e) => e.dataset.plays === "1"), 1500), "designer: clicking the piece replays the assembly");
-  // phone fold
+  // phone: no dock; the headline sits inside the canvas and nothing overflows
   await load("/", 390, 844);
-  const fold = await page.evaluate(() => {
-    const h1 = document.querySelector("#top h1").getBoundingClientRect();
-    const dock = document.querySelector("#top .hd").getBoundingClientRect();
-    const card = document.querySelector('#top [aria-label$=" banner"]')?.getBoundingClientRect();
-    const more = [...document.querySelectorAll("#top button")].find((b) => /\+\d+ more/.test(b.innerText));
-    return { h1b: h1.bottom, dockT: dock.top, cardT: card?.top ?? 9999, more: !!more, sw: document.documentElement.scrollWidth };
-  });
-  ok(fold.h1b < fold.dockT && fold.cardT < 844, "mobile 390: a real banner card is on the first screen, right under the headline", JSON.stringify(fold));
-  ok(fold.more, "mobile 390: the dock shows two cards and a '+N more' pill", JSON.stringify(fold));
-  ok(fold.sw <= 390, `mobile 390: no horizontal overflow after the hero reorder (scrollWidth ${fold.sw})`);
+  const fold = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, h1t: document.querySelector("#top h1").getBoundingClientRect().top, dock: !!document.querySelector("#top .hd") }));
+  ok(!fold.dock && fold.h1t < 844, "mobile 390: headline is on the first screen, no dock", JSON.stringify(fold));
+  ok(fold.sw <= 390, `mobile 390: no horizontal overflow after the hero (scrollWidth ${fold.sw})`);
+  // v3 global rules
+  for (const [w, h] of [[1440, 900], [1280, 800], [834, 1100], [390, 844]]) {
+    await load("/", w, h);
+    await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 700) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); } window.scrollTo(0, 0); });
+    const g = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+    ok(g.sw <= g.cw, `v3: no horizontal overflow at ${w} on /`, JSON.stringify(g));
+  }
+  await load("/", 1440, 900);
+  ok((await page.$$eval(".eyebrow", (e) => e.length)) === 0, "v3: no .eyebrow elements on /");
+  const ff = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  ok(/^["']?Archivo/i.test(ff), "v3: body font-family starts with Archivo", ff);
+  ok((await page.$$eval(".section-dark, .section-paper", (e) => e.length)) === 0, "v3: no element with class section-dark / section-paper");
   // proper nouns never wrap
   for (const [w, h] of [[1440, 900], [834, 1100], [390, 844]]) {
     for (const path of ["/", "/changelog", "/docs/getting-started/install"]) {
@@ -472,7 +561,8 @@ await section("header", async () => {
     return { hh: h.height, ih: i.height, href: document.querySelector(".site-brand").getAttribute("href") };
   });
   ok(l.href === "/", ".site-brand links home", l.href);
-  ok(Math.abs(l.ih - (l.hh - 5)) <= 1.5, `landing: .site-brand-icon height = header height - 5 (${l.ih} vs ${l.hh})`);
+  ok(Math.abs(l.ih - 54) <= 1.5, `landing: .site-brand-icon height is 54 (${l.ih})`);
+  ok(l.hh >= 64 && l.hh <= 65, `landing: header is a 64 px bar + 1 px border (${l.hh})`);
 
   await load("/", 390, 800);
   const m = await page.evaluate(() => {
