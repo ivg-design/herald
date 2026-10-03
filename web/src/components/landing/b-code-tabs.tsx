@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Play } from "lucide-react";
+import { useHerald } from "@/components/herald/useHerald";
 import { copyText } from "./b-hooks";
 
 const TABS = [
@@ -56,6 +57,8 @@ await new Herald().notify('ci.bot', 'Build passed', {
 export default function CodeTabs() {
   const [i, setI] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [ran, setRan] = useState(false);
+  const herald = useHerald();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -71,6 +74,18 @@ export default function CodeTabs() {
     setI(n);
     refs.current[n]?.focus();
   };
+  const onRun = () => {
+    herald.send({
+      app: "ci.bot",
+      appName: "CI Bot",
+      icon: "ci",
+      title: "Build passed",
+      body: "142 tests, 0 failures",
+      buttons: [{ label: "Open", role: "open", primary: true, url: "ci.example.com/142" }],
+      speak: true,
+    });
+    setRan(true);
+  };
   const onCopy = async () => {
     if (await copyText(TABS[i].code)) {
       setCopied(true);
@@ -80,7 +95,8 @@ export default function CodeTabs() {
   };
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-xl bg-bg text-ink">
+    <div className="min-w-0">
+    <div className="overflow-hidden rounded-xl bg-bg text-ink">
       <div className="flex items-center justify-between border-b border-line pr-2">
         <div role="tablist" aria-label="Language" className="flex overflow-x-auto" onKeyDown={onKey}>
           {TABS.map((t, n) => (
@@ -100,10 +116,15 @@ export default function CodeTabs() {
             </button>
           ))}
         </div>
-        <button type="button" onClick={onCopy} className="mini-btn !h-9 shrink-0 cursor-pointer gap-1.5 !px-3" aria-label="Copy code">
-          {copied ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button type="button" onClick={onCopy} className="mini-btn !h-9 cursor-pointer gap-1.5 !px-3" aria-label="Copy code">
+            {copied ? <Check aria-hidden className="size-3.5" /> : <Copy aria-hidden className="size-3.5" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button type="button" onClick={onRun} className="mini-btn is-primary !h-9 cursor-pointer gap-1.5 !px-3" aria-label="Run snippet">
+            <Play aria-hidden className="size-3.5" /> Run
+          </button>
+        </div>
       </div>
       {TABS.map((t, n) => (
         <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={n !== i} tabIndex={0}>
@@ -111,6 +132,10 @@ export default function CodeTabs() {
         </div>
       ))}
       <p className="sr-only" role="status" aria-live="polite">{copied ? "Copied to clipboard" : ""}</p>
+    </div>
+    <p className="m-0 mt-3 min-h-[1.5em] text-[13.5px] text-paper-muted" role="status" aria-live="polite" aria-label="Run outcome">
+      {ran ? `Sent. Same payload, any language.` : ""}
+    </p>
     </div>
   );
 }

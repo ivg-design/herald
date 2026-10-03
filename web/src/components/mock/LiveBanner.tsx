@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { AlarmClock, ChevronDown, Mic, Send, Square, X } from "lucide-react";
-import MiniIcon from "@/components/landing/MiniIcon";
+import { AlarmClock, ChevronDown, Mic, Send, Square, Volume2, X } from "lucide-react";
+import { HeraldMark } from "@/components/landing/MiniIcon";
+import StatusRing, { type RingState } from "@/components/rive/StatusRing";
+import { playVoice, sampleName, stopVoice, usePlayingKey } from "@/components/herald/voice";
+import type { HeraldIcon } from "@/components/herald/types";
 import { EASE } from "@/lib/config";
 
 export interface BItem { id: string; title: string; body: string }
@@ -27,8 +30,14 @@ export default function LiveBanner({
   delay = 0,
   snoozeSeconds = 3,
   snoozeLabel = "9:00",
+  icon = "herald",
+  speaking = false,
+  status,
   onClose,
   onDismissItem,
+  onSnoozeChange,
+  speak,
+  onToggleVoice,
 }: {
   app: string;
   items: BItem[];
@@ -38,11 +47,33 @@ export default function LiveBanner({
   delay?: number;
   snoozeSeconds?: number;
   snoozeLabel?: string;
+  icon?: HeraldIcon;
+  /** Shows a small waveform next to the title while the banner is being spoken. */
+  speaking?: boolean;
+  /** Optional status ring shown next to the title. */
+  status?: RingState;
   onClose: () => void;
   onDismissItem?: (id: string) => void;
+  /** Reports snooze start/end so a host can count snoozed banners. */
+  onSnoozeChange?: (snoozed: boolean) => void;
+  /** Adds a "Play voice" / "Stop" button that plays the card's pre-rendered sample (click only). */
+  onToggleVoice?: () => void;
+  /** Standalone banners: same meaning as HeraldSend.speak. `true` plays voice-sample, a string plays /audio/<string>.mp3. */
+  speak?: boolean | string;
 }) {
+  const voiceKey = useId();
+  const playingKey = usePlayingKey();
+  const ownPlaying = playingKey === voiceKey;
+  const sample = speak ? sampleName(speak) : undefined;
+  const toggleVoice = onToggleVoice ?? (sample ? () => (ownPlaying ? stopVoice() : playVoice(voiceKey, sample)) : undefined);
+  speaking = speaking || ownPlaying;
+  useEffect(() => {
+    return () => {
+      if (playingKey === voiceKey) stopVoice();
+    };
+  }, [playingKey, voiceKey]);
   const reduce = useReducedMotion();
-  const [phase, setPhase] = useState<"idle" | "confirm" | "working" | "snoozed">("idle");
+  const [phase, setPhase] = useState<"idle" | "confirm" | "working" | "done" | "snoozed">("idle");
   const [note, setNote] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -50,9 +81,17 @@ export default function LiveBanner({
   const later = (fn: () => void, ms: number) => {
     timers.current.push(window.setTimeout(fn, ms));
   };
+  const ticks = useRef<number[]>([]);
+  const onSnoozeRef = useRef(onSnoozeChange);
   useEffect(() => {
-    const t = timers.current;
-    return () => t.forEach(clearTimeout);
+    onSnoozeRef.current = onSnoozeChange;
+  });
+  useEffect(() => {
+    const t = ticks.current;
+    return () => {
+      t.forEach(clearInterval);
+      onSnoozeRef.current?.(false);
+    };
   }, []);
 
   const top = items[0];
@@ -69,16 +108,18 @@ export default function LiveBanner({
     let n = snoozeSeconds;
     setLeft(n);
     setPhase("snoozed");
+    onSnoozeChange?.(true);
     const id = window.setInterval(() => {
       n -= 1;
       setLeft(n);
       if (n <= 0) {
         clearInterval(id);
         setPhase("idle");
+        onSnoozeChange?.(false);
         flash(`Back from snooze (set for ${snoozeLabel})`);
       }
     }, 1000);
-    timers.current.push(id);
+    ticks.current.push(id);
   };
 
   const press = (b: BButton) => {
@@ -91,8 +132,7 @@ export default function LiveBanner({
   const yes = () => {
     setPhase("working");
     later(() => {
-      setPhase("idle");
-      setNote("Callback answered 200 OK. Banner dismissed, kept in History.");
+      setPhase("done");
       later(onClose, 1500);
     }, 1100);
   };
@@ -135,15 +175,17 @@ export default function LiveBanner({
       aria-label={`${app} banner`}
       initial={reduce ? false : { opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0, transition: enter }}
-      exit={{ opacity: 0, x: reduce ? 0 : 24, transition: { duration: reduce ? 0 : 0.32, ease: EASE.expo } }}
+      exit={{ opacity: 0, x: reduce ? 0 : 24, transition: { duration: reduce ? 0 : 0.39, ease: EASE.expo } }}
       transition={{ layout: { duration: dur, ease: EASE.quint } }}
-      style={{ paddingBottom: ghosts * 7 }}
-      className="relative"
+      style={{ paddingBottom: ghosts * 6 }}
+      className="relative hb-card"
     >
-      {ghosts > 0 &&
-        [1, 0].map((g) => (
-          <span key={g} aria-hidden className="mb absolute inset-x-0 bottom-0" style={{ height: 40, marginInline: (g + 1) * 7, opacity: 0.55 - g * 0.15, zIndex: 0 }} />
-        ))}
+      {ghosts > 0 && (
+        <>
+          <span aria-hidden className="hb-ghost" style={{ bottom: 6, marginInline: 7, opacity: 0.55 }} />
+          <span aria-hidden className="hb-ghost" style={{ bottom: 0, marginInline: 14, opacity: 0.4 }} />
+        </>
+      )}
       <div className="mb relative z-[1] p-3" style={{ borderRadius: 12 }}>
         {phase === "snoozed" ? (
           <p className="m-0 flex items-center gap-2.5 text-[13px]" role="status">
@@ -156,13 +198,13 @@ export default function LiveBanner({
         ) : (
           <>
             <div className="flex items-start gap-2.5">
-              <MiniIcon size={32} />
+              <HeraldMark icon={icon} size={32} />
               {stacked ? (
                 <button type="button" className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left text-inherit" aria-expanded={expanded} onClick={() => setExpanded((v) => !v)}>
-                  <Head app={app} title={top.title} />
+                  <Head app={app} title={top.title} speaking={speaking} status={status} />
                 </button>
               ) : (
-                <div className="min-w-0 flex-1"><Head app={app} title={top.title} /></div>
+                <div className="min-w-0 flex-1"><Head app={app} title={top.title} speaking={speaking} status={status} /></div>
               )}
               {stacked && (
                 <motion.span
@@ -211,7 +253,7 @@ export default function LiveBanner({
               )}
             </AnimatePresence>
 
-            {buttons.length > 0 && (
+            {(buttons.length > 0 || !!toggleVoice || phase === "done") && (
               <div className="mt-3 pl-[42px]">
                 {phase === "confirm" ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -220,9 +262,14 @@ export default function LiveBanner({
                     <button type="button" className="mb-btn" onClick={() => setPhase("idle")}>Cancel</button>
                   </div>
                 ) : phase === "working" ? (
-                  <p className="m-0 flex h-9 items-center gap-2 text-[13px]" role="status">
-                    <motion.span aria-hidden className="size-2 rounded-full bg-accent" animate={reduce ? undefined : { opacity: [1, 0.25, 1] }} transition={{ duration: 0.8, repeat: Infinity }} />
-                    Waiting for ci.bot to confirm the callback…
+                  <p className="m-0 flex min-h-9 items-center gap-2 text-[13px]" role="status">
+                    <StatusRing state="working" size={20} />
+                    Waiting for {app} to confirm the callback…
+                  </p>
+                ) : phase === "done" ? (
+                  <p className="m-0 flex min-h-9 items-center gap-2 text-[13px]" role="status">
+                    <StatusRing state="done" size={20} />
+                    Callback answered 200 OK. Banner dismissed, kept in History.
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -231,6 +278,12 @@ export default function LiveBanner({
                         {b.label}
                       </button>
                     ))}
+                    {toggleVoice && (
+                      <button type="button" className="mb-btn hb-play" aria-pressed={speaking} onClick={toggleVoice}>
+                        {speaking ? <Square size={12} aria-hidden /> : <Volume2 size={14} aria-hidden />}
+                        {speaking ? "Stop" : "Play voice"}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -245,8 +298,8 @@ export default function LiveBanner({
                     <button type="button" className="mb-btn" style={{ height: 30 }} onClick={finishRec}><Square size={12} aria-hidden />Stop</button>
                   </div>
                 ) : (
-                  <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
-                    <input ref={input} className="mb-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a reply…" aria-label="Reply to the agent" />
+                  <form className="flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); send(); }}>
+                    <input ref={input} className="mb-input" style={{ flex: "1 1 160px" }} value={text} onChange={(e) => setText(e.target.value)} placeholder="Type a reply…" aria-label="Reply to the agent" />
                     <button type="button" className="mb-btn is-danger" style={{ height: 40 }} onClick={() => { setSent(null); setHeard(null); setRec(3); }}><Mic size={15} aria-hidden />Record</button>
                     <button type="submit" className="mb-btn is-primary" style={{ height: 40 }} disabled={!text.trim()}><Send size={14} aria-hidden />Send</button>
                   </form>
@@ -283,11 +336,19 @@ export default function LiveBanner({
   );
 }
 
-function Head({ app, title }: { app: string; title: string }) {
+function Head({ app, title, speaking, status }: { app: string; title: string; speaking: boolean; status?: RingState }) {
   return (
     <>
       <span className="mono block text-[10px] uppercase leading-tight tracking-[0.06em]" style={{ color: "var(--mb-muted)" }}>{app}</span>
-      <span className="block truncate text-[15px] font-medium leading-snug">{title}</span>
+      <span className="flex items-center gap-2">
+        <span className="block min-w-0 truncate text-[15px] font-medium leading-snug">{title}</span>
+        {speaking && (
+          <span className="hb-wave" role="img" aria-label="Speaking">
+            <i /><i /><i /><i /><i />
+          </span>
+        )}
+        {status && <StatusRing state={status} size={16} />}
+      </span>
     </>
   );
 }

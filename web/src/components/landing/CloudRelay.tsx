@@ -11,8 +11,8 @@ const POINTS = [
 export default function CloudRelay() {
   return (
     <section id="cloud" className="section section-dark" style={{ paddingBlock: "clamp(72px, 10vw, 120px)" }}>
-      <div className="shell grid gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
-        <div>
+      <div className="shell grid grid-cols-[minmax(0,1fr)] gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-16">
+        <div className="min-w-0">
           <p className="eyebrow">From anywhere · Cloud relay</p>
           <h2 className="display max-w-[12ch] text-[clamp(44px,6vw,72px)]">Let your agent speak to you.</h2>
           <p className="lede">
@@ -27,7 +27,7 @@ export default function CloudRelay() {
             ))}
           </ul>
         </div>
-        <div className="lg:self-end"><CloudMock /></div>
+        <div className="w-full min-w-0 lg:self-end"><CloudMock /></div>
       </div>
     </section>
   );

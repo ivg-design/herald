@@ -1,0 +1,50 @@
+/* The Actions headline drum: per-character 3D flip (ported from the LERP landing).
+   Out: faces flip up and away (0 -> 90deg). In: faces flip up from below (-90deg -> 0).
+   translateZ(0.5em) is the drum radius, so each face rides the cylinder surface. */
+.flip-drum {
+  display: block;
+  position: relative;
+  /* Inherits the h2 size, so the headline font-size alone controls the drum height. */
+  height: var(--flip-h, 1.1em);
+  perspective: 800px;
+  color: var(--accent);
+  font-style: normal;
+}
+.flip-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  white-space: pre;
+  line-height: 1;
+}
+.flip-char {
+  display: inline-block;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+.flip-word-static .flip-char {
+  opacity: 1;
+  transform: rotateX(0deg) translateZ(0.5em);
+}
+.flip-word-out .flip-char {
+  animation: flip-char-out 0.5s var(--flip-stagger, 0s) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.flip-word-in .flip-char {
+  opacity: 0;
+  transform: rotateX(-90deg) translateZ(0.5em);
+  animation: flip-char-in 0.5s var(--flip-stagger, 0s) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes flip-char-out {
+  0% { transform: rotateX(0deg) translateZ(0.5em); opacity: 1; }
+  100% { transform: rotateX(90deg) translateZ(0.5em); opacity: 0; }
+}
+@keyframes flip-char-in {
+  0% { transform: rotateX(-90deg) translateZ(0.5em); opacity: 0; }
+  100% { transform: rotateX(0deg) translateZ(0.5em); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flip-word-out .flip-char, .flip-word-in .flip-char { animation: none; }
+}

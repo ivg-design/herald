@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Image from "next/image";
 import { ArrowUpRight, Download, Menu, X } from "lucide-react";
 import SiteLink from "./SiteLink";
+import Bell from "@/components/rive/Bell";
+import { HeraldInternalContext } from "@/components/herald/internal";
 import { asset, REPO_URL } from "@/lib/config";
 
 const NAV = [
@@ -19,6 +21,7 @@ const NAV = [
 
 export default function Header({ downloadUrl }: { downloadUrl: string }) {
   const [open, setOpen] = useState(false);
+  const herald = useContext(HeraldInternalContext);
 
   useEffect(() => {
     if (!open) return;
@@ -30,7 +33,7 @@ export default function Header({ downloadUrl }: { downloadUrl: string }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-bg">
       <div className="shell flex h-[68px] items-center justify-between gap-6">
-        <SiteLink href="/" className="site-brand flex h-full items-center gap-3 font-semibold" aria-label="Herald home">
+        <SiteLink href="/" className="site-brand flex h-full min-w-0 shrink-0 items-center gap-3 font-semibold" aria-label="Herald home">
           <Image src={asset("/herald-icon.png")} alt="" width={64} height={64} className="site-brand-icon" unoptimized />
           <span className="text-[17px]">Herald</span>
         </SiteLink>
@@ -43,11 +46,30 @@ export default function Header({ downloadUrl }: { downloadUrl: string }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
-          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="hidden items-center gap-1 px-2 text-[14px] text-muted hover:text-ink sm:inline-flex">
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          {herald && (
+            <button
+              type="button"
+              className="hb-bell"
+              aria-label={herald.pending > 0 ? `Show ${herald.pending} Herald ${herald.pending === 1 ? "banner" : "banners"}` : "Show Herald banners"}
+              aria-expanded={!herald.docked && herald.expanded}
+              aria-controls="herald-overlay"
+              onPointerEnter={(e) => {
+                if (e.pointerType === "mouse" && !herald.docked) {
+                  herald.setHold("hover", true);
+                  herald.show();
+                }
+              }}
+              onPointerLeave={() => herald.setHold("hover", false)}
+              onClick={herald.toggle}
+            >
+              <Bell count={herald.pending} ring={herald.ring} size={22} />
+            </button>
+          )}
+          <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className="hb-dl hidden items-center gap-1 px-2 text-[14px] text-muted hover:text-ink sm:inline-flex">
             GitHub <ArrowUpRight size={14} aria-hidden />
           </a>
-          <a href={downloadUrl} className="btn btn-primary btn-sm hidden sm:inline-flex">
+          <a href={downloadUrl} className="btn btn-primary btn-sm hb-dl hidden sm:inline-flex">
             Download for Mac
           </a>
           <button

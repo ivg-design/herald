@@ -15,7 +15,7 @@ export default function ActionsDemo() {
           {shown && (
             <LiveBanner
               key={run}
-              app="CI Bot"
+              app="CI Bot" icon="ci"
               items={[{ id: "d", title: "Build 4f2a passed", body: "All 214 tests passed on main." }]}
               buttons={[
                 { label: "Open log", role: "open", url: "ci.example.com/4f2a" },

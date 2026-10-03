@@ -14,7 +14,7 @@ export default function CloudMock() {
           {shown && (
             <LiveBanner
               key={run}
-              app="Claude · cloud session"
+              app="Claude · cloud session" icon="claude" speak="voice-cloud"
               items={[{ id: "c", title: "Deploy to production now?", body: "All 214 tests passed on main. Say the word and I’ll ship 4f2a to prod." }]}
               reply={{ transcript: "Yes, ship it to production." }}
               onClose={() => setShown(false)}

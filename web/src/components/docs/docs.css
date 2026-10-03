@@ -9,7 +9,7 @@ kbd {
 /* ---------- Header ---------- */
 .docs-header { position: sticky; top: 0; z-index: 40; background: var(--bg); border-bottom: 1px solid var(--line); }
 .docs-header-in { height: var(--docs-header); display: flex; align-items: center; gap: 12px; padding-inline: 16px; max-width: var(--docs-max); margin-inline: auto; }
-.docs-brand { display: flex; align-items: center; gap: 12px; height: var(--docs-header); padding-block: 5px; }
+.docs-brand { display: flex; align-items: center; gap: 12px; height: var(--docs-header); padding-block: 2.5px; }
 .docs-brand-icon { height: 100%; width: auto; aspect-ratio: 1; border-radius: 22%; }
 .docs-doclink { font-size: 15px; color: var(--muted); padding: 8px 4px; transition: color 150ms var(--ease-quart); }
 .docs-doclink:hover { color: var(--ink); }

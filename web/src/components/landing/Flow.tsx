@@ -1,7 +1,10 @@
 "use client";
 import { useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Send } from "lucide-react";
 import MiniIcon from "./MiniIcon";
+import { useHerald } from "@/components/herald/useHerald";
+import type { HeraldButton } from "@/components/herald/types";
 import { EASE } from "@/lib/config";
 
 type Key = "title" | "status" | "body" | "log" | "deploy";
@@ -24,7 +27,9 @@ const STEPS = [
 
 export default function Flow() {
   const reduce = useReducedMotion();
+  const herald = useHerald();
   const [step, setStep] = useState(3);
+  const [sent, setSent] = useState<{ sig: string; msg: string } | null>(null);
   const [empty, setEmpty] = useState<Set<Key>>(new Set());
   const [collapse, setCollapse] = useState(true);
   const toggle = (k: Key) =>
@@ -44,6 +49,26 @@ export default function Flow() {
       : collapse
         ? "Cells are empty, but each row still has a filled cell, so no row collapses."
         : "Empty cells keep their place; the banner stays full height.";
+
+  const sig = `${[...empty].sort().join(",")}|${collapse}`;
+  const sendTest = () => {
+    const buttons: HeraldButton[] = [];
+    if (!isEmpty("log")) buttons.push({ label: "Open log", role: "open", primary: true, url: "ci.example.com/142" });
+    if (!isEmpty("deploy")) buttons.push({ label: "Deploy", role: "deploy" });
+    herald.send({
+      app: "ci.bot",
+      appName: "CI Bot",
+      icon: "ci",
+      title: isEmpty("title") ? "" : "Build passed",
+      body: isEmpty("body") ? undefined : "142 tests, 0 failures · main",
+      buttons,
+      confirm: "Deploy to production?",
+    });
+    const drawn = 3 - collapsedRows.length;
+    const names = collapsedRows.map((r) => ["header", "body", "buttons"][r - 1]);
+    const tail = names.length ? `, ${names.join(" and ")} collapsed` : collapse || empty.size === 0 ? "" : ", empty cells keep their place";
+    setSent({ sig, msg: `Sent through the template: ${drawn} row${drawn === 1 ? "" : "s"}${tail}` });
+  };
 
   const panel = (n: number) => `relative min-w-0 rounded-xl border bg-surface p-5 transition-[opacity,border-color] duration-300 ${step === n ? "border-accent" : "border-line"}`;
   const dim = (n: number): React.CSSProperties => ({ opacity: step === n ? 1 : 0.55 });
@@ -97,7 +122,7 @@ export default function Flow() {
         </div>
         <p className="mt-4 mb-0 max-w-[78ch] text-[14.5px] leading-relaxed text-muted" aria-live="polite">{STEPS[step - 1].text}</p>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="mt-6 grid grid-cols-[minmax(0,1fr)] items-stretch lg:grid-cols-[minmax(0,1fr)_48px_minmax(0,1fr)_48px_minmax(0,1fr)]">
           {/* 1 manifest */}
           <article className={panel(1)} style={dim(1)}>
             <h3 className="m-0 mb-3 text-[15px] font-medium">1 · Manifest + notification</h3>
@@ -129,6 +154,7 @@ export default function Flow() {
             </div>
           </article>
 
+          <Arrow />
           {/* 2 template */}
           <article className={panel(2)} style={dim(2)}>
             <h3 className="m-0 mb-3 text-[15px] font-medium">2 · Template, 4 × 3 grid</h3>
@@ -151,6 +177,7 @@ export default function Flow() {
             </div>
           </article>
 
+          <Arrow />
           {/* 3 banner */}
           <article className={panel(3)} style={dim(3)}>
             <h3 className="m-0 mb-3 text-[15px] font-medium">3 · Banner</h3>
@@ -170,11 +197,31 @@ export default function Flow() {
                 </Row>
               </div>
             </div>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={sendTest} className="btn btn-ghost btn-sm cursor-pointer gap-2">
+                <Send aria-hidden className="size-3.5" /> Send test
+              </button>
+            </div>
           </article>
         </div>
         <p className="mt-4 mb-0 text-[13.5px] text-muted" role="status" aria-live="polite">{summary}</p>
+        <p className="mono mt-2 mb-0 min-h-[1.5em] text-[12.5px]" style={{ color: "var(--accent)" }} role="status" aria-live="polite" aria-label="Send test outcome">{sent && sent.sig === sig ? sent.msg : ""}</p>
       </div>
     </section>
+  );
+}
+
+/** A thin line with an arrowhead: horizontal on desktop, vertical on mobile. */
+function Arrow() {
+  return (
+    <div aria-hidden className="flex items-center justify-center py-1 lg:py-0">
+      <svg viewBox="0 0 48 12" className="hidden h-3 w-12 lg:block" fill="none" stroke="var(--line)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 6h42M38 1l6 5-6 5" />
+      </svg>
+      <svg viewBox="0 0 12 36" className="h-9 w-3 lg:hidden" fill="none" stroke="var(--line)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2v30M1 27l5 6 5-6" />
+      </svg>
+    </div>
   );
 }
 

@@ -1,60 +1,41 @@
 import type { ReactNode } from "react";
 
-type Row = [label: string, value: ReactNode];
+type Row = { label: string; mac: ReactNode; herald: ReactNode };
 
-const MAC: Row[] = [
-  ["Lifetime", "Banner fades in ~5 s, or Alert style stays until closed"],
-  ["Layout", "Apple’s template only: title, body, thumbnail"],
-  ["Actions", "Up to a few buttons, no scripts"],
-  ["History", "None. Dismissed or cleared means gone"],
-  ["Focus", "Can activate the app on click"],
-  ["Grouping", "Per app only"],
-];
-const HERALD: Row[] = [
-  ["Lifetime", "Stays until you dismiss, snooze, or act"],
-  ["Layout", "Your 3×4 grid: text, images, badges, progress, Rive"],
-  ["Actions", "URLs, callbacks, scripts, Apple Shortcuts, two-way"],
-  ["History", "SQLite, searchable, re-show any banner, export"],
-  ["Focus", <b key="never" className="font-semibold">Never. Not on show, not on click, not on confirm</b>],
-  ["Grouping", "By app, issuer or sender, stacked with a counter"],
+const ROWS: Row[] = [
+  { label: "Lifetime", mac: "Banner fades in ~5 s, or Alert style stays until closed", herald: "Stays until you dismiss, snooze, or act" },
+  { label: "Layout", mac: "Apple’s template only: title, body, thumbnail", herald: "Your grid, any size: text, images, badges, progress, Rive" },
+  { label: "Actions", mac: "Up to a few buttons, no scripts", herald: "URLs, callbacks, scripts, Apple Shortcuts, two-way" },
+  { label: "History", mac: "None. Dismissed or cleared means gone", herald: "SQLite, searchable, re-show any banner, export" },
+  {
+    label: "Focus",
+    mac: "Can activate the app on click",
+    herald: <b className="font-semibold">Never. Not on show, not on click, not on confirm</b>,
+  },
+  { label: "Grouping", mac: "Per app only", herald: "By app, issuer or sender, stacked with a counter" },
 ];
 
-function Table({ title, rows, herald }: { title: string; rows: Row[]; herald?: boolean }) {
+/** One static ledger. A table is for reading, so nothing here moves or reacts. */
+export default function Comparison() {
   return (
-    <table
-      className={`w-full overflow-hidden rounded-xl border-collapse text-left text-[14px] ${
-        herald ? "border-2 border-accent bg-white" : "border border-paper-line bg-white"
-      }`}
-      style={{ borderCollapse: "separate", borderSpacing: 0 }}
-    >
-      <caption className="sr-only">{title}</caption>
+    <table className="ledger">
+      <caption className="sr-only">macOS Notification Center compared with Herald</caption>
       <thead>
         <tr>
-          <th colSpan={2} scope="colgroup" className={`h-10 px-[17px] text-[13px] font-semibold ${herald ? "bg-accent text-accent-ink" : "bg-[#ecebe6] text-paper-ink/80"}`}>
-            {title}
-          </th>
+          <th scope="col" className="sr-only">Property</th>
+          <th scope="col" className="ledger-h">macOS Notification Center</th>
+          <th scope="col" className="ledger-h ledger-h-herald">Herald</th>
         </tr>
       </thead>
       <tbody>
-        {rows.map(([label, value]) => (
-          <tr key={label}>
-            <th scope="row" className="w-[30%] border-t border-paper-line px-[17px] py-[12px] align-top text-[13px] font-medium text-paper-muted sm:w-[28%]">
-              {label}
-            </th>
-            <td className={`border-t border-paper-line px-2 py-[12px] align-top ${herald ? "font-medium text-paper-ink" : "text-paper-ink"}`}>{value}</td>
+        {ROWS.map((r) => (
+          <tr key={r.label}>
+            <th scope="row" className="ledger-label">{r.label}</th>
+            <td className="ledger-mac" data-col="macOS">{r.mac}</td>
+            <td className="ledger-herald" data-col="Herald">{r.herald}</td>
           </tr>
         ))}
       </tbody>
     </table>
-  );
-}
-
-/** Static comparison. A table is for reading, so nothing here moves or reacts. */
-export default function Comparison() {
-  return (
-    <div className="mt-14 grid gap-6 md:grid-cols-2">
-      <Table title="macOS Notification Center" rows={MAC} />
-      <Table title="Herald" rows={HERALD} herald />
-    </div>
   );
 }

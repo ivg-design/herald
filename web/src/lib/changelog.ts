@@ -13,6 +13,11 @@ function plain(s: string): string {
   return s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/[`*_]/g, "").replace(/\s+/g, " ").trim();
 }
 
+function sentence(parts: string[]): string {
+  if (!parts.length) return "";
+  return `${parts.join("; ")}.`;
+}
+
 export function parseChangelog(): ChangelogEntry[] {
   let text = "";
   try {
@@ -30,10 +35,10 @@ export function parseChangelog(): ChangelogEntry[] {
     const body = part.slice(nl + 1).trim();
     // Landing summary: the bold lead of each bullet, joined; falls back to first bullet text.
     const leads = [...body.matchAll(/^- \*\*(.+?)\*\*/gm)].map((x) => plain(x[1]).replace(/[.:]$/, ""));
-    let summary = leads.slice(0, 4).join(" · ");
+    let summary = sentence(leads.slice(0, 4));
     if (!summary) {
       const first = body.split("\n").find((l) => l.startsWith("- "));
-      summary = first ? plain(first.slice(2)) : "";
+      summary = first ? plain(first.slice(2)).replace(/[.:]?$/, ".") : "";
     }
     if (summary.length > 190) summary = summary.slice(0, 187).replace(/\s+\S*$/, "") + "…";
     entries.push({ version: m[1], build: m[2] ?? null, date: m[3] ?? "", body, summary });

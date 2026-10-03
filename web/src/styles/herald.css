@@ -1,0 +1,74 @@
+/* Herald host: banner cards, the hero dock, the fixed page stack, pill, waveform. Imported from globals.css. */
+
+header .site-brand { padding-block: 2.5px; }
+
+/* header bell */
+.hb-bell { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; }
+.hb-bell:hover { background: var(--surface-2); }
+
+/* sender mark: 32px rounded tile tinted from surface-2 */
+.hb-mark { display: inline-grid; place-items: center; flex: none; border-radius: 22%; background: var(--mb-btn); color: var(--mb-ink); }
+
+/* hero dock: a grid cell the banners are drawn into */
+.hd { position: relative; width: 100%; max-width: 412px; min-height: 380px; padding: 18px 16px 16px; border: 1px dashed var(--line); border-radius: 14px; }
+.hd-tag { position: absolute; top: 0; right: 14px; transform: translateY(-50%); padding: 1px 8px; background: var(--bg); color: var(--muted); font-size: 10px; letter-spacing: 0.02em; border: 1px dashed var(--line); border-radius: 4px; white-space: nowrap; }
+.hb-cards { display: flex; flex-direction: column; gap: 10px; max-width: 380px; }
+
+.hb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; max-width: 380px; }
+.hb-head-l { min-width: 0; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-voice { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 14px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.hb-voice { white-space: nowrap; flex: none; }
+.hb-voice-icon { width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: 16px; }
+.hb-voice:hover { color: var(--ink); }
+.hb-voice[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+.hb-heldline { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+
+/* fixed overlay */
+.hb-overlay { position: fixed; z-index: 60; top: 84px; right: max(16px, calc((100vw - 1200px) / 2)); width: 360px; display: flex; flex-direction: column; align-items: flex-end; }
+.hb-stack { width: 100%; }
+.hb-stack[data-open="false"] { display: none; }
+.hb-stack[data-open="true"] { box-shadow: none; animation: hb-in 520ms var(--ease-expo) both; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.hb-stack .hb-head, .hb-stack .hb-cards { max-width: none; }
+.hb-more { display: block; margin: 8px 0 0 auto; height: 32px; padding: 0 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+@media (max-width: 639px) {
+  .hb-overlay { left: 12px; right: 12px; top: 76px; width: auto; }
+}
+
+/* inline text button (stack lines) */
+.hb-pill-btn { height: 28px; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.hb-pill-btn:hover { background: var(--surface-2); }
+@media (pointer: coarse) {
+  .hb-pill-btn, .hb-voice, .hb-more { min-height: 40px; }
+  .hb-card .mb-btn { min-height: 40px; }
+  .hb-card .mb-x { width: 40px; height: 40px; }
+}
+
+@keyframes hb-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+
+/* speaking waveform */
+.hb-wave { display: inline-flex; align-items: center; gap: 2px; height: 14px; flex: none; }
+.hb-wave i { display: block; width: 2px; height: 100%; border-radius: 1px; background: var(--accent); transform-origin: center; animation: hb-wave 900ms ease-in-out infinite; }
+.hb-wave i:nth-child(2) { animation-delay: -150ms; }
+.hb-wave i:nth-child(3) { animation-delay: -300ms; }
+.hb-wave i:nth-child(4) { animation-delay: -450ms; }
+.hb-wave i:nth-child(5) { animation-delay: -600ms; }
+@keyframes hb-wave { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .hb-stack { animation: none !important; }
+  .hb-wave i { animation: none !important; transform: scaleY(0.7); }
+}
+
+/* stacked-card edges peeking under a banner */
+.hb-ghost { position: absolute; inset-inline: 0; height: 6px; z-index: 0; background: var(--mb-bg); border: 1px solid var(--mb-line); border-top: 0; border-radius: 0 0 8px 8px; }
+
+/* living hero mark */
+.hb-logo { position: relative; display: inline-block; flex: none; line-height: 0; }
+.hb-logo-img { display: block; height: 64px; width: auto; }
+@media (min-width: 640px) { .hb-logo-img { height: 112px; } }
+.hb-logo-ping { position: absolute; left: 78.3%; top: 12.25%; width: 33.8%; aspect-ratio: 1; margin: -16.9% 0 0 -16.9%; border: 2px solid var(--signal); border-radius: 50%; pointer-events: none; animation: hb-ping 700ms var(--ease-quart) both; }
+@keyframes hb-ping { from { transform: scale(1); opacity: 0.55; } to { transform: scale(1.7); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .hb-logo-ping { display: none; } }
+
+@media (max-width: 639px) { header .hb-dl { display: none; } }

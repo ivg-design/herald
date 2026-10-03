@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Instrument_Serif, DM_Sans, JetBrains_Mono } from "next/font/google";
-import EasterEgg from "@/components/motion/EasterEgg";
 import StructuredData from "@/components/StructuredData";
 import { SITE_URL, asset } from "@/lib/config";
 import "./globals.css";
@@ -35,7 +34,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <StructuredData />
-        <EasterEgg />
       </body>
     </html>
   );

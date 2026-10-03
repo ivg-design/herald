@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@import "../styles/herald.css";
+@import "../styles/flip.css";
+@import "../styles/designer.css";
+@import "../styles/why.css";
+@import "../styles/send.css";
 
 /* Herald tokens. Blue-tinted charcoal, logo blue accent, signal red only for counters/stack badges. */
 :root {
@@ -112,6 +117,8 @@ img { max-width: 100%; }
 .btn-primary:hover { background: #5aaeef; }
 .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .btn-ghost:hover { border-color: var(--muted); background: var(--surface); }
+.on-paper .btn-ghost { color: var(--paper-ink); border-color: var(--paper-line); }
+.on-paper .btn-ghost:hover { border-color: var(--paper-muted); background: var(--paper-surface); }
 .btn-sm { height: 36px; padding: 0 14px; font-size: 14px; }
 
 /* Mini banner buttons (mocks) */

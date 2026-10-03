@@ -1,5 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { HeraldHost } from "@/components/herald/HeraldHost";
+import PageStack from "@/components/herald/PageStack";
+import EasterEgg from "@/components/motion/EasterEgg";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Hero from "@/components/landing/Hero";
@@ -23,6 +26,7 @@ export default async function Home() {
   const shots = { light: dims["designer-light"], dark: dims["designer-dark"] };
   return (
     <>
+      <HeraldHost>
       <Header downloadUrl={release.dmgUrl} />
       <main>
         <Hero release={release} />
@@ -37,6 +41,9 @@ export default async function Home() {
         <Download release={release} />
         <ChangelogPreview />
       </main>
+      <PageStack />
+      <EasterEgg />
+      </HeraldHost>
       <Footer />
     </>
   );
