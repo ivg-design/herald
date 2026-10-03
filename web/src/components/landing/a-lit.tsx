@@ -9,6 +9,7 @@ const Ctx = createContext<{ p: MotionValue<number>; live: boolean } | null>(null
 export function LitProvider({ progress, children }: { progress: MotionValue<number>; children: ReactNode }) {
   const reduce = useReducedMotion();
   const [live, setLive] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setLive(!reduce), [reduce]);
   return <Ctx.Provider value={{ p: progress, live }}>{children}</Ctx.Provider>;
 }

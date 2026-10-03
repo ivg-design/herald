@@ -8,6 +8,7 @@ export function useInViewOnce(ref: RefObject<Element | null>, threshold = 0.35):
     const el = ref.current;
     if (!el || seen) return;
     if (typeof IntersectionObserver === "undefined") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSeen(true);
       return;
     }

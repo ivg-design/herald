@@ -17,6 +17,7 @@ export function StackMock() {
 
   useEffect(() => {
     if (reduced || !seen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCount(1);
     let n = 1;
     const id = setInterval(() => {

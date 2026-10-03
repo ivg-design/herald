@@ -94,12 +94,11 @@ export function ToolList() {
   }, [reduced, seen, total]);
 
   const shown = reduced ? total : typed;
-  let used = 0;
+  const starts = lines.reduce<number[]>((acc, l, i) => [...acc, i === 0 ? 0 : acc[i - 1] + lines[i - 1].length], []);
   return (
     <ul ref={ref} className="mono m-0 mt-4 flex list-none flex-col gap-2.5 p-0 text-[12.5px] leading-snug text-muted">
-      {lines.map((l) => {
-        const k = Math.max(0, Math.min(l.length, shown - used));
-        used += l.length;
+      {lines.map((l, i) => {
+        const k = Math.max(0, Math.min(l.length, shown - starts[i]));
         return (
           <li key={l} className="flex items-start gap-3">
             <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-accent" />
