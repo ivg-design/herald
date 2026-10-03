@@ -687,3 +687,11 @@ struct ZoomControl: View {
         }
     }
 }
+
+#if DEBUG
+extension DesignerWindow {
+    /// For the HERALD_SCREENSHOTS launch mode (Debug/ScreenshotMode.swift).
+    static var debugWindow: NSWindow? { window }
+    static var debugModel: DesignerModel? { model }
+}
+#endif

@@ -763,3 +763,10 @@ extension BannerCenter: ConfirmationSurface {
         setConfirmation(app: app, id: id, nil)
     }
 }
+
+#if DEBUG
+extension BannerCenter {
+    /// For the HERALD_SCREENSHOTS launch mode (Debug/ScreenshotMode.swift).
+    func debugPanel(app: String, id: String) -> NSWindow? { entries[Self.key(app, id)]?.panel }
+}
+#endif

@@ -7,6 +7,9 @@ import AppKit
 enum HeraldMain {
     @MainActor private static let delegate = AppDelegate()
     static func main() {
+        #if DEBUG
+        ScreenshotMode.prepare()
+        #endif
         MainActor.assumeIsolated {
             let app = NSApplication.shared
             app.delegate = delegate
@@ -41,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.openHistory = { [weak self] in self?.openHistory() }
         controller.start()
         askLaunchAtLoginIfNeeded()
+        #if DEBUG
+        ScreenshotMode.start(controller: controller)
+        #endif
     }
 
     func applicationWillTerminate(_ notification: Notification) { controller.stop() }
