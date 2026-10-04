@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.6 (Build 16) - 2026-10-04
+
+### Changed
+
+- Cloud relay: an approved connector is now a durable connection. Its approval is the record, and it works until you
+  revoke it in Settings > Cloud. Tokens no longer expire and are no longer rotated. A client that still refreshes gets
+  a new access token and the same refresh token back, earlier access tokens stay valid, and a refresh can be repeated
+  safely, so a lost response can no longer disconnect an agent ("refresh outcome is uncertain"). Tokens issued by the
+  previous relay keep working after the upgrade, including ones it had marked used or expired.
+- Upgrade the relay from Settings > Cloud to get this; pairing and existing approvals are kept.
+
+### Fixed
+
+- Site and docs icons regenerated from the updated Herald icon.
+
+Relay: 153 tests.
+
 ## 1.6.5 (Build 15) - 2026-10-03
 
 ### Fixed

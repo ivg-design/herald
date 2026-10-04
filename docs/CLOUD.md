@@ -229,8 +229,11 @@ revoke itself (`POST /revoke`, RFC 7009).
   Mac, or the 6-digit code that only Herald shows. An approval request is shown only for clients that registered with this relay, with
   the name they chose and the host they return to, so a look-alike name still shows its real address; at most 3 requests wait at once and
   12 an hour.
-- Tokens: opaque, stored only as SHA-256 hashes in the mailbox. Access token 1 hour, refresh token 30 days and **rotating** (each refresh
-  returns a new pair; using an old refresh token again burns the whole family). Authorization codes live 5 minutes after approval, work
+- Tokens: opaque, stored only as SHA-256 hashes in the mailbox. An approval is a durable record: the connector works until you revoke
+  it in Herald. Its tokens never expire and are never rotated. The token endpoint still accepts `grant_type=refresh_token`, for clients
+  that refresh by habit: it returns a new access token and the same refresh token, earlier access tokens stay valid, and a refresh may
+  be repeated safely (a lost response costs nothing). `expires_in` is reported as ten years for clients that require the field.
+  Authorization codes live 5 minutes after approval, work
   once, require PKCE (S256), and a code used twice revokes what it produced. Tokens are bound to the `/mcp` resource (RFC 8707) and to
   their client. Re-authorizing the same connector replaces its earlier key.
 - Setting up your own relay changes nothing: the URLs above come from the host the connector was added with.
@@ -284,8 +287,8 @@ curl -s $RELAY/device_authorization -d client_id=hc_... -d scope=notify
 #    Settings > Cloud > Connector approvals; they press Approve if the code matches.)
 # 4. Poll every `interval` seconds until it stops answering authorization_pending.
 curl -s $RELAY/token -d grant_type=urn:ietf:params:oauth:grant-type:device_code -d client_id=hc_... -d device_code=hrv_...
-#    -> {"access_token":"hra_...","refresh_token":"hrr_...","expires_in":3600,"scope":"notify","token_type":"Bearer"}
-# 5. Use it: POST $RELAY/mcp with  Authorization: Bearer hra_...   (refresh with grant_type=refresh_token before it expires)
+#    -> {"access_token":"hra_...","refresh_token":"hrr_...","expires_in":315360000,"scope":"notify","token_type":"Bearer"}
+# 5. Use it: POST $RELAY/mcp with  Authorization: Bearer hra_...   (it works until the connector is revoked in Herald; no refresh is needed)
 ```
 
 What `/token` answers while you wait (RFC 8628 section 3.5, HTTP 400 with `{"error": ...}`): `authorization_pending` (keep polling),
@@ -486,7 +489,7 @@ Device endpoints (device token only): `GET /v1/device/stream` (WebSocket), `POST
 | A connector request never reaches this Mac, or goes to the wrong one | An old entry for this Mac was first in the relay's list (a reinstall, a redeploy that changed the secrets). Current relays pick the connected Mac and prune stale entries; see [Several Macs](#several-macs). Redeploy to get that, then check Advanced > Devices on this relay. |
 | Settings shows "Offline" and keeps retrying | No network; Herald retries 1 s, 2 s, 4 s ... up to 5 minutes and at once on wake or when the network returns. |
 | "the relay rejected this Mac's token" | The pairing was removed (Unpair) or the relay was reset. Pair again. |
-| The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked, or its refresh token was used twice; connect it again. |
+| The agent gets 401 | The key was revoked or belongs to another relay; check Settings > Cloud. For a ChatGPT connector: it was revoked; connect it again. A connector is never dropped for refreshing, retrying or the passage of time. |
 | ChatGPT's page says "Pair Herald first" | The relay has no paired Mac. Pair in Settings > Cloud, then connect again. |
 | The consent page waits and no banner shows | Herald is not running or not Online; or quiet hours / mute hid the banner. Use the 6-digit code from Settings > Cloud > Connector approvals. |
 | "approvals are already waiting" | Three requests are open; answer or deny them in Settings > Cloud (they expire after 10 minutes). |

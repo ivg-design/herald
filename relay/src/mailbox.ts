@@ -34,8 +34,13 @@ export const DEVICE_INTERVAL_S = 5;
 /** Consonants only: no vowels (no words), no 0/O/1/I/L/5/S/U/V ambiguity beyond what is left out here. */
 const USER_CODE_ALPHABET = "BCDFGHJKMNPQRTWXZ";
 export const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
-export const OAUTH_ACCESS_TTL_S = 3600;
-export const OAUTH_REFRESH_TTL_S = 30 * 86400;
+/**
+ * A connector approved in Herald is a durable record (its `keys` row): it works until it is revoked there. Its tokens therefore never
+ * expire and are never rotated. `expires_in` is still reported, as ten years, for clients that insist on the field.
+ */
+export const OAUTH_ACCESS_TTL_S = 10 * 365 * 86400;
+const NEVER = 253402300799000; // 9999-12-31, stored in the legacy `expires_at` column
+const ACCESS_TOKENS_KEPT_PER_KEY = 50;
 const OAUTH_MAX_PENDING = 3;
 const OAUTH_BEGINS_PER_HOUR = 12;
 const OAUTH_CODE_ATTEMPTS = 5;
@@ -136,7 +141,8 @@ export class Mailbox extends DurableObject<Env> {
     let good: boolean;
     if (p.kind === "oauth") {
       const t = this.sql<OAuthTok>("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'access'", await sha256Hex(p.secret))[0];
-      row = t && t.expires_at > Date.now() ? this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", t.key_id)[0] : undefined;
+      // No expiry check: the approval (the key row) decides, and `row.revoked_at` below ends it. Tokens issued before this rule keep working.
+      row = t ? this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", t.key_id)[0] : undefined;
       good = !!row && !row.revoked_at;
     } else {
       row = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
@@ -681,7 +687,7 @@ export class Mailbox extends DurableObject<Env> {
 
   private oauthSweep(now: number) {
     this.sql("DELETE FROM oauth_requests WHERE created_at < ?", now - DAY_MS);
-    this.sql("DELETE FROM oauth_tokens WHERE expires_at < ?", now - DAY_MS);
+    // Tokens are not swept by age: they live as long as their connector's approval.
   }
 
   private async oauthInternal(op: string, req: Request): Promise<Response> {
@@ -885,16 +891,28 @@ export class Mailbox extends DurableObject<Env> {
     return this.oauthDecide(b.id, b.decision, Date.now());
   }
 
-  private async issueTokens(keyId: string, clientId: string, resource: string, family: string, now: number) {
+  /**
+   * `keepRefresh` is the refresh token the client just presented: a refresh hands back that same token with a new access token, so a
+   * lost response can simply be retried and nothing the client holds is ever invalidated by using it.
+   */
+  private async issueTokens(keyId: string, clientId: string, resource: string, family: string, now: number, keepRefresh?: string) {
     const deviceId = this.getMeta("device_id") ?? "";
-    const access = randomHex(32), refresh = randomHex(32);
+    const access = randomHex(32);
     this.sql("INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'access', ?, ?, ?, ?, ?, ?)",
-      await sha256Hex(access), keyId, clientId, resource, family, now + OAUTH_ACCESS_TTL_S * 1000, now);
-    this.sql("INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'refresh', ?, ?, ?, ?, ?, ?)",
-      await sha256Hex(refresh), keyId, clientId, resource, family, now + OAUTH_REFRESH_TTL_S * 1000, now);
+      await sha256Hex(access), keyId, clientId, resource, family, NEVER, now);
+    let refreshToken = keepRefresh;
+    if (!refreshToken) {
+      const refresh = randomHex(32);
+      this.sql("INSERT INTO oauth_tokens (hash, kind, key_id, client_id, resource, family, expires_at, created_at) VALUES (?, 'refresh', ?, ?, ?, ?, ?, ?)",
+        await sha256Hex(refresh), keyId, clientId, resource, family, NEVER, now);
+      refreshToken = oauthToken("hrr", deviceId, refresh);
+    }
+    // Bound the table for a client that refreshes often: the oldest access tokens of this connector go first.
+    this.sql("DELETE FROM oauth_tokens WHERE kind = 'access' AND key_id = ? AND hash NOT IN (SELECT hash FROM oauth_tokens WHERE kind = 'access' AND key_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)",
+      keyId, keyId, ACCESS_TOKENS_KEPT_PER_KEY);
     return json(200, {
       access_token: oauthToken("hra", deviceId, access), token_type: "Bearer", expires_in: OAUTH_ACCESS_TTL_S,
-      refresh_token: oauthToken("hrr", deviceId, refresh), scope: "notify",
+      refresh_token: refreshToken, scope: "notify",
     });
   }
 
@@ -932,17 +950,12 @@ export class Mailbox extends DurableObject<Env> {
       if (!parseOAuthSecret(rt, "hrr")) return this.oerr("invalid_grant", "malformed refresh token");
       const t = this.sql<OAuthTok>("SELECT * FROM oauth_tokens WHERE hash = ? AND kind = 'refresh'", await sha256Hex(rt.split("_")[2]))[0];
       if (!t || t.client_id !== clientId) return this.oerr("invalid_grant", "unknown refresh token");
-      if (t.used_at) {
-        this.sql("DELETE FROM oauth_tokens WHERE family = ?", t.family); // replayed: the whole family is burned
-        return this.oerr("invalid_grant", "refresh token already used; authorize the connector again");
-      }
-      if (t.expires_at <= now) return this.oerr("invalid_grant", "refresh token expired");
+      // Reusable and without expiry (a token marked used or expired under the old rotating rule is accepted again).
       const key = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", t.key_id)[0];
       if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
       if (b.resource && !sameResource(b.resource, t.resource)) return this.oerr("invalid_target", "resource does not match the original grant");
       if (b.scope && b.scope.split(/\s+/).some((x) => x !== "notify")) return this.oerr("invalid_scope", "the only scope is notify");
-      this.sql("UPDATE oauth_tokens SET used_at = ? WHERE hash = ?", now, t.hash);
-      return this.issueTokens(key.id, clientId, t.resource, t.family, now);
+      return this.issueTokens(key.id, clientId, t.resource, t.family, now, rt);
     }
     return this.oerr("unsupported_grant_type", "grant_type must be authorization_code, refresh_token or urn:ietf:params:oauth:grant-type:device_code");
   }
