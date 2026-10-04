@@ -176,3 +176,52 @@ darker red (white text was 2.98:1 and 4.33:1); quiet-hours "now" label lightened
 - `/changelog` and docs article pages were looked at once after the type change (1440 and 390), not at 834 / 1280.
 - The drum's Georama phrase and the two long phrases at 390 were checked by the suite's overflow test, not by eye
   in every phase of the flip.
+
+---
+
+## Owner pass (after the round-2 review)
+
+Requests from the owner after seeing the first result, and what was done. Evidence in `web/.screenshots/r2/`
+(`g-*` large viewports, `e-*` editor, `an-*` anchors, `nar-*` narrowed headline).
+
+- **Hero on large monitors.** Only the hero scales. Above 1440 the canvas is `max(1200px, 82vw)` wide and the
+  headline takes the height the fixtures leave: `(100vh − 64px − 462px × kf) / 2.92` (three lines plus descender
+  room). Labels, buttons and the lede grow by `kf = 1 + 0.4 (k − 1)`, at most 1.3, where
+  `k = min(width / 1440, height / 900)`. Measured (canvas share of the window width / template bottom as a share
+  of the first screen / headline size): 1440×900 81.8 % / 93.9 % / 124 px; 1920×1080 80.8 % / 94.6 % / 177 px;
+  2560×1440 80.9 % / 95.1 % / 275 px; 2681×1589 80.9 % / 95.3 % / 317 px; 3440×1440 81.2 % / 95.1 % / 275 px.
+  The hero is exactly the first screen at all five. Nothing outside the hero is scaled. On the landing page the
+  header keeps its size and takes the canvas's edges above 1440.
+- **The hero is a small Designer.** Drag a field by its grip onto another cell: the two swap (GridEditing.move),
+  the headline re-fits by break, size and width axis. Drag a column divider on the ruler or a row divider on the
+  left ruler: the track takes the size, its neighbour gives way (24 pt floor for columns as in the app; rows stop
+  at 64 px here). Double-click a column divider: equal columns again. Keyboard: arrows on a grip move the field to
+  the nearest cell, arrows on a divider resize by 8 pt. Touch: tap a grip, then tap the target cell; tap a column
+  on the ruler for a − / + stepper. The right edge, the three presets, Replay and Send stay; Reset is new. The
+  tour shows one move and one track resize, then goes back. The first edit turns content-sized rows into fixed
+  ones, so the hero's height never changes (asserted). Left out: span changes by dragging a cell edge, per-cell
+  alignment, field on/off in the hero (Flow has collapse / keep space). The banner Send puts under the bell
+  states the arrangement in its body text; it does not re-lay itself out.
+- **Descenders and touching lines.** The headline carries 0.16 em under its last line; condensed settings open
+  the leading from 0.92 to 1.02 and give up a little size instead of growing. Lines are placed by transform, so
+  a change of break or size shifts nothing. Asserted across the width range in all presets at 1440 and 2560.
+- **Real app icon** in the hero and Download icon cells (512 PNG / 1024 WebP via srcSet), fitted to the cell's
+  content box, no tile, radius or clip. Radius clips removed from the header icon, footer icon and MiniIcon.
+  Left: `.docs-brand-icon` in docs.css (another worker's file at the time).
+- **Flow** has four payload presets (ci.bot passed / failed, WebWatcher, Claude) and per-field value chips; one
+  template renders all. Badge colour stays one tone because the docs make it a template setting.
+- **No demo moves the page.** Every interactive banner sits in a reserved stage; a suite section clicks every
+  button in seven sections at 1440 and 390 and asserts section height, next section top and document height.
+- **Focus rings** are no longer clipped in banners (asserted geometrically).
+- **Designer at its anchor** fits one screen: compact head row, the capture sized from the height left, the six
+  notes beside it. All nav anchors land with the title cell about 16 px under the header.
+- **Header at 1024** no longer overflows (links tighten 1024–1199); the changelog-only patch is gone.
+- **Download band**: icon fills a square cell; version, size and sha are sized to their cells.
+
+Numbers on the final build: suite 352 passed, 0 failed; ESLint 0 errors, 5 warnings; Lighthouse desktop 99 / 100 /
+100 / 100 (LCP 0.9 s, CLS 0), mobile 90 / 100 / 100 / 100 (LCP 3.7 s, CLS 0); CLS through load and tour 0 at 1440
+and 2681.
+
+Still weak: a dragged field is carried as its whole cell (a large title cell covers much of the canvas while it
+moves); with the body in a very large cell the lede sits small in its top-left; the editor was judged from
+headless frames, not by hand; Safari was not run; mobile LCP unchanged.

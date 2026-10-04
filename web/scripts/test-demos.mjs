@@ -138,9 +138,12 @@ await section("hero", async () => {
   ok(await waitFor(async () => (await st()).l === "compact", 3000, 50), "hero tour: then to compact", JSON.stringify(await st()));
   ok(await page.$eval("#top h1.hero-title", (e) => e.querySelectorAll("span").length === 1), "hero tour: in compact the headline is one line");
   ok(await waitFor(async () => (await st()).l === "hero", 3000, 50), "hero tour: and back to hero", JSON.stringify(await st()));
-  ok(await waitFor(async () => (await ptNow()) < pt0 - 100, 4000, 30), "hero tour: the handle glides, the canvas narrows", `${pt0} -> ${await ptNow()}`);
-  ok(await waitFor(async () => (await ptNow()) === pt0, 4000, 50), "hero tour: the canvas comes back to full width", `${pt0} -> ${await ptNow()}`);
-  await sleep(400);
+  const edState = () => page.evaluate(() => ({ ed: document.querySelector("#top").dataset.edited, icon: Math.round(document.querySelector('.hero-live [data-slot="icon"]').getBoundingClientRect().left), time: Math.round(document.querySelector('.hero-live [data-slot="time"]').getBoundingClientRect().left), cols: [...document.querySelectorAll(".hero-ruler-track")].map((e) => Number(e.textContent)) }));
+  const ed0 = await edState();
+  ok(await waitFor(async () => { const e = await edState(); return e.ed === "true" && e.icon > e.time; }, 4000, 50), "hero tour: a field is moved (icon and time swap cells)", JSON.stringify(await edState()));
+  ok(await waitFor(async () => { const e = await edState(); return Math.max(...e.cols) > ed0.cols[0] + 30 && Math.min(...e.cols) === 24; }, 4000, 50), "hero tour: a column divider is dragged; one track takes the width, its neighbour stops at 24 pt", JSON.stringify((await edState()).cols));
+  ok(await waitFor(async () => { const e = await edState(); return e.ed === "false" && e.icon < e.time && e.cols.every((c) => c === ed0.cols[0]); }, 4000, 50), "hero tour: the template goes back to the preset", JSON.stringify(await edState()));
+  await sleep(700);
   const tourEnd = await page.evaluate(() => ({ cls: +window.__cls.toFixed(4), layouts: window.__layouts }));
   ok(tourEnd.layouts.join(">") === "hero>imageLeft>compact>hero", "hero tour: hero > imageLeft > compact > hero, once", tourEnd.layouts.join(">"));
   ok(tourEnd.cls < 0.01, `hero tour: cumulative layout shift stays under 0.01 through load, tour and glide (${tourEnd.cls})`);
@@ -149,7 +152,7 @@ await section("hero", async () => {
   ok((await page.$$eval("h1", (h) => h.length)) === 1, "hero: exactly one h1 in the document once the canvas is live");
   ok(await page.$eval("#top h1.hero-title", (e) => e.querySelectorAll("span").length === 3), "hero: the headline is set on three lines in the hero layout");
   ok(await page.$eval("#top", (e) => e.classList.contains("blueprint") && getComputedStyle(e).backgroundColor === "rgb(21, 84, 192)"), "hero: the canvas is on the blueprint ground");
-  const ruler = await page.$$eval("#top .hero-ruler > span", (s) => s.map((e) => e.textContent.trim()));
+  const ruler = await page.$$eval("#top .hero-ruler-track", (s) => s.map((e) => e.textContent.trim()));
   ok(ruler.length === 12 && ruler.every((x) => /^\d+$/.test(x)), "hero: the column ruler shows 12 track widths", ruler.join(","));
   // a real pointer drag on the handle
   const hb = await page.$eval(".hero-handle", (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
@@ -158,10 +161,11 @@ await section("hero", async () => {
   await page.mouse.down();
   for (let i = 1; i <= 10; i++) { await page.mouse.move(hb.x - i * 40, hb.y); await sleep(20); }
   await sleep(200);
-  const dragMid = { pt: await ptNow(), wd: await page.$eval("#top h1.hero-title", (e) => parseFloat((e.style.fontVariationSettings.match(/"wdth"\s*([\d.]+)/) || [])[1])), fs: await page.$eval("#top h1.hero-title", (e) => getComputedStyle(e).fontSize), ruler: await page.$eval("#top .hero-ruler > span", (e) => Number(e.textContent)) };
+  const dragMid = { pt: await ptNow(), wd: await page.$eval("#top h1.hero-title", (e) => parseFloat((e.style.fontVariationSettings.match(/"wdth"\s*([\d.]+)/) || [])[1])), fs: await page.$eval("#top h1.hero-title", (e) => getComputedStyle(e).fontSize), ruler: await page.$eval("#top .hero-ruler-track", (e) => Number(e.textContent)) };
   ok(dragMid.pt < pt0 - 300, "hero drag: dragging the handle with the mouse narrows the canvas", `${pt0} -> ${dragMid.pt}`);
   ok(dragMid.wd < wdDrag0 && dragMid.wd >= 62.5, "hero drag: the headline condenses on the width axis instead of shrinking", `${wdDrag0} -> ${dragMid.wd}`);
-  ok(dragMid.fs === (await page.$eval(".hero-size", (e) => getComputedStyle(e).fontSize)), "hero drag: the headline keeps its size while it condenses", dragMid.fs);
+  const fsBase = parseFloat(await page.$eval(".hero-size", (e) => getComputedStyle(e).fontSize));
+  ok(parseFloat(dragMid.fs) >= fsBase * 0.85 && parseFloat(dragMid.fs) <= fsBase, "hero drag: the headline keeps its size (it gives up at most 15 % for the wider leading of a condensed setting)", `${dragMid.fs} of ${fsBase}`);
   ok(dragMid.ruler < Number(ruler[0]), "hero drag: the ruler follows the tracks", `${ruler[0]} -> ${dragMid.ruler}`);
   const tcell = await page.evaluate(() => { const t = document.querySelector("#top .hero-live .hero-c-time"), x = t.querySelector(".hero-time"); const a = t.getBoundingClientRect(), b = x.getBoundingClientRect(); return { cell: Math.round(a.right), text: Math.round(b.left + x.scrollWidth) }; });
   ok(tcell.text <= tcell.cell, "hero drag: the time stays inside its cell at the narrow end", JSON.stringify(tcell));
@@ -650,7 +654,7 @@ await section("large", async () => {
         over: document.documentElement.scrollWidth - document.documentElement.clientWidth, title: px("#top h1", "fontSize"), lede: px("#top .hero-live .hero-lede", "fontSize"), btn: px("#top .hero-live .btn-primary", "height"), slot: px("#top .hero-live .slot", "fontSize"),
         inCell: Math.max(...[...h1.querySelectorAll("span")].map((s) => s.getBoundingClientRect().right)) <= cell.right + 1,
         pt: Number((/(\d+)\s*pt/.exec(document.querySelector(".hero-readout").innerText.replace(/\u2007/g, "")) || [])[1]), cw: Math.round(c.width),
-        col: Number(document.querySelector(".hero-ruler span").textContent), gap: parseFloat(getComputedStyle(document.querySelector(".hero-ghost")).columnGap),
+        col: Number(document.querySelector(".hero-ruler-track").textContent), gap: parseFloat(getComputedStyle(document.querySelector(".hero-ghost")).columnGap),
         hdr: Math.round(hd.getBoundingClientRect().left + parseFloat(hs.paddingLeft)) - Math.round(c.left),
         why: px("#why .display-l", "fontSize"), dl: px("#download .display-l", "fontSize"), nav: px("header nav a", "fontSize"), body: px("body", "fontSize"),
       };
@@ -738,6 +742,130 @@ await section("stable", async () => {
   }
 });
 
+// ============ the hero is a small Designer ============
+await section("editor", async () => {
+  const S = () => page.evaluate(() => {
+    const t = document.querySelector("#top"), h = t.querySelector("h1"), cv = t.querySelector(".hero-canvas").getBoundingClientRect();
+    const box = (n) => { const r = t.querySelector(`.hero-live [data-slot="${n}"]`).getBoundingClientRect(); return { x: Math.round(r.left - cv.left), y: Math.round(r.top - cv.top), w: Math.round(r.width), h: Math.round(r.height) }; };
+    const nums = (sel) => [...t.querySelectorAll(sel)].map((e) => Number(e.textContent));
+    return { ed: t.dataset.edited, heroH: Math.round(t.getBoundingClientRect().height), next: Math.round(document.querySelector("#why").getBoundingClientRect().top + scrollY), title: box("title"), body: box("body"), icon: box("icon"), time: box("time"), cols: nums(".hero-ruler-track"), rows: nums(".hero-rows-track"), lines: h.querySelectorAll("span").length, fs: parseFloat(getComputedStyle(h).fontSize), cw: Math.round(cv.width), gap: parseFloat(getComputedStyle(t.querySelector(".hero-ghost")).columnGap) };
+  });
+  const centre = (sel) => page.$eval(sel, (e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const dragBy = async (from, dx, dy, steps = 10) => { await page.mouse.move(from.x, from.y); await page.mouse.down(); for (let i = 1; i <= steps; i++) { await page.mouse.move(from.x + (dx * i) / steps, from.y + (dy * i) / steps); await sleep(15); } };
+  /** Every line's ink (content area of the last line, widest line's right edge) is inside the title cell. */
+  const ink = () => page.evaluate(() => {
+    const h = document.querySelector("#top h1"), cell = h.closest(".cell"), cs = getComputedStyle(cell), cr = cell.getBoundingClientRect();
+    const spans = [...h.querySelectorAll("span")];
+    const rng = document.createRange(); rng.selectNodeContents(spans[spans.length - 1]);
+    const last = rng.getBoundingClientRect();
+    const tops = spans.map((s) => { const r = document.createRange(); r.selectNodeContents(s); return r.getBoundingClientRect(); });
+    const fs = parseFloat(getComputedStyle(h).fontSize);
+    // lines never touch: the next line's cap top (≈ 0.72 em above its baseline) stays under this line's descender (≈ 0.2 em below its baseline)
+    const pitch = tops.length > 1 ? Math.min(...tops.slice(1).map((r, i) => r.top - tops[i].top)) / fs : 1;
+    return { bottom: Math.round(last.bottom - (cr.bottom - parseFloat(cs.borderBottomWidth) - parseFloat(cs.paddingBottom))), right: Math.round(Math.max(...tops.map((r) => r.right)) - (cr.right - parseFloat(cs.paddingRight))), pitch: +pitch.toFixed(3), wd: h.style.fontVariationSettings };
+  });
+  for (const [w, hh] of [[1440, 900], [2560, 1440]]) {
+    await load("/", w, hh);
+    await page.mouse.move(2, 2);
+    await page.keyboard.press("Shift"); // any key ends the tour
+    await sleep(700);
+    const s0 = await S();
+    const T = `editor ${w}`;
+    ok(s0.ed === "false" && s0.cols.length === 12 && s0.rows.length === 3, `${T}: rulers show 12 columns and 3 rows in points`, JSON.stringify({ cols: s0.cols, rows: s0.rows }));
+    // 1. drag a field onto another cell: they swap, the headline re-fits
+    await page.hover('#top .hero-live [data-slot="title"]');
+    const grip = await centre('#top .hero-live [data-slot="title"] .hero-grip'), body = await centre('#top .hero-live [data-slot="body"]');
+    await dragBy(grip, body.x - grip.x, body.y - grip.y);
+    ok(await page.$eval('#top .hero-live [data-slot="body"]', (e) => e.dataset.over === "true"), `${T}: the cell under a dragged field lights up as the drop target`);
+    await page.mouse.up(); await page.mouse.move(2, 2); await sleep(800);
+    const s1 = await S();
+    const near = (a, b) => Math.abs(a - b) <= 2;
+    const same = (a, b) => near(a.x, b.x) && near(a.y, b.y) && near(a.w, b.w) && near(a.h, b.h);
+    ok(s1.ed === "true" && same(s1.title, s0.body) && same(s1.body, s0.title), `${T}: dragging the title by its grip onto the body cell swaps the two fields`, JSON.stringify({ title: s1.title, body: s1.body }));
+    ok(s1.fs < s0.fs && s1.lines < 3, `${T}: the headline re-fits its new cell (fewer lines, smaller, the axis condensed)`, JSON.stringify({ fs: s1.fs, lines: s1.lines }));
+    let k = await ink();
+    ok(k.bottom <= 0 && k.right <= 0, `${T}: the moved headline's ink stays inside its cell`, JSON.stringify(k));
+    // 2. a column divider
+    const d4 = await centre('#top .hero-divider-col[aria-label="Resize column 4"]');
+    await dragBy(d4, 60, 0); await page.mouse.up(); await page.mouse.move(2, 2); await sleep(500);
+    const s2 = await S();
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    ok(s2.cols[3] > s1.cols[3] + 40 && s2.cols[4] < s1.cols[4] - 20 && s2.cols[4] >= 24 && s2.cols.every((c, i) => i === 3 || i === 4 || c === s1.cols[i]), `${T}: dragging a column divider gives the column the width its neighbour gives up (24 pt floor)`, JSON.stringify(s2.cols));
+    ok(Math.abs(sum(s2.cols) + 11 * s2.gap - s2.cw) <= 6, `${T}: the ruler's columns plus gaps still sum to the canvas (${sum(s2.cols)} + 11 × ${s2.gap} vs ${s2.cw})`);
+    // 3. a row divider
+    const r1 = await centre('#top .hero-divider-row[aria-label="Resize row 1"]');
+    await dragBy(r1, 0, -70); await page.mouse.up(); await page.mouse.move(2, 2); await sleep(700);
+    const s3 = await S();
+    ok(s3.rows[0] < s2.rows[0] - 50 && s3.rows[1] > s2.rows[1] + 50 && near(sum(s3.rows), sum(s2.rows)), `${T}: dragging a row divider moves height between two rows`, JSON.stringify(s3.rows));
+    ok(s3.fs > s1.fs, `${T}: the headline grows with its row`, `${s1.fs} -> ${s3.fs}`);
+    // 4. keyboard: move a field, resize a track
+    await page.focus('#top .hero-live [data-slot="icon"] .hero-grip');
+    await page.keyboard.press("ArrowRight"); await sleep(700);
+    const s4 = await S();
+    ok(s4.icon.x === s3.time.x && s4.time.x === s3.icon.x, `${T}: ArrowRight on a field's grip moves it to the next cell`, JSON.stringify({ icon: s4.icon.x, time: s4.time.x }));
+    await page.focus('#top .hero-divider-col[aria-label="Resize column 9"]');
+    await page.keyboard.press("ArrowRight"); await sleep(400);
+    const s5 = await S();
+    ok(s5.cols[8] > s4.cols[8] && s5.cols[9] < s4.cols[9], `${T}: ArrowRight on a divider resizes the track`, JSON.stringify(s5.cols));
+    // 5. the right edge still resizes the whole grid; sample the headline's ink from full to the narrowest
+    const hb = await centre(".hero-handle");
+    await page.mouse.move(hb.x, hb.y); await page.mouse.down();
+    let worst = { bottom: -99, right: -99, pitch: 9 };
+    for (let i = 1; i <= 14; i++) { await page.mouse.move(hb.x - (i * s5.cw * 0.45) / 14, hb.y); await sleep(40); k = await ink(); worst = { bottom: Math.max(worst.bottom, k.bottom), right: Math.max(worst.right, k.right), pitch: Math.min(worst.pitch, k.pitch) }; }
+    await page.mouse.up(); await page.mouse.move(2, 2); await sleep(400);
+    ok(worst.bottom <= 0 && worst.right <= 0, `${T}: at every canvas width the headline's last line, descenders included, is inside the cell`, JSON.stringify(worst));
+    // 6. Send describes the arrangement
+    await clickBtn("#top .hero-live", "Send");
+    ok(await waitFor(async () => /Your layout: .*title r\d.* Columns /.test(await overlayText()), 3000), `${T}: Send puts a banner under the bell that states the visitor's arrangement`, (await overlayText()).slice(0, 160));
+    // 7. nothing moved the page
+    const s6 = await S();
+    ok(s6.heroH === s0.heroH && s6.next === s0.next, `${T}: the hero keeps its height through every edit (${s0.heroH} px) and the next section stays put`, JSON.stringify({ h: s6.heroH, next: s6.next }));
+    // 8. Reset
+    await clickBtn("#top .hero-pick", "Reset"); await sleep(900);
+    const s7 = await S();
+    ok(s7.ed === "false" && JSON.stringify(s7.cols) === JSON.stringify(s0.cols) && same(s7.title, s0.title) && s7.cw === s0.cw && s7.heroH === s0.heroH, `${T}: Reset restores the preset`, JSON.stringify({ cols: s7.cols, title: s7.title }));
+    // 9. presets: ink inside the cell across the width range, lines never touch
+    for (const l of ["hero", "imageLeft", "compact"]) {
+      await clickBtn("#top .hero-pick", l); await sleep(800);
+      const hb2 = await centre(".hero-handle");
+      await page.mouse.move(hb2.x, hb2.y); await page.mouse.down();
+      let wst = { bottom: -99, right: -99, pitch: 9 };
+      for (let i = 0; i <= 12; i++) { await page.mouse.move(hb2.x - (i * s0.cw * 0.44) / 12, hb2.y); await sleep(40); k = await ink(); wst = { bottom: Math.max(wst.bottom, k.bottom), right: Math.max(wst.right, k.right), pitch: Math.min(wst.pitch, k.pitch) }; }
+      await page.mouse.up(); await page.mouse.move(2, 2);
+      ok(wst.bottom <= 0 && wst.right <= 0, `${T}: ${l}: from full width to the narrowest the headline's ink (g, y descenders) stays inside the title cell`, JSON.stringify(wst));
+      ok(wst.pitch >= 0.9, `${T}: ${l}: lines keep at least 0.9 em between baselines, more when condensed (min ${wst.pitch})`);
+      await clickBtn("#top .hero-pick", "Reset"); await sleep(500);
+    }
+    // icon fitted to its cell
+    await clickBtn("#top .hero-pick", "imageLeft"); await sleep(800);
+    for (const l of ["imageLeft", "hero"]) {
+      await clickBtn("#top .hero-pick", l); await sleep(800);
+      const cov = await page.evaluate(() => { const c = document.querySelector('#top .hero-live [data-slot="icon"]'), i = c.querySelector("img").getBoundingClientRect(), s = getComputedStyle(c); const cw = c.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight), ch = c.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom); return { cover: +(i.width / Math.min(cw, ch)).toFixed(2), capped: i.width >= 299 }; });
+      ok(cov.cover >= 0.7 || cov.capped, `${T}: ${l}: the icon is fitted to its cell (${Math.round(cov.cover * 100)} % of the shorter side)`);
+    }
+  }
+  // phone: tap a field, then tap the cell it should go to; steppers for a track
+  await load("/", 390, 844);
+  await page.keyboard.press("Shift"); await sleep(600);
+  const p0 = await S();
+  await jsClick('#top .hero-live [data-slot="icon"]', "Move icon");
+  ok(await waitFor(() => page.$eval("#top", (e) => e.dataset.picking === "true"), 1500), "editor 390: tapping a field's grip picks it up");
+  await page.$eval('#top .hero-live [data-slot="time"]', (e) => e.click()); await sleep(700);
+  const p1 = await S();
+  ok(p1.icon.x === p0.time.x && p1.time.x === p0.icon.x, "editor 390: tapping another cell drops it there (the two swap)", JSON.stringify({ icon: p1.icon.x, time: p1.time.x }));
+  await page.$eval("#top .hero-ruler-track", (e) => e.click()); await sleep(300);
+  await jsClick("#top .hero-stepper", "Larger"); await sleep(400);
+  const p2 = await S();
+  ok(p2.cols[0] > p1.cols[0] && p2.cols[1] < p1.cols[1], "editor 390: tapping a column on the ruler gives a stepper that resizes it", JSON.stringify(p2.cols));
+  ok(p2.heroH === p0.heroH && (await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)), "editor 390: the hero keeps its height and nothing overflows", JSON.stringify({ a: p0.heroH, b: p2.heroH }));
+  // Download band: icon fitted to its cell
+  for (const w of [1440, 834, 390]) {
+    await load("/", w, 900);
+    const cov = await page.evaluate(() => { const c = [...document.querySelectorAll("#download .cell")].find((e) => e.querySelector(".slot")?.textContent === "icon"); c.scrollIntoView(); const i = c.querySelector("img").getBoundingClientRect(), s = getComputedStyle(c); const cw = c.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight), ch = c.clientHeight - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom); return +(Math.min(i.width, i.height) / Math.min(cw, ch)).toFixed(2); });
+    ok(cov >= 0.7, `download ${w}: the icon covers ${Math.round(cov * 100)} % of its cell's shorter side`);
+  }
+});
+
 // ============ header and anchors ============
 await section("anchors", async () => {
   for (const path of ["/", "/changelog", "/docs"]) {
@@ -750,7 +878,7 @@ await section("anchors", async () => {
     for (const id of ["why", "designer", "actions", "agents", "integrate", "download"]) {
       await page.goto(BASE + "/#" + id, { waitUntil: "load" });
       await sleep(1600);
-      const r = await page.evaluate((id) => { const s = document.getElementById(id); const hd = document.querySelector("header").getBoundingClientRect().bottom; const cell = s.querySelector(".cell") || s.querySelector("h2"); const q = (x) => { const e = s.querySelector(x); return e ? e.getBoundingClientRect().bottom : 0; }; return { top: Math.round(cell.getBoundingClientRect().top - hd), frame: Math.round(q(".dz-frame")), legend: Math.round(q(".dz-legend")), frameW: Math.round(s.querySelector(".dz-frame")?.getBoundingClientRect().width || 0), vh: innerHeight }; }, id);
+      const r = await page.evaluate((id) => { const s = document.getElementById(id); const hd = document.querySelector("header").getBoundingClientRect().bottom; const cell = s.querySelector("h2").closest(".cell") || s.querySelector("h2"); const q = (x) => { const e = s.querySelector(x); return e ? e.getBoundingClientRect().bottom : 0; }; return { top: Math.round(cell.getBoundingClientRect().top - hd), frame: Math.round(q(".dz-frame")), legend: Math.round(q(".dz-legend")), frameW: Math.round(s.querySelector(".dz-frame")?.getBoundingClientRect().width || 0), vh: innerHeight }; }, id);
       ok(r.top >= 0 && r.top <= 40, `anchor ${w}: #${id} lands with its title cell just under the header (${r.top} px)`);
       if (id === "designer") {
         ok(r.frame <= r.vh && r.legend <= r.vh, `anchor ${w}: #designer shows the whole capture and its six notes on one screen`, JSON.stringify(r));
