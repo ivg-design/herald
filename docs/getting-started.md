@@ -211,6 +211,7 @@ curl or from code. The line under the notification says how it left the screen, 
 
 ## Related
 
+- [Integrate Herald into your app](integrate.md): the starting page for an app developer.
 - [Install Herald](install.md)
 - [HTTP API](reference/api/README.md)
 - [Clients](../clients/README.md)

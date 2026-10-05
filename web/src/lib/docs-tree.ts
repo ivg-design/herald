@@ -26,6 +26,7 @@ export const DOC_TREE: DocGroup[] = [
     items: [
       { slug: "install", title: "Install", file: "docs/install.md" },
       { slug: "first-notification", title: "Send your first notification", file: "docs/getting-started.md" },
+      { slug: "integrate", title: "Integrate Herald into your app", file: "docs/integrate.md" },
       { slug: "agent-quickstart", title: "Connect an AI agent", file: "docs/AGENT-QUICKSTART.md" },
       { slug: "app", title: "The Herald app", file: "docs/APP.md" },
     ],
@@ -50,6 +51,7 @@ export const DOC_TREE: DocGroup[] = [
       { slug: "how-it-works", title: "How the relay works", file: "docs/cloud/how-it-works.md" },
       { slug: "connect-agent", title: "Connect an agent with a key", file: "docs/cloud/connect-agent.md" },
       { slug: "connect-chatgpt", title: "Connect ChatGPT", file: "docs/cloud/connect-chatgpt.md" },
+      { slug: "connect-dot", title: "Connect an OpenAI dot", file: "docs/cloud/connect-dot.md" },
       { slug: "device-flow", title: "Agents without a browser", file: "docs/cloud/device-flow.md" },
       { slug: "reply-events", title: "Reply events and dots", file: "docs/cloud/reply-events.md" },
       { slug: "custom-domain", title: "Custom domain", file: "docs/cloud/custom-domain.md" },
@@ -141,13 +143,27 @@ export const DOC_TREE: DocGroup[] = [
     ],
   },
   {
+    id: "relay-api",
+    title: "Relay API",
+    items: [
+      { slug: "overview", title: "Overview and authentication", file: `${R}/relay/README.md` },
+      { slug: "agent", title: "Agent endpoints", file: `${R}/relay/agent.md` },
+      { slug: "mcp", title: "MCP endpoint", file: `${R}/relay/mcp.md` },
+      { slug: "events", title: "Reply events", file: `${R}/relay/events.md` },
+      { slug: "oauth", title: "OAuth", file: `${R}/relay/oauth.md` },
+      { slug: "device-flow", title: "Device flow", file: `${R}/relay/device-flow.md` },
+      { slug: "pairing-and-devices", title: "Pairing and devices", file: `${R}/relay/pairing-and-devices.md` },
+      { slug: "device-side", title: "Device-side endpoints", file: `${R}/relay/device-side.md` },
+      { slug: "limits-and-errors", title: "Limits and errors", file: `${R}/relay/limits-and-errors.md` },
+    ],
+  },
+  {
     id: "reference",
     title: "Reference",
     items: [
       { slug: "cli", title: "herald CLI", file: `${R}/cli.md` },
       { slug: "swift-client", title: "HeraldClient (Swift)", file: "clients/README.md", slice: ["intro", "Swift"] },
       { slug: "clients", title: "Python & Node clients", file: "clients/README.md", slice: ["Python", "Node", "Registering a manifest"] },
-      { slug: "relay-api", title: "Relay API", file: `${R}/relay-api.md` },
       { slug: "parity", title: "What you can do where", file: `${R}/parity.md` },
       { slug: "glossary", title: "Glossary", file: `${R}/glossary.md` },
     ],
@@ -157,7 +173,6 @@ export const DOC_TREE: DocGroup[] = [
     title: "Examples",
     items: [
       { slug: "bidbot", title: "BidBot", file: "docs/examples/bidbot/README.md" },
-      { slug: "webwatcher", title: "WebWatcher", file: "docs/examples/webwatcher.md" },
     ],
   },
   {
@@ -194,6 +209,8 @@ export const DOC_REDIRECTS: [string, string][] = [
   ["/docs/more/api-overview", "/docs/api/overview"],
   ["/docs/more/reference-index", "/docs"],
   ["/docs/more/examples-index", "/docs/examples/bidbot"],
+  ["/docs/examples/webwatcher", "/docs/examples/bidbot"],
+  ["/docs/reference/relay-api", "/docs/relay-api/overview"],
   ["/docs/more/testing", "/docs/guides/testing"],
 ];
 

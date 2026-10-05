@@ -135,6 +135,6 @@ the agent knows it.
 
 ## Related
 
-- [Relay API: OAuth endpoints](../reference/relay-api.md#oauth-endpoints): every parameter of these requests.
+- [Relay API: device flow](../reference/relay/device-flow.md): every parameter of these requests.
 - [Reply events](reply-events.md): be told when the user replies.
 - [`GET /v1/relay/instructions`](../reference/api/relay.md#get-v1relayinstructions): get this sequence as text, with the relay's address filled in.

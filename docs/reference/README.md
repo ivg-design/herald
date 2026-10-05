@@ -81,7 +81,7 @@ Each interface has one home for every endpoint, tool or command, so a fact is ne
 | [Relay tools](mcp/relay.md) | Setting up and operating the relay. |
 | [Command line](cli.md) | Every `herald` command, with options and exit status. |
 | [Clients](../../clients/README.md) | The Swift, Python and Node client libraries. |
-| [Relay remote API](relay-api.md) | The relay's own endpoints for agents, OAuth connectors and devices. |
+| [Relay remote API](relay/README.md) | The relay's own endpoints for agents, OAuth connectors and devices. |
 | [Parity](parity.md) | Each capability against its HTTP route, command and MCP tool. |
 
 ## Words

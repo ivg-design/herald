@@ -34,7 +34,8 @@ curl -s -X POST "http://127.0.0.1:$(cat "$D/port")/v1/notify" \
 
 Herald answers `{"ok": true, "id": "..."}` and the banner appears. [Send your first notification](docs/getting-started.md)
 continues with buttons, updating a banner in place, dismissing it, and the same calls from the command line,
-Python, Node and Swift.
+Python, Node and Swift. If you build an app, [Integrate Herald into your app](docs/integrate.md) is the page to start
+with.
 
 ## Ways to send a notification
 
@@ -46,8 +47,8 @@ Python, Node and Swift.
 | MCP server | An AI agent on this Mac sends and designs banners. | [Herald MCP server](docs/MCP.md) |
 | Cloud relay | An agent that runs in the cloud, such as ChatGPT, sends to this Mac. | [Cloud agents](docs/CLOUD.md) |
 
-[WebWatcher](docs/examples/webwatcher.md) is an app that delivers its alerts through Herald, and
-[BidBot](docs/examples/bidbot/README.md) is a complete example that sends every kind of banner.
+WebWatcher is a Mac app that delivers its alerts through Herald. [BidBot](docs/examples/bidbot/README.md) is a
+complete example that sends every kind of banner.
 
 ## Documentation
 
@@ -57,6 +58,7 @@ Start with the task pages. Each one has numbered steps and says what you should 
 |---|---|
 | [Install Herald](docs/install.md) | Install, update, uninstall and build from source. |
 | [Send your first notification](docs/getting-started.md) | Show, update and dismiss a banner from curl, the CLI, Python, Node and Swift. |
+| [Integrate Herald into your app](docs/integrate.md) | Find Herald, register a manifest, send notifications, add buttons, ship a template and test. |
 | [Agent quick start](docs/AGENT-QUICKSTART.md) | Let an AI agent on this Mac use Herald. |
 | [The Herald app](docs/APP.md) | Use the menu bar menu, History and every Settings tab. |
 | [Design a banner](docs/AUTHORING.md) | Lay out a banner in the Designer. |

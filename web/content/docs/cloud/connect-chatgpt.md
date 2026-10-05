@@ -107,5 +107,5 @@ connector that is still approved, Herald offers **Remove and Revoke**, which doe
 
 - [Connect an agent without a browser](device-flow.md): for agents that cannot open the approval page.
 - [Reply events](reply-events.md): let the connector be told when you reply.
-- [Relay API: OAuth endpoints](../reference/relay-api.md#oauth-endpoints): the protocol behind these steps.
+- [Relay API: OAuth](../reference/relay/oauth.md): the protocol behind these steps.
 - [`GET /v1/relay/connectors`](../reference/api/relay.md#get-v1relayconnectors): list connectors and waiting requests from a script.

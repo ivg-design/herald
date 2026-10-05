@@ -130,7 +130,7 @@ npm run deploy
 For local development, `wrangler dev` needs a file `relay/.dev.vars` that sets `RELAY_SECRET`.
 
 Limits are set with variables on the relay program. Their names are in the
-[relay API](../reference/relay-api.md#limits-and-error-codes). To restrict where
+[relay API](../reference/relay/limits-and-errors.md). To restrict where
 [reply events](reply-events.md) may be delivered, set `EVENT_CALLBACK_HOSTS` to a comma-separated list of host
 names.
 

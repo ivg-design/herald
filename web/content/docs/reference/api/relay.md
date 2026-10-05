@@ -7,7 +7,7 @@ calls. Use them to script a relay setup or to let a local agent do it for the us
 
 > [!NOTE]
 > This page documents the routes under `/v1/relay` on Herald's **local** API. The relay itself, running in the
-> cloud, serves a different API to cloud agents. That one is the [relay API](../relay-api.md).
+> cloud, serves a different API to cloud agents. That one is the [relay API](../relay/README.md).
 
 ## What these endpoints manage
 
@@ -1138,5 +1138,5 @@ curl -s -X POST "$HERALD/v1/relay/delete" \
 
 - [Cloud relay](../../CLOUD.md): what the relay is and how to set it up by hand.
 - [How the relay works](../../cloud/how-it-works.md): the security model and the limits.
-- [Relay API](../relay-api.md): what the relay itself serves to cloud agents.
+- [Relay API](../relay/README.md): what the relay itself serves to cloud agents.
 - [MCP relay tools](../mcp/relay.md): the same operations for a local agent.

@@ -174,7 +174,7 @@ try {
   await page.keyboard.press("Escape");
   const lbClosed = await page.evaluate(() => !document.querySelector("dialog.docs-lightbox[open]"));
   ok(lb && lbClosed, "docs: a figure opens a larger view and Escape closes it");
-  for (const [from, to] of [["/docs/reference/http-api", "/docs/api/overview"], ["/docs/more/mcp-guide", "/docs/guides/mcp"], ["/docs/concepts/templates", "/docs/guides/templates"], ["/docs/reference/cloud-relay-api", "/docs/cloud/connect-agent"]]) {
+  for (const [from, to] of [["/docs/reference/http-api", "/docs/api/overview"], ["/docs/more/mcp-guide", "/docs/guides/mcp"], ["/docs/concepts/templates", "/docs/guides/templates"], ["/docs/reference/cloud-relay-api", "/docs/cloud/connect-agent"], ["/docs/reference/relay-api", "/docs/relay-api/overview"], ["/docs/examples/webwatcher", "/docs/examples/bidbot"]]) {
     const res = await page.goto(BASE + from, { waitUntil: "load" });
     ok(res.status() < 400 && new URL(page.url()).pathname === to, `docs: the old URL ${from} redirects to ${to}`, page.url());
   }

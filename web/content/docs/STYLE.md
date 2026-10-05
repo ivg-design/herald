@@ -69,7 +69,7 @@ The docs describe Herald as it works today, in the present tense, as if it had a
 
 | Placeholder | Stands for |
 |---|---|
-| `example.bidbot` | An app id. Examples use the fictional BidBot, or `webwatcher.email` on pages about WebWatcher. |
+| `example.bidbot` | An app id. Examples use the fictional BidBot. |
 | `$HERALD` | The local API base URL. |
 | `$TOKEN` | The local API bearer token. |
 | `$RELAY` | The relay's origin, `https://herald-relay.example.workers.dev`. |

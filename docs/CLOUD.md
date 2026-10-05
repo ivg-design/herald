@@ -144,4 +144,4 @@ More symptoms, including what agents see, are in [Operate the relay](cloud/opera
 - [Operate the relay](cloud/operating.md): update, advanced settings, several Macs, delete.
 - [Cloud relay API (local)](reference/api/relay.md): do everything on this page from a script.
 - [MCP relay tools](reference/mcp/relay.md): let a local agent set the relay up for you.
-- [Relay API](reference/relay-api.md): what the relay serves to cloud agents.
+- [Relay API](reference/relay/README.md): what the relay serves to cloud agents.

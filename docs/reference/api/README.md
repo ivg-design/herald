@@ -152,4 +152,4 @@ Use this to develop against Herald without touching your real notifications.
 - [herald CLI](../cli.md): the same operations from a terminal.
 - [MCP tools](../mcp/README.md): the same operations for an AI agent.
 - [Python, Node and Swift clients](../../../clients/README.md): thin wrappers over this API.
-- [Cloud relay API](../relay-api.md): the separate API the relay serves to cloud agents.
+- [Cloud relay API](../relay/README.md): the separate API the relay serves to cloud agents.

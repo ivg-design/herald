@@ -22,6 +22,13 @@ export default function Integrate() {
         <div className="col-span-full min-w-0 lg:col-span-8">
           <h3 className="display display-m !mb-5">Send from your language</h3>
           <CodeTabs />
+          <p className="mt-5 text-[15px] leading-snug text-muted">
+            Building an app?{" "}
+            <SiteLink href="/docs/getting-started/integrate" className="font-semibold text-accent-text underline underline-offset-4">
+              {nowrapText("Integrate Herald into your app")}
+            </SiteLink>{" "}
+            walks through finding Herald, the manifest, buttons, a default template and testing.
+          </p>
         </div>
         <div className="col-span-full mt-6 min-w-0 lg:col-span-4 lg:col-start-9 lg:mt-0">
           <h3 className="display display-m m-0">Already speaking Herald</h3>

@@ -3,7 +3,7 @@
 These MCP tools set up and manage the cloud relay from an agent running on the user's Mac: store the Cloudflare token,
 deploy the relay, pair this Mac, create and revoke the keys that cloud agents use, and check that everything works. They
 are for an agent that is asked "set up the cloud relay" or "give my cloud agent a key". Cloud agents themselves do not use
-these tools: they talk to the relay's own remote endpoint, described in [Relay API](../relay-api.md). Each tool here
+these tools: they talk to the relay's own remote endpoint, described in [Relay API](../relay/README.md). Each tool here
 wraps one route of the local [relay API](../api/relay.md).
 
 ## Concepts
@@ -1020,6 +1020,6 @@ Destructive for that subscription only. A malformed id is a `400`.
 - [Connect a cloud agent](../../cloud/connect-agent.md): the task guide for creating a key and pasting it into an agent.
 - [Reply events](../../cloud/reply-events.md): how a cloud agent subscribes to replies.
 - [Relay API](../api/relay.md): the local routes behind these tools.
-- [Relay's remote API](../relay-api.md): the endpoints a cloud agent calls.
+- [Relay's remote API](../relay/README.md): the endpoints a cloud agent calls.
 - [Apps and settings tools](apps-and-settings.md): the tools for apps, approvals, settings and History.
 - [MCP tool index and conventions](README.md): how the server reports errors and what every tool shares.

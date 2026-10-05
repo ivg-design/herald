@@ -78,7 +78,7 @@ curl -s -X POST "$RELAY/v1/notify" \
 > [Use a custom domain](custom-domain.md) for the cause and the alternative.
 
 Every field a notification may carry, and the other endpoints, are in the
-[relay API](../reference/relay-api.md).
+[relay API](../reference/relay/README.md).
 
 ## Check that it works
 
@@ -127,7 +127,7 @@ History stay in Herald until you remove the app in **Settings > Apps**.
 
 ## Related
 
-- [Relay API](../reference/relay-api.md): every field, endpoint and error an agent can meet.
+- [Relay API](../reference/relay/README.md): every field, endpoint and error an agent can meet.
 - [How the relay works](how-it-works.md): what a key can and cannot do.
 - [`POST /v1/relay/keys`](../reference/api/relay.md#post-v1relaykeys): create a key from a script.
 - [`create_agent_key`](../reference/mcp/relay.md#create_agent_key): let a local agent create the key.

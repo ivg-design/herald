@@ -40,7 +40,7 @@ An agent that holds a valid credential can do exactly four things:
 
 It cannot run commands, scripts or Shortcuts. It cannot add buttons that call a server, show a picture from a
 file, or play audio. It cannot read your History, see another agent's notifications, change settings, or create
-or approve keys. The fields and endpoints are in the [relay API](../reference/relay-api.md).
+or approve keys. The fields and endpoints are in the [relay API](../reference/relay/README.md).
 
 A cloud notification arrives in Herald as an ordinary notification of an app named `cloud.` followed by the
 key's name, so it has its own entry in **Settings > Apps**, its own History and its own template.
@@ -180,4 +180,4 @@ To see today's numbers, look at **Usage today** in **Settings > Cloud**, or call
 
 - [Cloud relay](../CLOUD.md): set the relay up.
 - [Operate the relay](operating.md): change limits, add Macs, update or delete the relay.
-- [Relay API](../reference/relay-api.md): the endpoints, fields and error codes in full.
+- [Relay API](../reference/relay/README.md): the endpoints, fields and error codes in full.
