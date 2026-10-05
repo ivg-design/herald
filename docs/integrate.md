@@ -291,14 +291,25 @@ curl -s "$HERALD/v1/replies/wait?app=example.bidbot&notificationId=bid-42&timeou
 ```
 
 **Commands.** A `command` button runs only when the user allows commands for your app, once with **Run once** and
-**Always allow** in the banner, or with the **Allow this app to run commands** switch in **Settings > Apps**. Register
+**Always allow** in the banner, or with the **Allow this app to run commands, scripts and Shortcuts** switch in **Settings > Apps**. Register
 with `allowCommands: true` to ask for it. Until the user agrees, the press fails with
 `commands are not allowed for APP`. Prefer a callback to a command: your app can do the work itself.
 
 ![The Apps tab of Settings with one app selected: its icon, banner, sound and display settings and the Remove button](../web/public/shots/docs/settings-apps.png#focus=60 "Per-app settings, including the switch that allows the app's buttons to run commands. Herald never grants it for the user.")
 
-Script and Shortcut actions and follow-up actions are described in [Actions](reference/actions.md); this page covers the
-five kinds above.
+**Scripts and Shortcuts.** An action can also run a file from Herald's scripts folder (`"kind": "script"`, a plain
+file name) or an Apple Shortcut (`"kind": "shortcut"`, with an optional `input` text). They run under the same switch as
+a command, and the banner question names the script and its hash, or the Shortcut and its input.
+
+```json
+{"id": "forward", "label": "Forward", "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}
+```
+
+**Follow-up.** Your manifest can name what to run when one of your notifications is left unattended: `"followUp":
+{"after": "10m", "actionRef": "forward"}`. The timer starts when the banner appears and stops when the person does
+anything with it. A callback follow-up receives `"event": "unattended"`. The person's template can replace or switch
+off your follow-up. See [Follow-ups](reference/actions.md#follow-ups) and the how-to
+[Forward a notification you missed](FORWARD-MISSED.md).
 
 ### Step 5: ship a default template and Rive assets (optional)
 

@@ -52,6 +52,7 @@ A template is one JSON document, and every edit the Designer makes rewrites it. 
 | The problems button | none | none | [`validate_template`](mcp/templates.md#validate_template) |
 | **Component** menu in the **Cell** tab | [`GET /v1/components`](api/templates.md#get-v1components) | none | [`component_schema`](mcp/templates.md#component_schema) |
 | **Actions** tab, add a rule | [`PUT /v1/templates`](api/templates.md#put-v1templates) | [`herald template put`](cli.md#herald-template-put) | [`add_action_rule`](mcp/templates.md#add_action_rule) |
+| **Actions** tab, **Follow-up** block | [`PUT /v1/templates/follow-up`](api/templates.md#put-v1templatesfollow-up) | [`herald template follow-up`](cli.md#herald-template-follow-up) | [`set_follow_up`](mcp/templates.md#set_follow_up) |
 | Symbol browser | [`GET /v1/symbols`](api/templates.md#get-v1symbols) | [`herald symbols`](cli.md#herald-symbols) | [`list_symbols`](mcp/templates.md#list_symbols) |
 | **Run Apple Shortcut** form | [`GET /v1/shortcuts`](api/templates.md#get-v1shortcuts) | none | [`list_shortcuts`](mcp/templates.md#list_shortcuts) |
 | Select a cell, undo, redo, zoom, drag | none | none | UI only |
@@ -99,6 +100,7 @@ Past notifications, kept per app.
 | What you do in the app | HTTP | CLI | MCP |
 |---|---|---|---|
 | History window | [`GET /v1/history`](api/history.md#get-v1history) | [`herald history`](cli.md#herald-history) | [`list_history`](mcp/apps-and-settings.md#list_history) |
+| A follow-up's line in a History row | [`GET /v1/history`](api/history.md#get-v1history) | [`herald history`](cli.md#herald-history) | [`list_history`](mcp/apps-and-settings.md#list_history) |
 | The search field | [`GET /v1/history/search`](api/history.md#get-v1historysearch) | [`herald history search`](cli.md#herald-history-search) | [`history_search`](mcp/apps-and-settings.md#history_search) |
 | **Re-show as Banner** | [`POST /v1/history/reshow`](api/history.md#post-v1historyreshow) | [`herald history reshow`](cli.md#herald-history-reshow) | [`reshow_notification`](mcp/apps-and-settings.md#reshow_notification) |
 | **Delete** on one item | [`DELETE /v1/history/item`](api/history.md#delete-v1historyitem) | [`herald history delete`](cli.md#herald-history-delete) | [`delete_history`](mcp/apps-and-settings.md#delete_history) |
@@ -139,7 +141,8 @@ An approval is the user's permission for something that runs code or sends data 
 | What you do in the app | HTTP | CLI | MCP |
 |---|---|---|---|
 | See an app's command and callback approvals | [`GET /v1/apps/settings`](api/apps.md#get-v1appssettings) | [`herald apps settings`](cli.md#herald-apps-settings) | [`list_apps`](mcp/apps-and-settings.md#list_apps) |
-| Revoke with **Allow this app to run commands** | [`PUT /v1/apps/settings`](api/apps.md#put-v1appssettings) | [`herald apps set`](cli.md#herald-apps-set) | [`update_app_settings`](mcp/apps-and-settings.md#update_app_settings) |
+| Revoke with **Allow this app to run commands, scripts and Shortcuts** | [`PUT /v1/apps/settings`](api/apps.md#put-v1appssettings) | [`herald apps set`](cli.md#herald-apps-set) | [`update_app_settings`](mcp/apps-and-settings.md#update_app_settings) |
+| See a follow-up's approval state | [`GET /v1/actions/approvals`](api/apps.md#get-v1actionsapprovals) | [`herald approvals`](cli.md#herald-approvals) | [`list_approvals`](mcp/apps-and-settings.md#list_approvals) |
 | See a template's code approvals, **Settings > Actions** | [`GET /v1/actions/approvals`](api/apps.md#get-v1actionsapprovals) | [`herald approvals`](cli.md#herald-approvals) | [`list_approvals`](mcp/apps-and-settings.md#list_approvals) |
 | **Revoke** a template's approval | [`DELETE /v1/actions/approvals`](api/apps.md#delete-v1actionsapprovals) | [`herald approvals revoke`](cli.md#herald-approvals-revoke) | [`revoke_approval`](mcp/apps-and-settings.md#revoke_approval) |
 | Grant any approval | none | none | none |
