@@ -113,6 +113,18 @@ describe("presentation fields are validated", () => {
     expect(b.message).toContain("would run or open something");
   });
 
+  it("a follow-up is a 400 that names followUp, however it is spelled", async () => {
+    const { token } = await pair();
+    const { key } = await mintKey(token);
+    const r = await notify(key, { title: "t", followUp: { after: 60, action: { kind: "shortcut", shortcut: "X" } }, follow_up: { after: 5 }, followup: {} });
+    expect(r.status).toBe(400);
+    const b = await j(r);
+    expect(b.error).toBe("forbidden_fields");
+    expect(b.fields.sort()).toEqual(["followUp", "follow_up", "followup"]);
+    expect(b.message).toContain("followUp");
+    expect(b.message).toContain("would run or open something");
+  });
+
   it("expectReply adds nothing else to the payload: no status, no persistence change", async () => {
     const p = await sendAndReceive({ expectReply: true });
     expect(p).toEqual({ title: "t", expectReply: true });

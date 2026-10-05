@@ -1,6 +1,6 @@
 {
-  "sourceHash": "2a7a332978f5d8f6799e8d023baaf0ab1234d59fef7a7b2e6649264a19f0ee28",
+  "sourceHash": "55f56536afac2a28196fcbe5c8deaa9639d370290468610d859edbdf38e68c0a",
   "mainModule": "worker.js",
   "compatibilityDate": "2026-08-01",
-  "bytes": 151110
+  "bytes": 151165
 }

@@ -144,6 +144,9 @@ var DANGEROUS = /* @__PURE__ */ new Set([
   "image",
   "template",
   "layout",
+  "followUp",
+  "follow_up",
+  "followup",
   "app",
   "appId",
   "path",
@@ -1926,7 +1929,7 @@ var TOOLS = [
   {
     name: "send_notification",
     title: "Send a notification to the user's Mac",
-    description: 'Queue a notification for the user\'s Mac. Text and presentation only (persistent, timeoutSeconds, sound, speak, voice, speed, presentation, priority, group, icon, imageURL, tags): no buttons, commands, callbacks or scripts are accepted, and a request with such fields is refused with 400 naming them. By default the banner stays until the user dismisses it. A spoken banner that stays: {"title":"Build done","body":"All tests passed","speak":true,"persistent":true}. Quiet hours and mute are enforced on the Mac, so check get_receipt: `received` means the relay has it, `displayed` that a banner was shown, `spoken` that speech finished, `suppressed` (with `reason`) that the user\'s settings held it back. Limits: 60 per 10 minutes per key, 32 KB per request.',
+    description: 'Queue a notification for the user\'s Mac. Text and presentation only (persistent, timeoutSeconds, sound, speak, voice, speed, presentation, priority, group, icon, imageURL, tags): no buttons, commands, callbacks, scripts or follow-ups are accepted, and a request with such fields is refused with 400 naming them. By default the banner stays until the user dismisses it. A spoken banner that stays: {"title":"Build done","body":"All tests passed","speak":true,"persistent":true}. Quiet hours and mute are enforced on the Mac, so check get_receipt: `received` means the relay has it, `displayed` that a banner was shown, `spoken` that speech finished, `suppressed` (with `reason`) that the user\'s settings held it back. Limits: 60 per 10 minutes per key, 32 KB per request.',
     inputSchema: { type: "object", additionalProperties: false, required: ["title"], properties: NOTIFY_PROPS },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
   },

@@ -8,7 +8,7 @@ export const MAX_NOTIFICATION_ID = 128;
 export const DANGEROUS = new Set([
   "command", "commands", "cmd", "script", "scripts", "shortcut", "shortcuts", "callback", "callbacks", "webhook",
   "buttons", "actions", "actionIds", "action", "reminder", "url", "audio", "image", "template", "layout",
-  "app", "appId", "path", "exec", "run", "open", "openApp", "snooze", "metadata", "accentColor", "templateName",
+  "followUp", "follow_up", "followup", "app", "appId", "path", "exec", "run", "open", "openApp", "snooze", "metadata", "accentColor", "templateName",
 ]);
 
 /** A data: icon may be this large (decoded); the request body is allowed that much more than the normal limit. */

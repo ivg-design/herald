@@ -246,7 +246,8 @@ public enum FollowUpResolver {
     }
 
     /// Every action a follow-up's `actionRef` may name for `notification`: what the banner offers after the template's
-    /// rules, then the actions the rules hid (issuer buttons, origin `.issuer`) and the template's own adds.
+    /// rules, then the actions the rules hid (issuer buttons, origin `.issuer`), every action the manifest declares, and
+    /// the template's own adds.
     public static func candidates(notification n: HeraldNotification, manifest: HeraldManifest?,
                                   template: HeraldTemplate?) -> [HeraldResolvedAction] {
         var list = ActionResolver.offered(notification: n, manifest: manifest, template: template)
@@ -254,6 +255,13 @@ public enum FollowUpResolver {
         let unruled = ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: [],
                                                      issuerOrigin: ActionResolver.buttonsCameFromTemplate(n, template) ? .template : .issuer)
         for a in unruled where !list.contains(where: { $0.action.id == a.action.id }) { list.append(a) }
+        // Every action the manifest declares, even one this notification does not show (the issuer's default follow-up
+        // names its own action).
+        if let m = manifest {
+            for (i, b) in m.actions.enumerated() where !list.contains(where: { $0.action.id == m.actionID(at: i) }) {
+                list.append(HeraldResolvedAction(action: HeraldAction(button: b, id: m.actionID(at: i)), origin: .issuer))
+            }
+        }
         for a in (template?.actionRules ?? []).compactMap(\.add) where !list.contains(where: { $0.action.id == a.id }) {
             list.append(HeraldResolvedAction(action: a, origin: .template))
         }
