@@ -4,6 +4,6 @@ import Foundation
 /// the number lives here; `HeraldVersionTests` compares it with project.yml and says which line to change.
 /// To bump a release: edit these two constants and MARKETING_VERSION / CURRENT_PROJECT_VERSION in project.yml.
 public enum HeraldVersion {
-    public static let marketing = "1.8.2"
-    public static let build = "21"
+    public static let marketing = "1.9.0"
+    public static let build = "22"
 }

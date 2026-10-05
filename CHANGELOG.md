@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.9.0 (Build 22) - 2026-10-04
+
+### Added
+
+- **Follow-up.** If a banner is still up after a time you choose, Herald runs one action once: an Apple Shortcut, a
+  script, a command or a callback. Use it to forward what you missed to your phone, email or Slack. The banner stays and
+  shows "Follow-up ran" with the time; History records it. Set it in the Designer (Actions > Follow-up), from a local
+  agent with the `set_follow_up` MCP tool, with `herald template follow-up`, or declare it in a manifest or a
+  notification (`followUp`). It works for cloud connectors' notifications too; a connector cannot add one itself.
+  The action needs the same approval as a pressed button: the app's toggle for an app's own follow-up, the template's
+  one-time approval for one you add. Without approval nothing runs and the question waits on the banner.
+- An app's manifest and a notification's buttons can be a script or an Apple Shortcut, under the existing per-app
+  toggle, now labelled "Allow this app to run commands, scripts and Shortcuts".
+- Settings > Cloud > Connect an agent is a short picker with a few steps per agent, a copy button and a link to the guide.
+- `herald help <command>` prints that command's help.
+
+### Fixed
+
+- `herald --version` and the MCP server report the real version.
+- A user template can no longer take a `builtin.` name; one name-length limit (128 bytes) applies everywhere.
+- A script action must be a plain file in Herald's scripts folder everywhere it is checked; scripts in sub-folders
+  are no longer listed or run.
+- A badge with a symbol placed "only" draws the symbol, not an empty pill; `bounce` repeats and `disappear` plays.
+- Relay: an explicit `speak: false` wins over `voice` or `speed`; a tool call costs one request of the daily budget,
+  not two. `relay_usage` and Settings show the daily limits.
+- The Designer's preview header keeps its controls whole when the problems badge is showing.
+- The deploy sheet says truthfully where the Cloudflare token is stored.
+
+Upgrade the relay from Settings > Cloud for the relay fixes. 1253 tests; relay 174.
+
 ## 1.8.2 (Build 21) - 2026-10-04
 
 ### Fixed
