@@ -119,7 +119,7 @@ private struct ActionRowView: View {
                 }
             }
             HStack(spacing: 8) {
-                Text(isIssuer ? "\(row.action.kind.rawValue) \u{00B7} from the issuer" : row.action.designerSummary)
+                Text(isIssuer ? "\(row.action.kind.rawValue) \u{00B7} issuer" : row.action.designerSummary)
                     .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Spacer(minLength: 0)
                 if isIssuer {

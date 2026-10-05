@@ -554,7 +554,7 @@ private struct DesignerPreviewBar: View {
                     .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(spacing: 8) {
-                Text("Live preview \u{00B7} as it will appear").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                Text("Live preview").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                     .layoutPriority(-1)
                 Picker("", selection: $model.previewSource) {
                     ForEach(DesignerPreviewSource.allCases) { Text($0.title).tag($0) }

@@ -39,7 +39,7 @@ struct GeneralSettingsView: View {
                 HStack {
                     TextField("Port", text: $portText).frame(width: 80) .heraldHelp(.apiPort)
                     Button("Apply") { applyPort() } .heraldHelp(.apiApply)
-                    Button("Reset to \(HeraldPaths.defaultPort)") { portText = String(HeraldPaths.defaultPort); applyPort() } .heraldHelp(.apiReset)
+                    Button(HeraldPaths.resetPortTitle) { portText = String(HeraldPaths.defaultPort); applyPort() } .heraldHelp(.apiReset)
                 }
                 Text({ _ = ticker.tick; return controller.serverStatus }())
                     .font(.caption).foregroundStyle(controller.serverRunning ? Color.secondary : Color.red)

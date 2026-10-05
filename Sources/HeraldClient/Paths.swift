@@ -2,6 +2,9 @@ import Foundation
 
 public enum HeraldPaths {
     public static let defaultPort = 48617
+    /// The label of Settings > General's reset button. Built as a plain String: a `LocalizedStringKey` interpolation would group the
+    /// port with a thousands separator ("48,617").
+    public static var resetPortTitle: String { "Reset to " + String(defaultPort) }
 
     public static var defaultSupportDirectory: URL {
         // HERALD_SUPPORT_DIR points a development build at its own data (token, port, history), so it can run

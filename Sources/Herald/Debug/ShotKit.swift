@@ -45,7 +45,7 @@ enum ShotKit {
                             "{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@")
             // Reports key and main (title bar and controls draw as active); the window is never really key.
             let yes: @convention(block) (AnyObject) -> Bool = { _ in true }
-            for name in ["isKeyWindow", "isMainWindow", "_hasKeyAppearance", "_hasMainAppearance", "_hasActiveControls", "_hasActiveAppearance"] {
+            for name in ["isKeyWindow", "isMainWindow", "_hasKeyAppearance", "_hasMainAppearance", "_hasActiveControls", "_hasActiveAppearance", "hasKeyAppearance", "_hasActiveAppearanceIgnoringKeyFocus"] {
                 class_addMethod(cls, NSSelectorFromString(name), imp_implementationWithBlock(yes), "B@:")
             }
             objc_registerClassPair(cls!)
@@ -57,6 +57,8 @@ enum ShotKit {
     @discardableResult
     static func place(_ w: NSWindow, size: NSSize? = nil) -> Bool {
         unconstrain(w)
+        swizzleAppActive()
+        forceActiveLook(w)
         let wasHidden = !w.isVisible
         let alpha = w.alphaValue
         if wasHidden { w.alphaValue = 0 }
@@ -84,6 +86,28 @@ enum ShotKit {
     /// Puts a window that AppKit moved back toward a display (a sheet, a popover, a resize) outside them again, at once.
     static func keepOffscreen(_ w: NSWindow) {
         if !isOffscreen(w) { w.alphaValue = 0; w.setFrameOrigin(far); w.alphaValue = 1 }
+    }
+
+    /// Private switches that make a window's controls draw as active (accent tint) although it is never key.
+    static func forceActiveLook(_ w: NSWindow) {
+        typealias SetBool = @convention(c) (AnyObject, Selector, Bool) -> Void
+        for name in ["_setForceActiveControls:", "_setHasActiveAppearance:"] {
+            let sel = Selector(name)
+            if w.responds(to: sel), let m = class_getInstanceMethod(NSWindow.self, sel) {
+                unsafeBitCast(method_getImplementation(m), to: SetBool.self)(w, sel, true)
+            }
+        }
+    }
+
+    private static var appSwizzled = false
+    /// NSApplication.isActive reports true for this process (nothing is activated).
+    static func swizzleAppActive() {
+        guard !appSwizzled else { return }
+        appSwizzled = true
+        let yes: @convention(block) (AnyObject) -> Bool = { _ in true }
+        if let m = class_getInstanceMethod(NSApplication.self, #selector(getter: NSApplication.isActive)) {
+            method_setImplementation(m, imp_implementationWithBlock(yes))
+        }
     }
 
     static func log(_ s: String) { FileHandle.standardError.write(Data(("screenshots: " + s + "\n").utf8)) }

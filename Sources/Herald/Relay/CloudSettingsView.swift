@@ -67,7 +67,7 @@ struct CloudSettingsView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(e.title.isEmpty ? e.id : e.title).lineLimit(1)
-                                Text("\(e.key) \u{00B7} \(e.receivedAt.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+                                Text("\(relay.keys.first { $0.name == e.key }?.title ?? e.key) \u{00B7} \(e.receivedAt.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(e.summary).font(.caption).foregroundStyle(e.suppressed == nil ? Color.secondary : Color.orange)
