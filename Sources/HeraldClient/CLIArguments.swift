@@ -159,6 +159,50 @@ public enum CLIArguments {
       0 ok   1 error (usage, HTTP error)   2 Herald is not running
     """
 
+    /// The commands `usage` lists under COMMANDS, in order.
+    public static var commandNames: [String] {
+        var names: [String] = []; var inCommands = false
+        for line in usage.components(separatedBy: "\n") {
+            if line == "COMMANDS" { inCommands = true; continue }
+            if inCommands {
+                if line.isEmpty { break }
+                if let first = line.split(separator: " ").first { names.append(String(first)) }
+            }
+        }
+        return names
+    }
+
+    /// The part of `usage` that concerns one command: its line under COMMANDS, its "<command> OPTIONS"
+    /// section and the parity lines that start with it. Nil for a command that does not exist.
+    public static func usage(for command: String) -> String? {
+        let name = command == "dismissAll" ? "dismiss-all" : command
+        guard commandNames.contains(name) else { return nil }
+        let lines = usage.components(separatedBy: "\n")
+        var out: [String] = ["herald \(name)", ""]
+        var inCommands = false, inParity = false, inOptions = false
+        var options: [String] = [], parity: [String] = []
+        for line in lines {
+            if line == "COMMANDS" { inCommands = true; continue }
+            if inCommands {
+                if line.isEmpty { inCommands = false; continue }
+                if line.split(separator: " ").first.map(String.init) == name { out.append(line) }
+                continue
+            }
+            if line.hasSuffix(" OPTIONS") && !line.hasPrefix(" ") {
+                inOptions = line == "\(name) OPTIONS"; inParity = false
+                if inOptions { options.append(line) }
+                continue
+            }
+            if line.hasPrefix("parity commands") { inParity = true; inOptions = false; continue }
+            if line.isEmpty { inOptions = false; inParity = false; continue }
+            if inOptions { options.append(line) }
+            else if inParity, line.trimmingCharacters(in: .whitespaces).split(separator: " ").first.map(String.init) == name { parity.append(line) }
+        }
+        if !options.isEmpty { out.append(""); out += options }
+        if !parity.isEmpty { out.append(""); out.append("EXAMPLES"); out += parity }
+        return out.joined(separator: "\n")
+    }
+
     public static let notRunningMessage = "Herald is not running. Launch Herald.app first."
     public static let defaultPort = 48617
 

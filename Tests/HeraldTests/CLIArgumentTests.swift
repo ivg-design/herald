@@ -115,6 +115,18 @@ final class CLIArgumentTests: XCTestCase {
         if case .version = try CLIArguments.parse(["--version"]).action {} else { XCTFail() }
     }
 
+    func testHelpForOneCommandPrintsOnlyThatCommand() throws {
+        if case .help(let c) = try CLIArguments.parse(["help", "snooze"]).action { XCTAssertEqual(c, "snooze") } else { XCTFail() }
+        let snooze = try XCTUnwrap(CLIArguments.usage(for: "snooze"))
+        XCTAssertTrue(snooze.contains("--minutes N"))
+        XCTAssertFalse(snooze.contains("--reminder"), "notify options must not appear")
+        let template = try XCTUnwrap(CLIArguments.usage(for: "template"))
+        XCTAssertTrue(template.contains("template export") && template.contains("template rename"))
+        XCTAssertNotNil(CLIArguments.usage(for: "notify"))
+        XCTAssertNil(CLIArguments.usage(for: "bogus"))
+        for name in CLIArguments.commandNames { XCTAssertNotNil(CLIArguments.usage(for: name), name) }
+    }
+
     func testNotifyTemplateFlagsAndOptionalTitle() throws {
         // A named template may supply the title.
         let r = try request(["notify", "--app", "bidbot", "--template", "bid-won", "--metadata", "{\"amount\":\"$4,200\"}",

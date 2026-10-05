@@ -30,11 +30,15 @@ do {
 }
 
 switch invocation.action {
-case .help:
-    print(CLIArguments.usage)
+case .help(let command):
+    guard let command else { print(CLIArguments.usage); exit(0) }
+    guard let text = CLIArguments.usage(for: command) else {
+        fail("herald: unknown command \u{201C}\(command)\u{201D}. Try 'herald --help' for the list.")
+    }
+    print(text)
     exit(0)
 case .version:
-    print("herald 1.1.0")
+    print("herald \(HeraldVersion.marketing) (build \(HeraldVersion.build))")
     exit(0)
 case .request(let req):
     let target = resolveTarget()

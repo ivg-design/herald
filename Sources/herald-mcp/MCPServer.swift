@@ -5,7 +5,7 @@ import HeraldClient
 /// notifications. It does no I/O of its own; `main.swift` feeds it lines and writes what it returns.
 final class MCPServer: @unchecked Sendable {
     static let serverName = "herald-mcp"
-    static let serverVersion = "1.1.0"
+    static let serverVersion = HeraldVersion.marketing
     /// The protocol revision this server implements.
     static let latestProtocolVersion = "2025-06-18"
     /// Revisions it also accepts: the tool and resource shapes it uses are the same in these.
