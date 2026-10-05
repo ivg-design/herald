@@ -12,16 +12,16 @@ export interface ReleaseInfo {
   live: boolean;
 }
 
-// Fallback used when GitHub is unreachable at build time: the real 1.9.0 (build 22) asset.
+// Fallback used when GitHub is unreachable at build time: the real 1.9.1 (build 23) asset.
 const FALLBACK: ReleaseInfo = {
-  version: "1.9.0",
-  build: "22",
+  version: "1.9.1",
+  build: "23",
   date: "2026-10-05T01:30:00Z",
-  dmgUrl: `https://github.com/${REPO}/releases/download/v1.9.0/Herald-1.9.0-build22-macOS.dmg`,
-  dmgName: "Herald-1.9.0-build22-macOS.dmg",
-  sizeMB: Math.round(15241603 / 1024 / 1024),
-  sha256: "f2365eeb5b0fe44e2ea13a7f924b28dfd529072f7ce5c270c14ca630cc456b58",
-  shaUrl: `https://github.com/${REPO}/releases/download/v1.9.0/Herald-1.9.0-build22-macOS.dmg.sha256`,
+  dmgUrl: `https://github.com/${REPO}/releases/download/v1.9.1/Herald-1.9.1-build23-macOS.dmg`,
+  dmgName: "Herald-1.9.1-build23-macOS.dmg",
+  sizeMB: Math.round(15266007 / 1024 / 1024),
+  sha256: "70c042d959ce8e375280b9fcb330955c92e783762db0de48ec621f70e28cd721",
+  shaUrl: `https://github.com/${REPO}/releases/download/v1.9.1/Herald-1.9.1-build23-macOS.dmg.sha256`,
   live: false,
 };
 
