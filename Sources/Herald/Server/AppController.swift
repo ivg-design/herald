@@ -93,6 +93,7 @@ final class AppController {
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
         relay = RelayController(controller: self)
+        followUps.onFire = { [unowned self] key, seconds in followUpFired(key: key, unattendedSeconds: seconds) }
     }
 
     var muted: Bool {
@@ -152,6 +153,7 @@ final class AppController {
     }
 
     func stop() {
+        followUps.cancelAll()   // follow-ups live in memory only: quitting drops them
         listener?.stop()
         try? FileManager.default.removeItem(at: HeraldPaths.portURL(in: supportDirectory))
     }
@@ -209,6 +211,8 @@ final class AppController {
         // break through when the app allows it.
         let quiet = QuietHoursCoordinator.shared.state(for: note)
         let voiceOnly = VoiceCoordinator.shared.handle(notification: note, historyItem: item, quiet: quiet)
+        // A delivery (or a re-delivery under the same id) may follow up once; its timer starts when the banner appears.
+        followUps.reset(key: key)
         if !voiceOnly {
             if quiet.active && quiet.banners { banners.deferBanner(key: key, corner: eff.corner) }
             else { banners.show(item, settings: eff, record: record) }
@@ -234,6 +238,7 @@ final class AppController {
     func dismissItem(app: String, id: String, action: String?, notify: Bool = true, supersedePending: Bool = true) {
         if supersedePending { pendingNotifies.invalidate(BannerCenter.key(app, id)) }
         cancelFlash(BannerCenter.key(app, id))
+        followUps.cancel(key: BannerCenter.key(app, id))
         VoiceCoordinator.shared.cancel(app: app, id: id)
         history.update(app: app, id: id) { item in
             // The first way an item was dismissed is the one History records; a late click or a repeated
@@ -473,6 +478,8 @@ final class AppController {
     private var failureFlashes: [String: Task<Void, Never>] = [:]
     private var systemObservers: [NSObjectProtocol] = []
     private let callbacks = CallbackDelivery()
+    /// Follow-up timers, one per banner on screen whose notification declares a follow-up (in memory only).
+    let followUps = FollowUpScheduler()
     /// Runs script, command and shortcut actions (DESIGN 7.3); their output goes to ~/Library/Logs/Herald/actions.log.
     let actionRunner = ActionRunner()
     /// The templates whose commands the user confirmed (template-authored commands ask once per template).
@@ -505,6 +512,7 @@ final class AppController {
 
     func userOpened(app: String, id: String) {
         guard let item = history.item(app: app, id: id) else { return }
+        followUps.cancel(key: BannerCenter.key(app, id))
         // A template can make the banner's click bring the issuing application forward instead of opening a link.
         let template = templates.template(for: item.notification)
         if template?.onClick == .openApp {
@@ -546,6 +554,8 @@ final class AppController {
     /// "Action failed" line and can be tried again.
     func userPerformed(app: String, id: String, action pressed: HeraldAction) {
         guard let item = history.item(app: app, id: id) else { return }
+        // Any button the person presses (a reply too) means the banner was attended: no follow-up.
+        followUps.cancel(key: BannerCenter.key(app, id))
         guard !busyActions.contains(BannerCenter.key(app, id)) else { return }
         let template = templates.template(for: item.notification)
         let manifest = manifests.get(app: app)
@@ -558,19 +568,23 @@ final class AppController {
         perform(action, origin: found?.origin ?? .issuer, item: item, template: template, manifest: manifest)
     }
 
+    /// `followUp` is set when a follow-up runs the action (how long the banner was left up): the same plan, gates and
+    /// questions as a pressed button, but the outcome is recorded on the item and shown as a persistent line instead
+    /// of dismissing the banner or flashing a failure.
     private func perform(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
-                         template: HeraldTemplate?, manifest: HeraldManifest?) {
+                         template: HeraldTemplate?, manifest: HeraldManifest?, followUp: Int? = nil) {
         let app = item.app, id = item.id
         let extra = template?.extra ?? [:]
         let invocation = ActionInvocation(
             notification: item.notification,
             fields: TemplateResolver.fields(for: item.notification, manifest: manifest, extra: extra, deliveredAt: item.deliveredAt),
-            extra: extra, template: item.notification.template, imagePath: item.imagePath)
+            extra: extra, template: item.notification.template, imagePath: item.imagePath, unattendedSeconds: followUp)
         let plan: ActionPlan
         switch actionRunner.plan(action, origin: origin, invocation: invocation) {
         case .failure(let e):
             log("\(action.kind.rawValue) action \(action.label) of \(app) cannot run: \(e.reason)")
-            flashFailure(app: app, id: id, reason: e.reason)
+            if let followUp { recordFollowUp(item: item, action: action, origin: origin, outcome: .failed, detail: e.reason, unattended: followUp) }
+            else { flashFailure(app: app, id: id, reason: e.reason) }
             return
         case .success(let p):
             plan = p
@@ -578,13 +592,14 @@ final class AppController {
         // The gate may have to ask the user first. The question is drawn inside the banner (never an alert), so the
         // rest of the action runs from its answer: `proceed` is called at once when nothing needs asking.
         let go = { [self] in
-            authorize(action, origin: origin, item: item, template: template, manifest: manifest) { [self] in
-                execute(plan, action: action, origin: origin, item: item, manifest: manifest)
+            authorize(action, origin: origin, item: item, template: template, manifest: manifest, followUp: followUp) { [self] in
+                execute(plan, action: action, origin: origin, item: item, manifest: manifest, followUp: followUp)
             }
         }
         // A destructive button is asked about first (inline, never an alert); its own gate follows.
         if ActionRunner.confirmsBeforeRunning(action) {
             let name = registry.displayName(for: app)
+            if let followUp { recordFollowUp(item: item, action: action, origin: origin, outcome: .waitingForApproval, detail: nil, unattended: followUp) }
             confirmations.askDestructive(app: app, id: id, label: ctxLabel(action, item: item), name: name, run: go)
         } else {
             go()
@@ -602,9 +617,25 @@ final class AppController {
 
     /// What an authorized action does.
     private func execute(_ plan: ActionPlan, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
-                         manifest: HeraldManifest?) {
+                         manifest: HeraldManifest?, followUp: Int? = nil) {
         let app = item.app, id = item.id
         guard !busyActions.contains(BannerCenter.key(app, id)) else { return }
+        if let followUp {
+            // Only kinds that run unattended get here (`HeraldFollowUp.allowedKinds`); the banner stays either way.
+            switch plan {
+            case .process(let spec):
+                runProcess(spec, action: action, origin: origin, item: item, followUp: followUp)
+            case .callback(let callback):
+                let label = origin == .issuer
+                    ? (ActionRunner.issuerLabel(id: action.id, notification: item.notification, manifest: manifest) ?? action.label)
+                    : action.label
+                runCallbackButton(item: item, label: label, callback: callback, followUp: (action, origin, followUp))
+            default:
+                recordFollowUp(item: item, action: action, origin: origin, outcome: .failed,
+                               detail: "a \(action.kind.rawValue) action cannot run unattended", unattended: followUp)
+            }
+            return
+        }
         switch plan {
         case .openURL(let url):
             let outcome = Self.openLink(url)
@@ -811,42 +842,59 @@ final class AppController {
 
     // MARK: Callback buttons
 
-    private func runCallbackButton(item: HeraldHistoryItem, label: String, callback: HeraldCallback) {
+    /// The follow-up a callback runs for: the action, its origin and how long the banner was left up.
+    typealias FollowUpCall = (action: HeraldAction, origin: HeraldActionOrigin, unattended: Int)
+
+    private func runCallbackButton(item: HeraldHistoryItem, label: String, callback: HeraldCallback, followUp: FollowUpCall? = nil) {
         let target = callback.url ?? registry.record(for: item.app)?.registration.callbackURL
         guard let target, let url = URL(string: target) else {
             log("callback action \(label) of \(item.app) has no callback URL")
-            flashFailure(app: item.app, id: item.id, reason: "no callback URL")
+            if let f = followUp { recordFollowUp(item: item, action: f.action, origin: f.origin, outcome: .failed, detail: "no callback URL", unattended: f.unattended) }
+            else { flashFailure(app: item.app, id: item.id, reason: "no callback URL") }
             return
         }
         // A callback goes to a loopback address freely; any other host only after the user agreed to it, because
         // the event carries the payload the sender attached to the button. The question is asked inside the banner
         // (DESIGN 8) and the delivery runs from its answer; once or always sends, cancel does nothing.
         guard CallbackDelivery.needsApproval(url) else {
-            deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [])
+            deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [], followUp: followUp)
             return
         }
         guard let host = CallbackDelivery.normalizedHost(of: url) else {
-            flashFailure(app: item.app, id: item.id, reason: "invalid callback URL")
+            if let f = followUp { recordFollowUp(item: item, action: f.action, origin: f.origin, outcome: .failed, detail: "invalid callback URL", unattended: f.unattended) }
+            else { flashFailure(app: item.app, id: item.id, reason: "invalid callback URL") }
             return
         }
-        let send = { [self] in deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [host]) }
+        let send = { [self] in deliverCallback(item: item, label: label, callback: callback, url: url, approvedHosts: [host], followUp: followUp) }
         if registry.record(for: item.app)?.callbackHostApproved == host {
             send()
         } else {
             let name = registry.displayName(for: item.app)
+            if let f = followUp { recordFollowUp(item: item, action: f.action, origin: f.origin, outcome: .waitingForApproval, detail: nil, unattended: f.unattended) }
             confirmations.askCallbackHost(app: item.app, id: item.id, name: name, host: host, url: url.absoluteString,
                                           send: send)
         }
     }
 
     private func deliverCallback(item: HeraldHistoryItem, label: String, callback: HeraldCallback, url: URL,
-                                 approvedHosts: Set<String>) {
-        let event = HeraldCallbackEvent(notificationId: item.id, app: item.app, action: label, payload: callback.payload)
+                                 approvedHosts: Set<String>, followUp: FollowUpCall? = nil) {
+        let event = HeraldCallbackEvent(notificationId: item.id, app: item.app, action: label, payload: callback.payload,
+                                        event: followUp == nil ? nil : HeraldCallbackEvent.unattendedEvent,
+                                        unattendedSeconds: followUp?.unattended)
         let key = BannerCenter.key(item.app, item.id)
         busyActions.insert(key)
         Task { @MainActor in
             let outcome = await callbacks.deliver(event, to: url, approvedHosts: approvedHosts)
             busyActions.remove(key)
+            if let f = followUp {
+                switch outcome {
+                case .delivered:
+                    recordFollowUp(item: item, action: f.action, origin: f.origin, outcome: .ran, detail: nil, unattended: f.unattended)
+                case .failed(_, let reason):
+                    recordFollowUp(item: item, action: f.action, origin: f.origin, outcome: .failed, detail: reason, unattended: f.unattended)
+                }
+                return
+            }
             switch outcome {
             case .delivered:
                 dismissItem(app: item.app, id: item.id, action: label)
@@ -866,45 +914,56 @@ final class AppController {
     /// otherwise from the answer (Run once or Always allow). It never runs when the user cancels, when a failure
     /// line was shown, or when the banner goes away first.
     private func authorize(_ action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
-                           template: HeraldTemplate?, manifest: HeraldManifest?, proceed: @escaping () -> Void) {
-        switch ActionRunner.gate(for: action, origin: origin) {
-        case .open:
+                           template: HeraldTemplate?, manifest: HeraldManifest?, followUp: Int? = nil,
+                           proceed: @escaping () -> Void) {
+        // A follow-up that needs an approval runs nothing now: the question goes on the banner (it stays there for when
+        // the person comes back) and History and the log say it is waiting.
+        let waiting = { [self] in
+            guard let followUp else { return }
+            log("follow-up \(action.label) of \(item.app)/\(item.id) waiting for approval")
+            recordFollowUp(item: item, action: action, origin: origin, outcome: .waitingForApproval, detail: nil, unattended: followUp)
+        }
+        let name = registry.displayName(for: item.app)
+        let templateName = template?.name ?? item.notification.template ?? ""
+        switch actionRunner.authorization(for: action, origin: origin, app: item.app, record: registry.record(for: item.app),
+                                          template: template, templateName: templateName, approvals: commandApprovals) {
+        case .run:
             proceed()
-        case .appPermission:
-            let record = registry.record(for: item.app)
-            let name = record?.displayName ?? item.app
-            switch CommandPermission.evaluate(record) {
-            case .denied(let why):
-                log("\(action.kind.rawValue) action \(action.label) ignored for \(item.app): \(why)")
+        case .denied(let why):
+            log("\(action.kind.rawValue) action \(action.label) ignored for \(item.app): \(why)")
+            if let followUp {
+                recordFollowUp(item: item, action: action, origin: origin, outcome: .failed,
+                               detail: "\(name) is not allowed to run commands, scripts and Shortcuts", unattended: followUp)
+            } else {
                 flashFailure(app: item.app, id: item.id, reason: "commands are not allowed for \(name)")
-            case .needsConfirmation:
-                confirmations.askCommand(app: item.app, id: item.id, name: name, kind: action.kind,
-                                         text: ActionRunner.describe(action), run: proceed)
-            case .allowed:
-                proceed()
             }
-        case .templateConfirmation:
-            // The approval key binds to the command text, the script file's hash or the Shortcut's name and input.
-            guard let key = actionRunner.approvalKey(for: action) else { proceed(); return }
-            let templateName = template?.name ?? item.notification.template ?? ""
-            if commandApprovals.isApproved(app: item.app, template: templateName, command: key) { proceed(); return }
-            let all = template.map { actionRunner.templateApprovalKeys(of: $0) } ?? [key]
+        case .askApp(let text):
+            waiting()
+            confirmations.askCommand(app: item.app, id: item.id, name: name, kind: action.kind, text: text, run: proceed)
+        case .askTemplate(let key, let all, let text):
             let replaced = ActionRunner.replacedIssuerLabel(for: action, notification: item.notification,
                                                             manifest: manifest, template: template)
-            let name = registry.displayName(for: item.app)
+            waiting()
             confirmations.askTemplateCommand(app: item.app, id: item.id, template: templateName, name: name,
-                                             kind: action.kind, pressedText: actionRunner.confirmationText(for: action),
+                                             kind: action.kind, pressedText: text,
                                              approvalKey: key, all: all, replacedIssuerLabel: replaced, run: proceed)
         }
     }
 
-    private func runProcess(_ spec: ActionProcessSpec, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem) {
+    private func runProcess(_ spec: ActionProcessSpec, action: HeraldAction, origin: HeraldActionOrigin, item: HeraldHistoryItem,
+                            followUp: Int? = nil) {
         let key = BannerCenter.key(item.app, item.id)
         busyActions.insert(key)
-        let context = CommandContext(app: item.app, notificationId: item.id, action: action.label)
+        let context = CommandContext(app: item.app, notificationId: item.id,
+                                     action: followUp == nil ? action.label : "follow-up: \(action.label)")
         Task { @MainActor in
             let result = await actionRunner.run(spec, context: context, origin: origin)
             busyActions.remove(key)
+            if let followUp {
+                recordFollowUp(item: item, action: action, origin: origin, outcome: result.succeeded ? .ran : .failed,
+                               detail: result.succeeded ? nil : actionRunner.failureReason(result), unattended: followUp)
+                return
+            }
             if result.succeeded {
                 dismissItem(app: item.app, id: item.id, action: action.label)
             } else {
@@ -912,6 +971,42 @@ final class AppController {
                 flashFailure(app: item.app, id: item.id, reason: actionRunner.failureReason(result))
             }
         }
+    }
+
+    // MARK: Follow-up
+
+    /// The banner is on screen (`BannerCenter.show`, including a snoozed or held-back banner that appears later): the
+    /// notification's follow-up, if it has one, starts its timer. A banner that is only redrawn keeps its timer.
+    func bannerShown(app: String, id: String) {
+        let key = BannerCenter.key(app, id)
+        guard !followUps.isArmed(key), !followUps.hasFired(key), !followUps.isAttended(key),
+              let item = history.item(app: app, id: id), item.dismissedAt == nil, item.snoozedUntil == nil,
+              let f = ActionRunner.followUp(notification: item.notification, manifest: manifests.get(app: app),
+                                            template: templates.template(for: item.notification)) else { return }
+        followUps.start(key: key, after: f.after)
+    }
+
+    /// The timer ran out with the banner still up: run the follow-up through the same path as a pressed button.
+    private func followUpFired(key: String, unattendedSeconds: Int) {
+        guard let (app, id) = BannerKey.split(key), let item = history.item(app: app, id: id),
+              item.dismissedAt == nil, item.snoozedUntil == nil else { return }
+        let template = templates.template(for: item.notification)
+        let manifest = manifests.get(app: app)
+        guard let f = ActionRunner.followUp(notification: item.notification, manifest: manifest, template: template) else { return }
+        log("follow-up \(f.action.label) of \(app)/\(id) fired after \(unattendedSeconds) s unattended")
+        perform(f.action, origin: f.origin, item: item, template: template, manifest: manifest, followUp: unattendedSeconds)
+    }
+
+    /// Keeps what the follow-up did on the item (History and the history API show it), puts the quiet line under the
+    /// banner's grid (`BannerModel.followUpLine`, it stays) and adds a line to the actions log.
+    private func recordFollowUp(item: HeraldHistoryItem, action: HeraldAction, origin: HeraldActionOrigin,
+                                outcome: HeraldFollowUpRecord.Outcome, detail: String?, unattended: Int) {
+        let record = HeraldFollowUpRecord(ranAt: Date(), action: action.label, actionId: action.id, kind: action.kind,
+                                          outcome: outcome, detail: detail, unattendedSeconds: unattended)
+        actionRunner.log.append(ActionLog.followUpEntry(app: item.app, notificationId: item.id, action: action, origin: origin, record: record))
+        guard let updated = history.update(app: item.app, id: item.id, { $0.followUp = record }) else { return }
+        banners.updateItem(updated)
+        changed()
     }
 
     // MARK: Failure line
@@ -992,6 +1087,7 @@ final class AppController {
     private func snooze(app: String, id: String, until: Date) {
         guard let item = history.item(app: app, id: id), item.dismissedAt == nil else { return }
         cancelFlash(BannerCenter.key(app, id))
+        followUps.snoozed(key: BannerCenter.key(app, id))   // the banner that comes back starts a fresh timer
         history.update(app: app, id: id) { $0.snoozedUntil = until }
         banners.close(app: app, id: id)   // also cancels the timer of an earlier snooze
         banners.scheduleSnooze(app: app, id: id, at: until)

@@ -277,6 +277,9 @@ public struct HeraldTemplate: Codable, Equatable, Identifiable, Sendable {
     /// What clicking the banner does. nil is `url` (open the notification's link); `openApp` brings the issuing
     /// application to the front instead.
     public var onClick: HeraldBannerClick?
+    /// The user's follow-up for this template's notifications (`HeraldFollowUp`): replaces the issuer's and the
+    /// notification's; `enabled: false` switches theirs off.
+    public var followUp: HeraldFollowUp?
 
     /// Line limit the pre-template banner used, so an untemplated look and a bare template match.
     public static let defaultMaxBodyLines = 8
@@ -328,7 +331,7 @@ public struct HeraldTemplate: Codable, Equatable, Identifiable, Sendable {
         case name, app, layout, accentColor, showSubtitle, showBody, showTimestamp, maxBodyLines
         case title, subtitle, body, image, url, buttons, sound, persistent, timeout, snooze
         case priority, reminder
-        case layoutVersion, grid, cells, collapseEmpty, actionRules, extra, onClick
+        case layoutVersion, grid, cells, collapseEmpty, actionRules, extra, onClick, followUp
     }
 
     public init(from decoder: Decoder) throws {
@@ -360,6 +363,7 @@ public struct HeraldTemplate: Codable, Equatable, Identifiable, Sendable {
         actionRules = try c.decodeIfPresent([HeraldActionRule].self, forKey: .actionRules) ?? []
         extra = try c.decodeIfPresent([String: String].self, forKey: .extra) ?? [:]
         onClick = try c.decodeIfPresent(HeraldBannerClick.self, forKey: .onClick)
+        followUp = try c.decodeIfPresent(HeraldFollowUp.self, forKey: .followUp)
     }
 
     /// Writes only what is set: a v1 template stays as short as it was (plus `layoutVersion`), and a v2 one
@@ -393,6 +397,7 @@ public struct HeraldTemplate: Codable, Equatable, Identifiable, Sendable {
         if !actionRules.isEmpty { try c.encode(actionRules, forKey: .actionRules) }
         if !extra.isEmpty { try c.encode(extra, forKey: .extra) }
         try c.encodeIfPresent(onClick, forKey: .onClick)
+        try c.encodeIfPresent(followUp, forKey: .followUp)
     }
 }
 
@@ -530,6 +535,8 @@ public extension HeraldTemplate {
             }
         }
 
+        if let f = followUp { followUpIssues(f, manifest: manifest, into: &issues) }
+
         if layoutVersion != 1 && layoutVersion != Self.currentLayoutVersion {
             err("layoutVersion", "unsupported layoutVersion \(layoutVersion) (1 or \(Self.currentLayoutVersion))")
             return issues
@@ -634,6 +641,28 @@ public extension HeraldTemplate {
         guard s.hasPrefix("#") else { return false }
         let hex = s.dropFirst()
         return [3, 4, 6, 8].contains(hex.count) && hex.allSatisfy { $0.isHexDigit }
+    }
+
+    /// The follow-up: its own rules (`HeraldFollowUp.problems`), the inline action as any template action, and what an
+    /// `actionRef` names (checked against the manifest's actions and the template's own; without a manifest an unknown
+    /// id is only a warning, since the issuer's buttons are not known).
+    private func followUpIssues(_ f: HeraldFollowUp, manifest: HeraldManifest?, into issues: inout [HeraldTemplateIssue]) {
+        guard f.isEnabled else { return }
+        let candidates = FollowUpResolver.sampleCandidates(manifest: manifest, template: self)
+        for p in f.problems(path: "followUp", knownActionIDs: manifest == nil ? nil : candidates.map(\.action.id), timeout: timeout) {
+            issues.append(.init(severity: p.isError ? .error : .warning, path: p.path, message: p.message))
+        }
+        if let a = f.action { Self.validateAction(a, path: "followUp.action", cell: nil, into: &issues) }
+        if f.action == nil, let ref = f.actionRef {
+            if let found = candidates.first(where: { $0.action.id.caseInsensitiveCompare(ref) == .orderedSame }) {
+                if let why = HeraldFollowUp.kindProblem(found.action.kind) {
+                    issues.append(.init(severity: .error, path: "followUp.actionRef", message: "'\(ref)' is a \(found.action.kind.rawValue) action: \(why)"))
+                }
+            } else if manifest == nil {
+                issues.append(.init(severity: .warning, path: "followUp.actionRef",
+                                    message: "'\(ref)' is not one of this template's own actions; without the app's manifest it cannot be checked against the issuer's"))
+            }
+        }
     }
 
     private static func validateAction(_ a: HeraldAction, path p: String, cell: String?, into issues: inout [HeraldTemplateIssue]) {

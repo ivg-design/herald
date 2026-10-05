@@ -253,7 +253,8 @@ final class TemplateV2Tests: XCTestCase {
         XCTAssertEqual(list[2].legacyButton, HeraldButton(label: "Open", url: "https://x"))
         XCTAssertEqual(list[3].legacyButton, HeraldButton(label: "Run", command: "echo hi"))
         XCTAssertNotNil(list[0].legacyButton?.callback)
-        XCTAssertNil(HeraldAction(id: "s", label: "S", kind: .shortcut, shortcut: "X").legacyButton)
+        XCTAssertEqual(HeraldAction(id: "s", label: "S", kind: .shortcut, shortcut: "X").legacyButton, HeraldButton(label: "S", shortcut: "X"))
+        XCTAssertNil(HeraldAction(id: "z", label: "Z", kind: .snooze).legacyButton)
     }
 
     func testRuleHidesByIdOrLabelCaseInsensitive() {

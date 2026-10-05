@@ -27,19 +27,31 @@ public struct ActionInvocation: Sendable {
     public var template: String?
     /// Local copy of the notification's image, if one was cached.
     public var imagePath: String?
+    /// Set when a follow-up runs the action (the banner was left up this long), nil for a pressed button. The action
+    /// then also reads `{herald.followUp}` and `{herald.unattendedSeconds}`, and the JSON carries
+    /// `"herald": {"followUp": true, "unattendedSeconds": N}`, so one Shortcut can serve a button and a follow-up.
+    public var unattendedSeconds: Int?
 
     public init(notification: HeraldNotification, fields: [String: HeraldFieldValue] = [:],
-                extra: [String: String] = [:], template: String? = nil, imagePath: String? = nil) {
+                extra: [String: String] = [:], template: String? = nil, imagePath: String? = nil,
+                unattendedSeconds: Int? = nil) {
         self.notification = notification; self.fields = fields; self.extra = extra
-        self.template = template; self.imagePath = imagePath
+        self.template = template; self.imagePath = imagePath; self.unattendedSeconds = unattendedSeconds
+        if let u = unattendedSeconds {
+            self.fields["herald.followUp"] = .bool(true)
+            self.fields["herald.unattendedSeconds"] = .number(Double(u))
+        }
     }
 
-    /// The merged payload as JSON: `ActionResolver.mergedPayload` plus the template name and the cached image path.
+    /// The merged payload as JSON: `ActionResolver.mergedPayload` plus the template name, the cached image path and,
+    /// for a follow-up, the `herald` object.
     public func payloadJSON(action: HeraldAction?) -> Data {
         var value = ActionResolver.mergedPayload(notification: notification, fields: fields, extra: extra, action: action)
         if case .object(var o) = value {
             if let t = template, !t.isEmpty { o["template"] = .string(t) }
             if let p = imagePath, !p.isEmpty { o["imagePath"] = .string(p) }
+            o["herald"] = .object(["followUp": .bool(unattendedSeconds != nil),
+                                   "unattendedSeconds": unattendedSeconds.map { .number(Double($0)) } ?? .null])
             value = .object(o)
         }
         return (try? HeraldJSON.encoder().encode(value)) ?? Data("{}".utf8)
@@ -64,6 +76,17 @@ public enum ActionGate: Equatable, Sendable {
     /// approval is bound to what was shown: the command text, the script file's SHA-256, the Shortcut's name
     /// and input. `subject` is the command, the script name or the Shortcut name.
     case templateConfirmation(kind: HeraldActionKind, subject: String)
+}
+
+/// The outcome of `ActionRunner.authorization`.
+public enum ActionAuthorization: Equatable, Sendable {
+    case run
+    /// The app never registered with `allowCommands`: nothing runs.
+    case denied(String)
+    /// The app may ask, the person has not agreed yet: the banner asks, showing `text`.
+    case askApp(text: String)
+    /// Template code not approved yet: the banner asks once for the template (`all` are every key it approves).
+    case askTemplate(approvalKey: String, all: [String], text: String)
 }
 
 // MARK: - Plans
@@ -234,6 +257,24 @@ public enum ActionLog {
         s += "---\n"
         return s
     }
+
+    /// The line a follow-up leaves in the log: that it fired, ran, failed or waits for approval (a script, command or
+    /// Shortcut it ran also has its own entry with the output).
+    public static func followUpEntry(app: String, notificationId: String, action: HeraldAction, origin: HeraldActionOrigin,
+                                     record: HeraldFollowUpRecord, at date: Date = Date()) -> String {
+        let what: String
+        switch record.outcome {
+        case .ran: what = "follow-up ran"
+        case .failed: what = "follow-up failed"
+        case .waitingForApproval: what = "follow-up waiting for approval"
+        }
+        var s = "\(ISODate.string(from: date)) app=\(oneLine(app)) id=\(oneLine(notificationId)) "
+        s += "action=\"\(oneLine(action.label))\" kind=\(action.kind.rawValue) origin=\(origin.rawValue) result=\"\(what)"
+        if let d = record.detail, !d.isEmpty { s += ": \(oneLine(d))" }
+        s += "\""
+        if let u = record.unattendedSeconds { s += " unattended=\(u)s" }
+        return s + "\n---\n"
+    }
 }
 
 // MARK: - Runner
@@ -287,6 +328,32 @@ public final class ActionRunner: Sendable {
         case (.shortcut, .template): return .templateConfirmation(kind: .shortcut, subject: action.shortcut ?? "")
         case (.command, .issuer), (.script, .issuer), (.shortcut, .issuer): return .appPermission
         default: return .open
+        }
+    }
+
+    /// What has to happen before `action` runs, given the app's record and the template approvals: run now, refuse
+    /// (the app never asked to run commands), or ask the person on the banner. A pressed button and a follow-up both go
+    /// through this, so a follow-up never runs code a button press would have asked about.
+    public func authorization(for action: HeraldAction, origin: HeraldActionOrigin, app: String, record: AppRecord?,
+                              template: HeraldTemplate?, templateName: String,
+                              approvals: TemplateCommandApprovals) -> ActionAuthorization {
+        switch Self.gate(for: action, origin: origin) {
+        case .open:
+            return .run
+        case .appPermission:
+            switch CommandPermission.evaluate(record) {
+            case .denied(let why): return .denied(why)
+            case .allowed: return .run
+            case .needsConfirmation:
+                // Name exactly what will run: the command, the script with its hash, the Shortcut with its input.
+                return .askApp(text: action.kind == .command ? Self.describe(action) : confirmationText(for: action))
+            }
+        case .templateConfirmation:
+            // The approval key binds to the command text, the script file's hash or the Shortcut's name and input.
+            guard let key = approvalKey(for: action) else { return .run }
+            if approvals.isApproved(app: app, template: templateName, command: key) { return .run }
+            let all = template.map { templateApprovalKeys(of: $0) } ?? [key]
+            return .askTemplate(approvalKey: key, all: all.contains(key) ? all : [key] + all, text: confirmationText(for: action))
         }
     }
 
@@ -385,34 +452,29 @@ public final class ActionRunner: Sendable {
     /// The legacy v1 button as an action, with v1's precedence (url, then command, then callback, else dismiss).
     public static func legacyAction(_ b: HeraldButton) -> HeraldAction {
         let kind: HeraldActionKind = b.reply != nil ? .reply : b.url != nil ? .url : b.command != nil ? .command
+            : b.script != nil ? .script : b.shortcut != nil ? .shortcut
             : b.callback != nil ? .callback : b.openApp != nil ? .openApp : .dismiss
         return HeraldAction(id: HeraldAction.slug(b.label), label: b.label, kind: kind, style: b.style,
-                            url: b.url, callback: b.callback, command: b.command, bundleId: b.openApp?.bundleId,
-                            path: b.openApp?.path, reply: b.reply)
+                            url: b.url, callback: b.callback, command: b.command, script: b.script, shortcut: b.shortcut,
+                            input: b.input, bundleId: b.openApp?.bundleId, path: b.openApp?.path, reply: b.reply)
     }
 
     /// Every action a banner for `notification` can offer, with its origin: the issuer's buttons after the
     /// template's rules, then the template's inline component actions that the rules did not already produce.
     public static func resolvedActions(notification n: HeraldNotification, manifest: HeraldManifest?,
                                        template: HeraldTemplate?) -> [HeraldResolvedAction] {
-        let source = ActionResolver.issuerSource(for: n, manifest: manifest)
-        var list = ActionResolver.resolveDetailed(issuer: source.buttons, ids: source.ids, rules: template?.actionRules ?? [],
-                                                  issuerOrigin: buttonsCameFromTemplate(n, template) ? .template : .issuer)
-        for cell in template?.cells ?? [] {
-            for a in cell.component.inlineActions where !list.contains(where: { $0.action == a }) {
-                list.append(HeraldResolvedAction(action: a, origin: .template))
-            }
-        }
-        return list
+        ActionResolver.offered(notification: n, manifest: manifest, template: template)
     }
 
-    /// `TemplateResolver.resolve` copies a template's v1 default `buttons` into a notification that sent none, so
-    /// history holds them as if the issuer had sent them. A notification whose buttons are exactly the
-    /// template's default set is treated as the template's: they are the template author's code, not the
-    /// issuer's, and must not ride the app-level "Always Allow".
     static func buttonsCameFromTemplate(_ n: HeraldNotification, _ template: HeraldTemplate?) -> Bool {
-        guard let t = template, !t.buttons.isEmpty, let b = n.buttons else { return false }
-        return b == t.buttons
+        ActionResolver.buttonsCameFromTemplate(n, template)
+    }
+
+    /// The follow-up for a delivered notification (`FollowUpResolver`), with every action it may name.
+    public static func followUp(notification n: HeraldNotification, manifest: HeraldManifest?,
+                                template: HeraldTemplate?) -> HeraldResolvedFollowUp? {
+        FollowUpResolver.resolve(manifest: manifest, notification: n, template: template,
+                                 candidates: FollowUpResolver.candidates(notification: n, manifest: manifest, template: template))
     }
 
     /// Finds the pressed action in `list`: identical first, then the same id and kind (a view may have filled
@@ -434,6 +496,8 @@ public final class ActionRunner: Sendable {
         var all: [HeraldAction] = t.actionRules.compactMap(\.add)
         for cell in t.cells { all += cell.component.inlineActions }
         all += t.buttons.map { legacyAction($0) }
+        // An inline follow-up action is the template's own code too: "Always allow" covers it with the rest.
+        if let a = t.followUp?.action, t.followUp?.isEnabled == true { all.append(a) }
         return all
     }
 
@@ -646,9 +710,10 @@ public final class ActionRunner: Sendable {
             "HERALD_ACTION_KIND": a.kind.rawValue, "HERALD_ORIGIN": origin.rawValue,
         ]
         if let t = inv.template, !t.isEmpty { env["HERALD_TEMPLATE"] = clean(t) }
+        if let u = inv.unattendedSeconds { env["HERALD_FOLLOW_UP"] = "1"; env["HERALD_UNATTENDED_SECONDS"] = String(u) }
         var extras = 0
         for key in inv.fields.keys.sorted() where extras < 100 {
-            guard let v = inv.fields[key] else { continue }
+            guard let v = inv.fields[key], !key.hasPrefix("herald.") else { continue }
             if key.hasPrefix("extra.") { env["HERALD_EXTRA_" + name(String(key.dropFirst(6)))] = clean(TemplateResolver.string(for: v)) }
             else { env["HERALD_FIELD_" + name(key)] = clean(TemplateResolver.string(for: v)) }
             extras += 1

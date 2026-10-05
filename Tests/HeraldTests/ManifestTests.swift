@@ -187,8 +187,34 @@ final class ManifestTests: XCTestCase {
         XCTAssertEqual(m.actionIDs, ["open", "ping", "run", "later", "inferred"])
     }
 
-    func testShortcutScriptAndUnknownActionKindsAreRejectedWithAReason() {
-        for kind in ["shortcut", "script", "snooze"] {
+    func testScriptAndShortcutActionsRoundTripAndSnoozeIsRejected() throws {
+        let m = try decode("""
+        {"app":"x","actions":[{"id":"fwd","label":"Forward","kind":"shortcut","shortcut":"Forward to phone","input":"{title}"},
+          {"id":"log","label":"Log","kind":"script","script":"log.sh"},{"label":"Inferred","shortcut":"S"}]}
+        """)
+        XCTAssertEqual(m.actions[0], HeraldButton(label: "Forward", shortcut: "Forward to phone", input: "{title}"))
+        XCTAssertEqual(m.actions[1], HeraldButton(label: "Log", script: "log.sh"))
+        XCTAssertEqual(m.actions[2].shortcut, "S")
+        let again = try HeraldJSON.decoder().decode(HeraldManifest.self, from: HeraldJSON.encoder().encode(m))
+        XCTAssertEqual(again, m)
+        let wire = String(decoding: try HeraldJSON.encoder().encode(m), as: UTF8.self)
+        XCTAssertTrue(wire.contains("\"kind\":\"shortcut\"") && wire.contains("\"kind\":\"script\""), wire)
+        XCTAssertEqual(HeraldAction(button: m.actions[0], id: "fwd").kind, .shortcut)
+        XCTAssertEqual(HeraldAction(button: m.actions[0]).input, "{title}")
+        XCTAssertEqual(HeraldAction(button: m.actions[1]).kind, .script)
+        // A script or Shortcut action names what it runs; a script is a plain file name in the scripts folder.
+        for kind in ["shortcut", "script"] {
+            XCTAssertThrowsError(try decode("{\"app\":\"x\",\"actions\":[{\"label\":\"A\",\"kind\":\"\(kind)\"}]}")) { error in
+                guard case DecodingError.dataCorrupted(let c) = error else { return XCTFail("\(error)") }
+                XCTAssertEqual(c.codingPath.last?.stringValue, kind)
+            }
+        }
+        let path = try decode(#"{"app":"x","actions":[{"label":"A","kind":"script","script":"../evil.sh"}]}"#)
+        XCTAssertTrue(path.validationErrors().contains { $0.contains("actions[0].script") && $0.contains("plain file name") }, "\(path.validationErrors())")
+    }
+
+    func testSnoozeAndUnknownActionKindsAreRejectedWithAReason() {
+        for kind in ["snooze"] {
             XCTAssertThrowsError(try decode("{\"app\":\"x\",\"actions\":[{\"label\":\"A\",\"kind\":\"\(kind)\"}]}")) { error in
                 guard case DecodingError.dataCorrupted(let c) = error else { return XCTFail("\(error)") }
                 XCTAssertTrue(c.debugDescription.contains("authored in templates"), c.debugDescription)
@@ -493,8 +519,8 @@ final class ManifestTests: XCTestCase {
         XCTAssertEqual(r.status, 400); XCTAssertTrue(text(r).contains("fields[1].type"), text(r))
         r = await router.handle(req("PUT", "/v1/manifest", body: "{\"app\":\"x\",\"actions\":[{\"label\":\"A\",\"kind\":\"url\",\"url\":\"https://x.test\"},{\"label\":\"F\",\"kind\":\"shortcut\"}]}"))
         XCTAssertEqual(r.status, 400)
-        XCTAssertTrue(text(r).contains("actions[1].kind"), text(r))
-        XCTAssertTrue(text(r).contains("authored in templates"), text(r))
+        XCTAssertTrue(text(r).contains("actions[1].shortcut"), text(r))
+        XCTAssertTrue(text(r).contains("name of an installed Shortcut"), text(r))
 
         // Semantic problems are all reported at once.
         r = await router.handle(req("PUT", "/v1/manifest", body: "{\"app\":\"x\",\"fields\":[{\"key\":\"a\"},{\"key\":\"a\"},{\"key\":\"b c\"}]}"))

@@ -165,6 +165,7 @@ final class BannerCenter {
             e.width = e.model.bannerWidth
             applyStacks()
             relayout(animated: true)
+            controller.bannerShown(app: item.app, id: item.id)
             return
         }
 
@@ -243,6 +244,8 @@ final class BannerCenter {
         panel.alphaValue = 0
         panel.setFrame(NSRect(x: BannerDisplays.parkingX, y: vf.maxY - 200, width: e.width, height: e.height), display: false)
         panel.orderFrontRegardless()
+        // The banner is up: a follow-up's timer starts now (not while quiet hours or mute held it back).
+        controller.bannerShown(app: item.app, id: item.id)
     }
 
     /// The template the notification names: one saved for its app, else a built-in (`builtin.hero` ...).
@@ -518,6 +521,15 @@ final class BannerCenter {
 
     func setReminderState(app: String, id: String, _ s: ReminderState) {
         entries[Self.key(app, id)]?.model.reminderState = s
+    }
+
+    /// Redraws a banner that is up with the item as History now holds it (a follow-up's line). False when none is up.
+    @discardableResult
+    func updateItem(_ item: HeraldHistoryItem) -> Bool {
+        guard let e = entries[Self.key(item.app, item.id)] else { return false }
+        e.model.item = item
+        relayout(animated: true)
+        return true
     }
 
     /// Shows (or clears, with nil) the "Action failed" strip on a banner. False when no such banner is up.

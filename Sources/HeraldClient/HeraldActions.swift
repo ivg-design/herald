@@ -83,17 +83,21 @@ public struct HeraldAction: Codable, Equatable, Identifiable, Sendable {
         case .callback: return HeraldButton(label: label, style: style, callback: callback ?? HeraldCallback())
         case .openApp: return HeraldButton(label: label, style: style, openApp: HeraldOpenApp(bundleId: bundleId, path: path))
         case .reply: return HeraldButton(label: label, style: style, reply: reply ?? HeraldReply())
-        case .script, .shortcut, .dismiss, .snooze: return nil
+        case .script: return HeraldButton(label: label, style: style, script: script, input: input)
+        case .shortcut: return HeraldButton(label: label, style: style, shortcut: shortcut, input: input)
+        case .dismiss, .snooze: return nil
         }
     }
 
-    /// An action for a v1 button: url, callback, command, otherwise dismiss. `id` defaults to a slug of the label.
+    /// An action for an issuer button: reply, callback, url, command, script, shortcut, openApp, otherwise dismiss.
+    /// `id` defaults to a slug of the label.
     public init(button b: HeraldButton, id: String? = nil) {
         let kind: HeraldActionKind = b.reply != nil ? .reply : b.callback != nil ? .callback : b.url != nil ? .url
-            : b.command != nil ? .command : b.openApp != nil ? .openApp : .dismiss
+            : b.command != nil ? .command : b.script != nil ? .script : b.shortcut != nil ? .shortcut
+            : b.openApp != nil ? .openApp : .dismiss
         self.init(id: id ?? Self.slug(b.label), label: b.label, kind: kind, style: b.style, url: b.url,
-                  callback: b.callback, command: b.command, bundleId: b.openApp?.bundleId, path: b.openApp?.path,
-                  reply: b.reply)
+                  callback: b.callback, command: b.command, script: b.script, shortcut: b.shortcut, input: b.input,
+                  bundleId: b.openApp?.bundleId, path: b.openApp?.path, reply: b.reply)
     }
 
     /// "Mark as Read" becomes "mark-as-read"; a label with no letters or digits becomes "action".
@@ -244,6 +248,30 @@ public enum ActionResolver {
     /// For issuer actions that already carry their origin (a template's default buttons are `.template`).
     public static func resolveDetailed(issuerResolved: [HeraldResolvedAction], rules: [HeraldActionRule]) -> [HeraldResolvedAction] {
         apply(rules, to: issuerResolved)
+    }
+
+    /// Every action a banner for `n` can offer, with its origin: the issuer's buttons after the template's rules, then
+    /// the template's inline component actions that the rules did not already produce. (`ActionRunner.resolvedActions`.)
+    public static func offered(notification n: HeraldNotification, manifest: HeraldManifest?,
+                               template: HeraldTemplate?) -> [HeraldResolvedAction] {
+        let source = issuerSource(for: n, manifest: manifest)
+        var list = resolveDetailed(issuer: source.buttons, ids: source.ids, rules: template?.actionRules ?? [],
+                                   issuerOrigin: buttonsCameFromTemplate(n, template) ? .template : .issuer)
+        for cell in template?.cells ?? [] {
+            for a in cell.component.inlineActions where !list.contains(where: { $0.action == a }) {
+                list.append(HeraldResolvedAction(action: a, origin: .template))
+            }
+        }
+        return list
+    }
+
+    /// `TemplateResolver.resolve` copies a template's v1 default `buttons` into a notification that sent none, so
+    /// history holds them as if the issuer had sent them. A notification whose buttons are exactly the
+    /// template's default set is treated as the template's: they are the template author's code, not the
+    /// issuer's, and must not ride the app-level "Always Allow".
+    public static func buttonsCameFromTemplate(_ n: HeraldNotification, _ template: HeraldTemplate?) -> Bool {
+        guard let t = template, !t.buttons.isEmpty, let b = n.buttons else { return false }
+        return b == t.buttons
     }
 
     /// The issuer's buttons for a notification, with their ids: the one place the ways of naming them are

@@ -21,6 +21,11 @@ final class BannerModel: ObservableObject {
     /// "Action failed - why", shown under the grid for a few seconds after an action fails. It is the card's own
     /// line, not a template field, so it shows whatever the template draws.
     @Published var failureLine: String?
+    /// "Follow-up ran: Forward · 14:05" (or "Follow-up failed: why"): what the follow-up did, from the item's History
+    /// record. Drawn under the grid like `failureLine`, but it stays for as long as the banner does.
+    var followUpLine: String? {
+        item.followUp?.bannerLine { DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short) }
+    }
     /// A question the banner is asking inline (run this command? send to this host?). While it is set it takes the
     /// place of the actions row (`GridBannerView` hides the action cells, `BannerView` draws the question under
     /// the grid) and the panel re-measures. Answered by `answerConfirmation`; never a modal alert (DESIGN 8).
@@ -359,6 +364,9 @@ struct BannerView: View {
             } else if let line = model.failureLine {
                 FailureLine(text: line, inset: model.grid.grid?.padding ?? 14)
             }
+            if let line = model.followUpLine {
+                FollowUpLine(text: line, failed: model.item.followUp?.outcome == .failed, inset: model.grid.grid?.padding ?? 14)
+            }
         }
             .frame(width: model.bannerWidth, alignment: .topLeading)
             .fixedSize(horizontal: false, vertical: true)
@@ -386,6 +394,27 @@ struct FailureLine: View {
         .padding(.horizontal, inset).padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.red.opacity(0.10))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(text)
+    }
+}
+
+/// The quiet, persistent strip under the grid that says what the follow-up did.
+struct FollowUpLine: View {
+    let text: String
+    let failed: Bool
+    let inset: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: failed ? "exclamationmark.circle" : "arrow.turn.up.right").font(.caption)
+            Text(text).font(.caption).lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(failed ? Color.orange : Color.secondary)
+        .padding(.horizontal, inset).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(text)
     }

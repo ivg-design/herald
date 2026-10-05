@@ -105,8 +105,9 @@ public struct HeraldAsset: Codable, Equatable, Sendable {
 /// offers and the assets it ships. One per `app`, stored by `ManifestStore`, served by `/v1/manifest`.
 ///
 /// `actions` are the issuer's own buttons and so can only be what `HeraldButton` can express: open a
-/// URL, call the issuer back, run a command (the user confirms commands per app as for any payload) or
-/// plain dismiss. Script, Shortcuts and snooze actions are authored in templates, by the user.
+/// URL, call the issuer back, run a command, a script from Herald's scripts folder or an Apple Shortcut (all three
+/// only when the user allows the app to run commands, scripts and Shortcuts), bring an app forward, take a reply, or
+/// plain dismiss. Snooze actions are authored in templates, by the user.
 /// On the wire an action also carries an `id` (what a template's `actionRules` match) and a `kind`;
 /// `actionIDs` keeps the ids, parallel to `actions`.
 public struct HeraldManifest: Codable, Equatable, Sendable {
@@ -130,6 +131,9 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
     /// `onClick: openApp`) can bring it to the front. Both optional; see `HeraldOpenAppResolver` for the order.
     public var appBundleId: String?
     public var appPath: String?
+    /// The issuer's default follow-up (`HeraldFollowUp`): what to run when one of its notifications is left unattended.
+    /// A notification's own `followUp` replaces it, and the user's template replaces both.
+    public var followUp: HeraldFollowUp?
 
     public init(app: String, appName: String? = nil, icon: String? = nil, version: Int = 1,
                 fields: [HeraldField] = [], actions: [HeraldButton] = [], actionIDs: [String]? = nil,
@@ -154,7 +158,7 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
     // MARK: Coding
 
     private enum CodingKeys: String, CodingKey {
-        case app, appName, icon, version, fields, actions, assets, defaultTemplate, family, appBundleId, appPath
+        case app, appName, icon, version, fields, actions, assets, defaultTemplate, family, appBundleId, appPath, followUp
     }
 
     /// The wire shape of one action.
@@ -171,9 +175,15 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
         /// kind reply: the field's hint. A `callback` on a reply action also receives the reply.
         var placeholder: String?
         var voice: Bool?
+        /// kind script: a plain file name in Herald's scripts folder.
+        var script: String?
+        /// kind shortcut: the name of an installed Shortcut.
+        var shortcut: String?
+        /// kind script or shortcut: the text handed over, with `{token}` placeholders; absent hands the full JSON.
+        var input: String?
     }
 
-    private static let issuerKinds = ["url", "callback", "command", "openApp", "reply", "dismiss"]
+    private static let issuerKinds = ["url", "callback", "command", "script", "shortcut", "openApp", "reply", "dismiss"]
 
     /// Only `app` is required: a bare `{"app":"x"}` is a valid (empty) manifest. `appName` defaults to
     /// the app id, `version` to 1.
@@ -188,20 +198,33 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
         for (i, w) in wires.enumerated() {
             let path = decoder.codingPath + [CodingKeys.actions, IndexKey(i)]
             if let kind = w.kind, !Self.issuerKinds.contains(kind) {
-                let why = ["script", "shortcut", "snooze"].contains(kind)
+                let why = kind == "snooze"
                     ? "'\(kind)' actions are authored in templates, not declared by an issuer"
                     : "unknown kind '\(kind)'"
                 throw DecodingError.dataCorrupted(.init(
                     codingPath: path + [AnyKey("kind")],
                     debugDescription: "\(why) (an issuer action is one of \(Self.issuerKinds.joined(separator: ", ")))"))
             }
+            // A script or Shortcut action names what it runs.
+            if w.kind == "script", (w.script ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                throw DecodingError.dataCorrupted(.init(codingPath: path + [AnyKey("script")],
+                    debugDescription: "a script action needs 'script': the name of a file in Herald's scripts folder"))
+            }
+            if w.kind == "shortcut", (w.shortcut ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                throw DecodingError.dataCorrupted(.init(codingPath: path + [AnyKey("shortcut")],
+                    debugDescription: "a shortcut action needs 'shortcut': the name of an installed Shortcut"))
+            }
             var callback = w.callback
             if w.kind == "callback", callback == nil { callback = HeraldCallback() }   // "call the issuer back" needs no payload
             let open = (w.kind == "openApp" || w.bundleId != nil || w.path != nil) ? HeraldOpenApp(bundleId: w.bundleId, path: w.path) : nil
             var reply: HeraldReply?
             if w.kind == "reply" { reply = HeraldReply(placeholder: w.placeholder, callback: callback, voice: w.voice); callback = nil }
+            // Without a kind, a script or shortcut field says what it is (as `HeraldAction` infers it).
+            let script = (w.kind == nil || w.kind == "script") ? w.script : nil
+            let shortcut = (w.kind == nil || w.kind == "shortcut") && script == nil ? w.shortcut : nil
             buttons.append(HeraldButton(label: w.label, style: w.style, url: w.url, command: w.command, callback: callback, openApp: open,
-                                        reply: reply))
+                                        reply: reply, script: script, shortcut: shortcut,
+                                        input: (script != nil || shortcut != nil) ? w.input : nil))
             if let id = w.id?.trimmingCharacters(in: .whitespaces), !id.isEmpty {
                 guard explicit.insert(id).inserted else {
                     throw DecodingError.dataCorrupted(.init(codingPath: path + [AnyKey("id")],
@@ -233,6 +256,7 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
                   family: try c.decodeIfPresent(String.self, forKey: .family),
                   appBundleId: try c.decodeIfPresent(String.self, forKey: .appBundleId),
                   appPath: try c.decodeIfPresent(String.self, forKey: .appPath))
+        self.followUp = try c.decodeIfPresent(HeraldFollowUp.self, forKey: .followUp)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -245,13 +269,14 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
         var wires: [ActionWire] = []
         for (i, b) in actions.enumerated() {
             let kind = b.reply != nil ? "reply" : b.callback != nil ? "callback" : b.url != nil ? "url" : b.command != nil ? "command"
-                : b.openApp != nil ? "openApp" : "dismiss"
+                : b.script != nil ? "script" : b.shortcut != nil ? "shortcut" : b.openApp != nil ? "openApp" : "dismiss"
             // A callback that only means "call the issuer back" is written as just its kind.
             let own = b.reply != nil ? b.reply?.callback : b.callback
             let callback = own == HeraldCallback() ? nil : own
             wires.append(ActionWire(id: actionID(at: i), label: b.label, kind: kind, style: b.style,
                                     url: b.url, command: b.command, callback: callback,
-                                    bundleId: b.openApp?.bundleId, path: b.openApp?.path, placeholder: b.reply?.placeholder, voice: b.reply?.voice))
+                                    bundleId: b.openApp?.bundleId, path: b.openApp?.path, placeholder: b.reply?.placeholder, voice: b.reply?.voice,
+                                    script: b.script, shortcut: b.shortcut, input: b.input))
         }
         try c.encode(wires, forKey: .actions)
         try c.encode(assets, forKey: .assets)
@@ -259,6 +284,7 @@ public struct HeraldManifest: Codable, Equatable, Sendable {
         try c.encodeIfPresent(family, forKey: .family)
         try c.encodeIfPresent(appBundleId, forKey: .appBundleId)
         try c.encodeIfPresent(appPath, forKey: .appPath)
+        try c.encodeIfPresent(followUp, forKey: .followUp)
     }
 
     // MARK: Ids
@@ -374,14 +400,30 @@ public extension HeraldManifest {
             if a.label.isEmpty { errors.append("\(at).label is required") }
             tooBig("\(at).label", a.label, Limits.maxLabelBytes)
             for (name, value) in [("url", a.url), ("command", a.command), ("style", a.style),
-                                  ("bundleId", a.openApp?.bundleId), ("path", a.openApp?.path)] {
+                                  ("bundleId", a.openApp?.bundleId), ("path", a.openApp?.path),
+                                  ("script", a.script), ("shortcut", a.shortcut), ("input", a.input)] {
                 tooBig("\(at).\(name)", value, Limits.maxSmallFieldBytes)
             }
+            if let sc = a.script {
+                if sc.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("\(at).script needs the name of a file in Herald's scripts folder") }
+                else if !HeraldScriptName.isPlain(sc) { errors.append("\(at).script must be a plain file name in Herald's scripts folder, not a path") }
+            }
+            if let sh = a.shortcut, sh.trimmingCharacters(in: .whitespaces).isEmpty { errors.append("\(at).shortcut needs the name of an installed Shortcut") }
             if let style = a.style, !HeraldActionStyle.isAccepted(style) {
                 errors.append("\(at).style '\(style)' must be normal, prominent, destructive or cancel")
             }
             let id = actionID(at: i)
             if !ids.insert(id).inserted { errors.append("\(at).id '\(id)' is declared twice") }
+        }
+
+        if let f = followUp {
+            let ids = actions.indices.map { actionID(at: $0) }
+            for p in f.problems(path: "followUp", knownActionIDs: ids) where p.isError { errors.append("\(p.path): \(p.message)") }
+            if f.isEnabled, f.action == nil, let ref = f.actionRef,
+               let i = ids.firstIndex(where: { $0.caseInsensitiveCompare(ref) == .orderedSame }),
+               let why = HeraldFollowUp.kindProblem(HeraldAction(button: actions[i]).kind) {
+                errors.append("followUp.actionRef: '\(ref)' is not something a follow-up can run: \(why)")
+            }
         }
 
         if assets.count > Limits.maxAssets { errors.append("too many assets (at most \(Limits.maxAssets))") }

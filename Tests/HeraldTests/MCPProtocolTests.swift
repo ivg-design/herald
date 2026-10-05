@@ -737,9 +737,9 @@ final class MCPProtocolTests: XCTestCase {
         XCTAssertEqual(try payload(ok)["fields"]?.numberValue, 2)
         XCTAssertEqual(fake.manifests["bidbot"]?["appName"]?.stringValue, "BidBot")
 
-        // A shortcut action belongs in a template, not a manifest: the error says where.
+        // A snooze action belongs in a template, not a manifest: the error says where.
         let bad = try await call("put_manifest", .object(["manifest": MCPFixtures.json("""
-        {"app":"bidbot","actions":[{"label":"Follow up","kind":"shortcut"}]}
+        {"app":"bidbot","actions":[{"label":"Later","kind":"snooze"}]}
         """)]))
         XCTAssertTrue(isError(bad))
         let report = try payload(bad)
@@ -1304,7 +1304,7 @@ final class MCPProtocolTests: XCTestCase {
         XCTAssertEqual(backend.manifestsByApp["webwatcher.email"]?.fields.count, 6)
         let m = try payload(try await call("get_manifest", .object(["app": .string("webwatcher.email")]), using: s))
         XCTAssertEqual(m["actions"]?.arrayValue?.compactMap { $0["id"]?.stringValue }, ["markRead", "archive"])
-        let rejected = try await call("put_manifest", .object(["manifest": MCPFixtures.json(#"{"app":"x","actions":[{"label":"A","kind":"shortcut"}]}"#)]), using: s)
+        let rejected = try await call("put_manifest", .object(["manifest": MCPFixtures.json(#"{"app":"x","actions":[{"label":"A","kind":"snooze"}]}"#)]), using: s)
         XCTAssertTrue(isError(rejected))
 
         let saved = try await call("put_template", .object(["template": MCPFixtures.json(MCPFixtures.template)]), using: s)

@@ -23,11 +23,20 @@ public struct HeraldButton: Codable, Equatable, Sendable {
     /// notification's history record and in the app's reply queue (`GET /v1/replies`); with a callback it is
     /// also POSTed there.
     public var reply: HeraldReply?
+    /// Run a file in Herald's scripts folder (a plain file name, never a path) with the notification JSON on stdin.
+    /// Like a command, it runs only when the app is allowed to run commands, scripts and Shortcuts.
+    public var script: String?
+    /// Run the Apple Shortcut with this name. Same permission as a command.
+    public var shortcut: String?
+    /// For `script` and `shortcut`: the text handed to the Shortcut (with `{token}` placeholders). Absent: the full
+    /// notification as JSON.
+    public var input: String?
     public init(label: String, style: String? = nil, url: String? = nil,
                 command: String? = nil, callback: HeraldCallback? = nil, openApp: HeraldOpenApp? = nil,
-                reply: HeraldReply? = nil) {
+                reply: HeraldReply? = nil, script: String? = nil, shortcut: String? = nil, input: String? = nil) {
         self.label = label; self.style = style; self.url = url
         self.command = command; self.callback = callback; self.openApp = openApp; self.reply = reply
+        self.script = script; self.shortcut = shortcut; self.input = input
     }
 }
 
@@ -111,6 +120,9 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
     public var audio: String?
     public var presentation: HeraldPresentation?
 
+    /// Run an action when this notification is left unattended (`HeraldFollowUp`). A template's follow-up replaces it.
+    public var followUp: HeraldFollowUp?
+
     public init(app: String, id: String? = nil, title: String, subtitle: String? = nil,
                 body: String? = nil, image: String? = nil, url: String? = nil,
                 sound: String? = nil, persistent: Bool? = nil, timeout: Double? = nil,
@@ -118,7 +130,8 @@ public struct HeraldNotification: Codable, Equatable, Sendable {
                 reminder: HeraldReminder? = nil, metadata: JSONValue? = nil,
                 template: String? = nil, layout: HeraldLayout? = nil, accentColor: String? = nil,
                 showSubtitle: Bool? = nil, showBody: Bool? = nil, showTimestamp: Bool? = nil,
-                maxBodyLines: Int? = nil, actionIds: [String]? = nil, group: String? = nil) {
+                maxBodyLines: Int? = nil, actionIds: [String]? = nil, group: String? = nil, followUp: HeraldFollowUp? = nil) {
+        self.followUp = followUp
         self.app = app; self.id = id; self.title = title; self.subtitle = subtitle
         self.body = body; self.image = image; self.url = url; self.sound = sound
         self.persistent = persistent; self.timeout = timeout; self.priority = priority
@@ -182,6 +195,8 @@ public struct HeraldHistoryItem: Codable, Equatable, Sendable, Identifiable {
     /// A voice reply (the banner's Record button): the m4a kept in History, and what was transcribed from it on this Mac.
     public var replyAudioPath: String?
     public var replyTranscript: String?
+    /// What the follow-up did (it fired because the banner was left unattended). Nil when none fired.
+    public var followUp: HeraldFollowUpRecord?
     public init(id: String, app: String, notification: HeraldNotification, deliveredAt: Date,
                 dismissedAt: Date? = nil, actionUsed: String? = nil, snoozedUntil: Date? = nil,
                 imagePath: String? = nil, fields: [String: HeraldFieldValue]? = nil) {
@@ -193,12 +208,19 @@ public struct HeraldHistoryItem: Codable, Equatable, Sendable, Identifiable {
 }
 
 /// Body POSTed to a callback URL when a `callback` button is pressed.
+/// `event` is absent for a pressed button and `"unattended"` when a follow-up fired because the banner was left up
+/// (`unattendedSeconds` then says for how long).
 public struct HeraldCallbackEvent: Codable, Equatable, Sendable {
     public var notificationId: String
     public var app: String
     public var action: String
     public var payload: JSONValue?
-    public init(notificationId: String, app: String, action: String, payload: JSONValue? = nil) {
+    public var event: String?
+    public var unattendedSeconds: Int?
+    public static let unattendedEvent = "unattended"
+    public init(notificationId: String, app: String, action: String, payload: JSONValue? = nil,
+                event: String? = nil, unattendedSeconds: Int? = nil) {
         self.notificationId = notificationId; self.app = app; self.action = action; self.payload = payload
+        self.event = event; self.unattendedSeconds = unattendedSeconds
     }
 }
