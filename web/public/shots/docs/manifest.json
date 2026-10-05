@@ -78,6 +78,45 @@
     "section": "designer"
   },
   {
+    "file": "designer-followup-block.png",
+    "file2x": "designer-followup-block@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 919,
+    "width2x": 792,
+    "height2x": 1838,
+    "appearance": "light",
+    "title": "Follow-up block",
+    "shows": "The Actions tab of the inspector down to its Follow-up block: the If not dismissed switch on, After 10 minutes, Run set to the Post to Slack Shortcut action, and the note that it runs once if the banner is still up.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-followup-issuer.png",
+    "file2x": "designer-followup-issuer@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 486,
+    "width2x": 792,
+    "height2x": 972,
+    "appearance": "light",
+    "title": "Issuer follow-up",
+    "shows": "The Follow-up block for an app whose manifest declares one: a switch reading From the issuer: Retry after 15 minutes (on), the If not dismissed switch for your own follow-up (off), and the note under them.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-followup-run-menu.png",
+    "file2x": "designer-followup-run-menu@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 386,
+    "width2x": 792,
+    "height2x": 772,
+    "appearance": "light",
+    "title": "Follow-up Run choice",
+    "shows": "The lower part of the Follow-up block with the Run choice showing its current value, Post to Slack. A native menu cannot open offscreen, so the list of choices is not shown.",
+    "section": "designer"
+  },
+  {
     "file": "designer-grid-editing.png",
     "file2x": "designer-grid-editing@2x.png",
     "framed": true,
@@ -290,9 +329,9 @@
     "file2x": "settings-actions@2x.png",
     "framed": true,
     "width": 859,
-    "height": 571,
+    "height": 581,
     "width2x": 1718,
-    "height2x": 1142,
+    "height2x": 1162,
     "appearance": "light",
     "title": "Actions settings",
     "shows": "The Actions tab: the scripts folder with two sample scripts and the Reveal in Finder button, and the templates that carry commands of their own with their confirmation status.",
@@ -309,6 +348,19 @@
     "appearance": "light",
     "title": "Apps settings",
     "shows": "The Apps tab with GitHub Actions selected in the list: its icon, banner, sound and display settings, and the Remove button at the bottom.",
+    "section": "settings"
+  },
+  {
+    "file": "settings-apps-followup.png",
+    "file2x": "settings-apps-followup@2x.png",
+    "framed": true,
+    "width": 859,
+    "height": 1301,
+    "width2x": 1718,
+    "height2x": 2602,
+    "appearance": "light",
+    "title": "Apps settings, app with a follow-up",
+    "shows": "The Apps tab with Acme Deploys selected: the Commands section with the switch Allow this app to run commands, scripts and Shortcuts, and the line Declares a follow-up: Retry after 15 minutes under it.",
     "section": "settings"
   },
   {
@@ -420,9 +472,9 @@
     "file2x": "settings-voice@2x.png",
     "framed": true,
     "width": 859,
-    "height": 1221,
+    "height": 1311,
     "width2x": 1718,
-    "height2x": 2442,
+    "height2x": 2622,
     "appearance": "light",
     "title": "Voice settings",
     "shows": "The Voice tab: the speech voice, speed and language choices, the on-device voice install, and the Quiet hours section.",
@@ -465,6 +517,19 @@
     "appearance": "light",
     "title": "History filtered",
     "shows": "The History window with GitHub Actions selected in the sidebar and the text \"build\" in the search field, so only matching rows are listed.",
+    "section": "history"
+  },
+  {
+    "file": "history-followup-row.png",
+    "file2x": "history-followup-row@2x.png",
+    "framed": true,
+    "width": 1107,
+    "height": 819,
+    "width2x": 2214,
+    "height2x": 1638,
+    "appearance": "light",
+    "title": "History row with a follow-up",
+    "shows": "The History window with GitHub Actions selected: the row for Build failed ends with a line saying the follow-up Post to Slack ran, and how long the banner had been left up.",
     "section": "history"
   },
   {
@@ -621,6 +686,32 @@
     "appearance": "light",
     "title": "Device connector request",
     "shows": "The question for an agent with no browser: Let Codex CLI send you notifications?, with the code BDFG-HJKM to match against what the agent printed, and the Approve and Deny answers.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-followup-approval.png",
+    "file2x": "banner-followup-approval@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 379,
+    "width2x": 928,
+    "height2x": 758,
+    "appearance": "light",
+    "title": "Follow-up waiting for approval",
+    "shows": "A banner whose follow-up fired after being left up, but whose action is not approved yet: the question under the text asks whether to run the script Post summary, with Run once, Always allow and Cancel.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-followup-ran.png",
+    "file2x": "banner-followup-ran@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 176,
+    "width2x": 928,
+    "height2x": 352,
+    "appearance": "light",
+    "title": "Follow-up ran",
+    "shows": "A banner after its follow-up ran: the quiet line Follow-up ran: Post summary with the time sits under the text, and the banner stays on screen.",
     "section": "banners"
   },
   {

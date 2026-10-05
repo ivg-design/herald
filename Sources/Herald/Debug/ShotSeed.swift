@@ -79,7 +79,9 @@ extension ScreenshotMode {
             item("agent.claude-code", "Tests pass", "herald", "All 412 tests passed after the banner refactor. Ready for review.", 9),
             item("web-watcher", "Price dropped", "Studio monitor", "Now $289, was $329.", 21),
             item("calendar", "Design review in 10 minutes", "Room 4B", nil, 34),
-            item(ciApp, "Build failed", "herald-relay \u{00B7} main", "Step 'lint' exited with code 1.", 58),
+            { var i = item(ciApp, "Build failed", "herald-relay \u{00B7} main", "Step 'lint' exited with code 1.", 58)
+              i.followUp = HeraldFollowUpRecord(ranAt: now.addingTimeInterval(-52 * 60), action: "Post to Slack", actionId: "post-to-slack", kind: .shortcut, outcome: .ran, unattendedSeconds: 600)
+              return i }(),
             item("agent.codex", "Refactor done", "relay", "Moved the socket handling into its own module. 3 files changed.", 95),
             item("cloud.build-bot", "Migration finished", nil, "All 14 tables migrated. Want me to open the pull request?", 130),
             item("vercel", "Preview ready", "herald-web \u{00B7} gmail-section", "https://example.com/preview", 190, group: "herald-web"),

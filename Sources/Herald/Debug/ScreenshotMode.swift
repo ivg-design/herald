@@ -140,6 +140,7 @@ final class Runner {
     func run() async {
         startWatchdog()
         ScreenshotMode.seed(c)
+        ScreenshotMode.seedExtras(c)
         await pause(1.0)
         if wantsAny("designer-") { await designer() } else if wantsAny("banner-actions") { await styleHeadless() }
         if wantsAny("settings-") { await settings() }
@@ -158,6 +159,7 @@ final class Runner {
         var dual = false
         var crop: CGRect?
         var trim = false
+        var tail: CGFloat?
         var round: CGFloat?
         var settle = 0.9
         var darkOnly = false
@@ -176,6 +178,7 @@ final class Runner {
             guard wants(file) || wants(name) else { continue }
             setDark(dark)
             await prepare?(dark)
+            ShotKit.emphasize(w)
             await pause(o.settle)
             w.contentView?.layoutSubtreeIfNeeded(); w.displayIfNeeded()
             await pause(0.15)
@@ -190,6 +193,7 @@ final class Runner {
         guard var img = g?.image, let method = g?.method else { ShotKit.log("\(file): FAILED, no capture method worked"); skipped.append(file); return }
         if let r = o.crop, let cropped = ShotKit.crop(img, points: r) { img = cropped }
         if o.trim { img = ShotKit.trimBottom(img) }
+        if let t = o.tail, CGFloat(img.height) > t * 2, let c = img.cropping(to: CGRect(x: 0, y: CGFloat(img.height) - t * 2, width: CGFloat(img.width), height: t * 2)) { img = c }
         if let r = o.round, let rounded = ShotKit.rounded(img, radius: r) { img = rounded }
         else if windowShot, let px = ShotKit.rgba(img), px[3] > 200, let rounded = ShotKit.rounded(img, radius: 16) { img = rounded }
         guard let data = ShotKit.png(img) else { skipped.append(file); return }
@@ -343,6 +347,10 @@ final class Runner {
             NotificationCenter.default.post(name: Notification.Name("herald.debug.appsSelect"), object: ScreenshotMode.ciApp)
             await self.pause(0.8)
         }
+        await settingsShot("settings-apps-followup", tab: 1, Opts(title: "Apps settings, app with a follow-up", shows: "The Apps tab with Acme Deploys selected: the Commands section with the switch Allow this app to run commands, scripts and Shortcuts, and the line Declares a follow-up: Retry after 15 minutes under it.", section: "settings"), tall: 1150, fit: false) { _ in
+            NotificationCenter.default.post(name: Notification.Name("herald.debug.appsSelect"), object: ScreenshotMode.showApp)
+            await self.pause(0.8)
+        }
         await settingsShot("settings-actions", tab: 2, Opts(title: "Actions settings", shows: "The Actions tab: the scripts folder with two sample scripts and the Reveal in Finder button, and the templates that carry commands of their own with their confirmation status.", section: "settings"))
         await settingsShot("settings-voice", tab: 3, Opts(title: "Voice settings", shows: "The Voice tab: the speech voice, speed and language choices, the on-device voice install, and the Quiet hours section.", section: "settings"))
         await settingsShot("settings-cloud-off", tab: 4, Opts(title: "Cloud settings, relay off", shows: "The Cloud tab before a relay is set up: the explanation, the Enable relay switch (off), and the collapsed Advanced section.", section: "settings"))
@@ -394,6 +402,7 @@ final class Runner {
         for (name, app, search, o) in [
             ("history", HistorySelection.allID, "", Opts(title: "History", shows: "The History window with All Apps selected: the apps sidebar with counts, the search field, and the newest-first list of past notifications as banner-style rows.", section: "history", settle: 1.0)),
             ("history-group-folded", "vercel", "", Opts(title: "History with a folded group", shows: "The History window with Vercel selected: three notifications sent with the same group are folded into one row, herald-web, with an arrow to open it and a line saying 3 notifications and how many were not dismissed.", section: "history", settle: 1.0)),
+            ("history-followup-row", ScreenshotMode.ciApp, "", Opts(title: "History row with a follow-up", shows: "The History window with GitHub Actions selected: the row for Build failed ends with a line saying the follow-up Post to Slack ran, and how long the banner had been left up.", section: "history", settle: 1.0)),
             ("history-filtered", ScreenshotMode.ciApp, "build", Opts(title: "History filtered", shows: "The History window with GitHub Actions selected in the sidebar and the text \"build\" in the search field, so only matching rows are listed.", section: "history", settle: 1.0))] {
             guard wants(name) else { continue }
             let w = ShotWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 640), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)

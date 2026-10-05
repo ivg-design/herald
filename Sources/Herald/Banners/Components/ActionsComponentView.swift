@@ -86,6 +86,15 @@ struct ActionsComponentView: View {
             .help(label)
     }
 
+    /// Documentation screenshots (Debug only): a live menu draws just its text offscreen, so the capsule label stands in.
+    private static var captureStandIn: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["HERALD_SCREENSHOTS"]?.isEmpty == false
+        #else
+        return false
+        #endif
+    }
+
     private func overflowLabel(_ hidden: Int) -> some View {
         Text(ActionOverflow.menuTitle(hidden: hidden))
             .font(.system(size: 12, weight: .medium))
@@ -95,7 +104,8 @@ struct ActionsComponentView: View {
     }
 
     @ViewBuilder private func overflowMenu(_ hidden: [HeraldResolvedAction]) -> some View {
-        if ctx.offscreen { overflowLabel(hidden.count) } else { liveOverflowMenu(hidden) }
+        if ctx.offscreen || Self.captureStandIn { overflowLabel(hidden.count) } else { liveOverflowMenu(hidden) }
+
     }
 
     private func liveOverflowMenu(_ hidden: [HeraldResolvedAction]) -> some View {

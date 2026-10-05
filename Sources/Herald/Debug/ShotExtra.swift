@@ -19,7 +19,7 @@ extension ScreenshotMode {
         let ring = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HERALD_SHOTS_RIVE"] ?? FileManager.default.currentDirectoryPath + "/web/public/rive/status-ring.riv")
         let ringAsset = HeraldAsset(id: "status-ring", type: "rive", path: ring.path)
         _ = try? AssetStore.shared.install(ringAsset, app: showApp)
-        let manifest = HeraldManifest(
+        var manifest = HeraldManifest(
             app: showApp, appName: "Acme Deploys",
             fields: [HeraldField(key: "title", type: .text, sample: .text("Health check")), HeraldField(key: "body", type: .text, sample: .text("All services are responding.")),
                      HeraldField(key: "image", type: .image), HeraldField(key: "progress", type: .number, sample: .number(0.62)),
@@ -29,7 +29,15 @@ extension ScreenshotMode {
                       HeraldButton(label: "Mute for an hour", style: "cancel"), HeraldButton(label: "Open dashboard", url: "https://ci.example.com"),
                       HeraldButton(label: "Dismiss", style: "cancel")],
             actionIDs: ["open-log", "retry", "roll-back", "mute", "dashboard", "dismiss"], assets: [ringAsset], defaultTemplate: showTemplate)
+        manifest.followUp = HeraldFollowUp(after: 900, actionRef: "retry")
         _ = try? c.putManifest(manifest)
+        // The follow-up shots run one harmless sample script from the sandbox scripts folder.
+        c.actionRunner.ensureScriptsDirectory()
+        let sample = c.actionRunner.scriptsDirectory.appendingPathComponent("post-summary.sh")
+        try? "#!/bin/zsh\nexit 0\n".write(to: sample, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sample.path)
+        c.registry.register(HeraldAppRegistration(app: showApp, appName: "Acme Deploys", allowCommands: true))
+        c.registry.update(showApp) { $0.commandsConfirmed = true }
 
         func cell(_ id: String, _ r: Int, _ col: Int, cols: Int = 1, rows: Int = 1, align: HeraldAlign = .topLeading, _ comp: HeraldComponent) -> HeraldCell {
             HeraldCell(id: id, row: r, col: col, rowSpan: rows, colSpan: cols, align: align, padding: 0, component: comp)
@@ -72,13 +80,13 @@ extension ScreenshotMode {
 @MainActor
 extension Runner {
     func extras() async {
-        ScreenshotMode.seedExtras(c)
-        await pause(0.5)
         if wantsAny("banner-") { await extraBanners() }
         if wantsAny("designer-") { await extraDesigner() }
         if wantsAny("menu-quiet") { await quietMenu() }
         if wantsAny("settings-apps-remove-dialog") { await removeDialog() }
         if wantsAny("template-editor") { await templateEditor() }
+        if wantsAny("banner-followup") { await followUpBanners() }
+        if wantsAny("designer-followup") { await followUpDesigner() }
     }
 
     // MARK: Banners
@@ -247,6 +255,41 @@ extension Runner {
         await pause(1.5)
         await shot("template-editor", w, Opts(title: "Template editor", shows: "The classic Template editor opened from Settings > Apps > Templates...: the template list on the left, the form in the middle and the live preview with its sample-data drawer on the right.", section: "settings"))
         w.close()
+    }
+}
+
+@MainActor
+extension Runner {
+    var sampleFollowUpAction: HeraldAction { HeraldAction(id: "post-summary", label: "Post summary", kind: .script, script: "post-summary.sh") }
+
+    func followUpBanners() async {
+        let fu = HeraldFollowUp(after: 5, action: sampleFollowUpAction)
+        c.registry.register(HeraldAppRegistration(app: "example.bidbot", appName: "BidBot", allowCommands: true))
+        _ = await banner("banner-followup-approval", Opts(title: "Follow-up waiting for approval", shows: "A banner whose follow-up fired after being left up, but whose action is not approved yet: the question under the text asks whether to run the script Post summary, with Run once, Always allow and Cancel.", section: "banners"),
+            HeraldNotification(app: "example.bidbot", id: UUID().uuidString, title: "Report ready", body: "The weekly bid report is ready to send.", sound: "none", persistent: true, followUp: fu),
+            settle: 8.0)
+        _ = await banner("banner-followup-ran", Opts(title: "Follow-up ran", shows: "A banner after its follow-up ran: the quiet line Follow-up ran: Post summary with the time sits under the text, and the banner stays on screen.", section: "banners"),
+            HeraldNotification(app: ScreenshotMode.showApp, id: UUID().uuidString, title: "Deploy needs approval", body: "Step 'migrate' is waiting for a decision.", sound: "none", persistent: true, followUp: fu),
+            settle: 8.0)
+    }
+
+    func followUpDesigner() async {
+        if let (w, m) = await tallDesigner(app: ScreenshotMode.ciApp, template: ScreenshotMode.ciTemplate) {
+            let top = w.frame.height - w.contentLayoutRect.height + 34, h = w.frame.height - top
+            let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
+            m.setFollowUpOn(true)
+            if let c = m.followUpChoices.first(where: { $0.title.contains("Post to Slack") }) { m.setFollowUpAction(ref: c.id) }
+            await pause(0.8)
+            await shot("designer-followup-block", w, Opts(title: "Follow-up block", shows: "The Actions tab of the inspector down to its Follow-up block: the If not dismissed switch on, After 10 minutes, Run set to the Post to Slack Shortcut action, and the note that it runs once if the banner is still up.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in m.tab = .actions }
+            await shot("designer-followup-run-menu", w, Opts(title: "Follow-up Run choice", shows: "The lower part of the Follow-up block with the Run choice showing its current value, Post to Slack. A native menu cannot open offscreen, so the list of choices is not shown.", section: "designer", crop: inspector, trim: true, tail: 330, round: 12)) { _ in m.tab = .actions }
+            w.close(); await pause(1.2)
+        }
+        if let (w, m) = await tallDesigner(app: ScreenshotMode.showApp, template: ScreenshotMode.showTemplate) {
+            let top = w.frame.height - w.contentLayoutRect.height + 34, h = w.frame.height - top
+            let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
+            await shot("designer-followup-issuer", w, Opts(title: "Issuer follow-up", shows: "The Follow-up block for an app whose manifest declares one: a switch reading From the issuer: Retry after 15 minutes (on), the If not dismissed switch for your own follow-up (off), and the note under them.", section: "designer", crop: inspector, trim: true, tail: 430, round: 12)) { _ in m.tab = .actions }
+            w.close(); await pause(1.2)
+        }
     }
 }
 #endif
