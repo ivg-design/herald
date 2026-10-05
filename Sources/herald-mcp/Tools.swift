@@ -328,8 +328,8 @@ final class MCPTools: @unchecked Sendable {
             }
         }
         let (t, unknownKeys) = try parseTemplate(raw)
-        if BuiltinTemplates.isBuiltin(t.name) || t.name.hasPrefix(BuiltinTemplates.prefix) {
-            throw ToolFailure("Template names starting with '\(BuiltinTemplates.prefix)' are reserved for the built-in layouts. Pick another name.",
+        if let problem = HeraldTemplateName.problem(t.name, allowScratch: true) {
+            throw ToolFailure("Invalid template name: \(problem). Pick another name.",
                               details: ["saved": .bool(false), "path": .string("name")])
         }
         let manifest = try? await client.manifest(app: t.app)
@@ -360,11 +360,11 @@ final class MCPTools: @unchecked Sendable {
 
     private func deleteTemplate(_ args: MCPArgs) async throws -> MCPToolResult {
         let app = try args.requiredString("app"), name = try args.requiredString("name")
-        if name.hasPrefix(BuiltinTemplates.prefix) {
-            throw ToolFailure("'\(name)' is a built-in template and cannot be deleted.")
-        }
         do { try await client.deleteTemplate(app: app, name: name) }
-        catch HeraldError.server(let status, _) where status == 404 { throw await templateNotFound(app: app, name: name) }
+        catch HeraldError.server(let status, _) where status == 404 {
+            if name.hasPrefix(BuiltinTemplates.prefix) { throw ToolFailure("'\(name)' is a built-in template and cannot be deleted.") }
+            throw await templateNotFound(app: app, name: name)
+        }
         var notes: [String] = []
         if let m = (try? await client.manifest(app: app)) ?? nil, m.defaultTemplate == name {
             notes.append("'\(name)' is still the manifest's defaultTemplate; put_manifest to change it.")

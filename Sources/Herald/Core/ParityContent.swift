@@ -163,14 +163,7 @@ extension ParityService {
 
     // MARK: Template duplicate, rename, default
 
-    static func validTemplateName(_ n: String) -> String? {
-        if n.isEmpty || n.trimmingCharacters(in: .whitespaces).isEmpty { return "the name is empty" }
-        if n.contains("/") || n.contains(":") { return "the name cannot contain / or :" }
-        if n.hasPrefix(".") || n.hasPrefix("_") { return "the name cannot start with . or _ (those are reserved)" }
-        if n.hasPrefix(BuiltinTemplates.prefix) { return "names starting with builtin. are reserved for the built-in layouts" }
-        if n.utf8.count > 128 { return "the name is longer than 128 bytes" }
-        return nil
-    }
+    static func validTemplateName(_ n: String) -> String? { HeraldTemplateName.problem(n) }
 
     func sourceTemplate(app: String, name: String) throws -> HeraldTemplate {
         if let t = templates.get(app: app, name: name) { return t }
@@ -202,7 +195,10 @@ extension ParityService {
     func renameTemplate(_ req: HTTPRequest) throws -> HTTPResponse {
         let o = try body(req)
         let app = try requiredString(o, "app"), name = try requiredString(o, "name"), newName = try requiredString(o, "newName")
-        guard !name.hasPrefix(BuiltinTemplates.prefix) else { throw BackendError(400, "a built-in template cannot be renamed; duplicate it instead") }
+        // A built-in layout cannot be renamed; a stored template that happens to carry a builtin. name can.
+        guard templates.get(app: app, name: name) != nil || !name.hasPrefix(BuiltinTemplates.prefix) else {
+            throw BackendError(400, "a built-in template cannot be renamed; duplicate it instead")
+        }
         if let problem = Self.validTemplateName(newName) { throw BackendError(400, "invalid newName: \(problem)") }
         guard var t = templates.get(app: app, name: name) else { throw BackendError(404, "template not found") }
         guard newName != name else { return Self.reply(["ok": true, "app": app, "name": name, "unchanged": true]) }

@@ -591,7 +591,22 @@ private struct DesignerPreviewBar: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
+        #if DEBUG
+        // Documentation screenshots: the problems list drawn inline (a popover is vibrancy over nothing offscreen).
+        .overlay(alignment: .topLeading) {
+            if debugIssuesOpen {
+                IssuesPopover(model: model)
+                    .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
+                    .shadow(radius: 10, y: 4).offset(x: 330, y: 52)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.issuesOpen"))) { n in debugIssuesOpen = (n.object as? Bool) ?? true }
+        #endif
     }
+    #if DEBUG
+    @State private var debugIssuesOpen = false
+    #endif
 }
 
 private struct FieldsPopover: View {

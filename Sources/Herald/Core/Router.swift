@@ -242,6 +242,11 @@ public final class Router: @unchecked Sendable {
                 let t = try decode(HeraldTemplate.self, req)
                 guard !t.app.isEmpty else { throw BackendError(400, "app is required") }
                 guard !t.name.isEmpty else { throw BackendError(400, "name is required") }
+                // Existing stored names are never checked again; a name written now follows the one shared rule.
+                if let problem = HeraldTemplateName.problem(t.name, allowScratch: true) {
+                    let stored = try await backend.templates(app: t.app).contains { $0.name == t.name }
+                    if !stored { throw BackendError(400, "invalid template name: \(problem)") }
+                }
                 // A saved template is read and laid out on every delivery for its app, so it is checked on the way in
                 // (grid size, cell count, sizes), the same as the MCP server and the Designer do.
                 let errors = t.validate().filter(\.isError)

@@ -144,6 +144,7 @@ final class Runner {
         if wantsAny("designer-") { await designer() } else if wantsAny("banner-actions") { await styleHeadless() }
         if wantsAny("settings-") { await settings() }
         if wantsAny("menu") { await menu() }
+        await extras()
         // Banners before History: an open History window holds banners back (the notifications are already in front of the user).
         if wantsAny("banner-") { await banners() }
         if wantsAny("history") { await history() }

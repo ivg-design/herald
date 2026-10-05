@@ -260,7 +260,7 @@ struct TemplateEditorView: View {
 
     private func save() {
         let name = draft.name.trimmingCharacters(in: .whitespaces)
-        guard Self.isValidName(name) else { error = "Name must not be empty or contain / or start with a dot."; return }
+        if let problem = HeraldTemplateName.problem(name) { error = "Name not usable: \(problem)."; return }
         if name != savedName, templates.contains(where: { $0.name == name }) { error = "A template named \u{201C}\(name)\u{201D} already exists."; return }
         draft.name = name
         draft.app = app
@@ -306,7 +306,7 @@ struct TemplateEditorView: View {
     }
 
     static func isValidName(_ n: String) -> Bool {
-        !n.isEmpty && !n.contains("/") && !n.contains(":") && !n.hasPrefix(".")
+        HeraldTemplateName.problem(n) == nil
     }
 
     // MARK: Bindings

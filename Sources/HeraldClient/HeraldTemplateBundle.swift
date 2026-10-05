@@ -387,13 +387,15 @@ public enum HeraldTemplateBundle {
 
     // MARK: Names
 
-    /// A template name that passes `DesignerModel.isValidName`: no `/` or `:`, no leading `.` or `_`, at most 100
-    /// characters; "Imported template" when nothing is left.
+    /// A template name that passes `HeraldTemplateName.problem`: no `/` or `:`, no leading `.` or `_`, no reserved
+    /// `builtin.` prefix, at most `HeraldTemplateName.maxBytes` bytes; "Imported template" when nothing is left.
     public static func sanitizedTemplateName(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         s = String(s.map { $0 == "/" || $0 == ":" || $0.unicodeScalars.contains(where: { $0.value < 0x20 }) ? "-" : $0 })
-        while s.hasPrefix(".") || s.hasPrefix("_") { s.removeFirst() }
-        s = String(s.prefix(100)).trimmingCharacters(in: .whitespaces)
+        while s.hasPrefix(".") || s.hasPrefix("_") || s.hasPrefix(HeraldTemplateName.reservedPrefix) {
+            s = s.hasPrefix(HeraldTemplateName.reservedPrefix) ? String(s.dropFirst(HeraldTemplateName.reservedPrefix.count)) : String(s.dropFirst())
+        }
+        s = HeraldTemplateName.truncated(s).trimmingCharacters(in: .whitespaces)
         return s.isEmpty ? "Imported template" : s
     }
 

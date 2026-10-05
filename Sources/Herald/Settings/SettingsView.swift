@@ -294,9 +294,9 @@ enum AppRemovalPrompt {
         return "Removes the app with its history, templates and icon. An app that sends again later is added again."
     }
 
-    static func ask(controller: AppController, record: AppRecord) {
+    /// The question, built but not shown (also used to draw it for the documentation).
+    static func makeAlert(controller: AppController, record: AppRecord) -> (alert: NSAlert, hasKey: Bool) {
         let app = record.registration.app
-        guard app != HeraldIdentity.app else { return }
         let key = liveKey(controller: controller, app: app)
         let a = NSAlert()
         a.alertStyle = .warning
@@ -310,6 +310,14 @@ enum AppRemovalPrompt {
             a.addButton(withTitle: "Remove")
         }
         a.addButton(withTitle: "Cancel")
+        return (a, key != nil)
+    }
+
+    static func ask(controller: AppController, record: AppRecord) {
+        let app = record.registration.app
+        guard app != HeraldIdentity.app else { return }
+        let key = liveKey(controller: controller, app: app)
+        let a = makeAlert(controller: controller, record: record).alert
         let r = a.runModal()
         let cancel: NSApplication.ModalResponse = key != nil ? .alertThirdButtonReturn : .alertSecondButtonReturn
         guard r != cancel else { return }

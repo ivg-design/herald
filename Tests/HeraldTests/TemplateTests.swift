@@ -368,6 +368,35 @@ final class TemplateTests: XCTestCase {
                         "a scratch template still resolves by name")
     }
 
+    func testPutRefusesReservedAndLongNamesButKeepsStoredOnes() async throws {
+        let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
+        var r = await router.handle(req("PUT", "/v1/templates", body: #"{"name":"builtin.hero","app":"bidbot"}"#))
+        XCTAssertEqual(r.status, 400); XCTAssertTrue(text(r).contains("builtin."), text(r))
+        XCTAssertNil(backend.store.get(app: "bidbot", name: "builtin.hero"))
+        r = await router.handle(req("PUT", "/v1/templates", body: "{\"name\":\"\(String(repeating: "a", count: 129))\",\"app\":\"bidbot\"}"))
+        XCTAssertEqual(r.status, 400); XCTAssertTrue(text(r).contains("128"), text(r))
+        r = await router.handle(req("PUT", "/v1/templates", body: "{\"name\":\"\(String(repeating: "a", count: 128))\",\"app\":\"bidbot\"}"))
+        XCTAssertEqual(r.status, 200)
+        // A reserved name that is already stored (written before the rule) can still be saved again and deleted.
+        XCTAssertTrue(backend.store.put(HeraldTemplate(name: "builtin.old", app: "bidbot")))
+        r = await router.handle(req("PUT", "/v1/templates", body: #"{"name":"builtin.old","app":"bidbot","layout":"hero"}"#))
+        XCTAssertEqual(r.status, 200, text(r))
+        r = await router.handle(req("DELETE", "/v1/templates", query: ["app": "bidbot", "name": "builtin.old"]))
+        XCTAssertEqual(r.status, 200)
+    }
+
+    func testTemplateNameRule() {
+        XCTAssertNil(HeraldTemplateName.problem("bid won"))
+        for bad in ["", "  ", "a/b", "a:b", ".x", "_x", "builtin.hero", "builtin.x", String(repeating: "é", count: 65)] {
+            XCTAssertNotNil(HeraldTemplateName.problem(bad), bad)
+        }
+        XCTAssertNil(HeraldTemplateName.problem("_designer-test", allowScratch: true))
+        XCTAssertEqual(HeraldTemplateName.truncated(String(repeating: "é", count: 100)).utf8.count, 128)
+        XCTAssertNil(HeraldTemplateName.problem(HeraldTemplateBundle.sanitizedTemplateName("builtin.hero")))
+        XCTAssertEqual(HeraldTemplateBundle.sanitizedTemplateName("builtin.hero"), "hero")
+        XCTAssertNil(HeraldTemplateName.problem(HeraldTemplateBundle.sanitizedTemplateName(String(repeating: "é", count: 200))))
+    }
+
     func testTemplateCRUDOverHTTP() async throws {
         let (router, backend, dir) = routerAndBackend(); defer { try? FileManager.default.removeItem(at: dir) }
         var r = await router.handle(req("GET", "/v1/templates"))

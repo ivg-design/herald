@@ -1160,12 +1160,12 @@ final class DesignerModel: ObservableObject {
 
     // MARK: Save, duplicate, delete, default
 
-    static func isValidName(_ n: String) -> Bool { !n.isEmpty && !n.contains("/") && !n.contains(":") && !n.hasPrefix(".") && !n.hasPrefix("_") }
+    static func isValidName(_ n: String) -> Bool { HeraldTemplateName.problem(n) == nil }
 
     @discardableResult
     func save() -> Bool {
         let name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isValidName(name) else { fail("Name must not be empty, start with . or _, or contain / or :."); return false }
+        if name != savedName, let problem = HeraldTemplateName.problem(name) { fail("Name not usable: \(problem)."); return false }
         if name != savedName, templates.contains(where: { $0.name == name }) { fail("A template named \u{201C}\(name)\u{201D} already exists."); return false }
         var t = draft
         t.name = name; t.app = app; t.layoutVersion = HeraldTemplate.currentLayoutVersion
@@ -1189,8 +1189,11 @@ final class DesignerModel: ObservableObject {
     func duplicate() {
         var base = draft.name.isEmpty ? "template" : draft.name
         if base.hasSuffix(" copy") { base.removeLast(5) }
+        while base.hasPrefix(HeraldTemplateName.reservedPrefix) { base.removeFirst(HeraldTemplateName.reservedPrefix.count) }
+        if base.isEmpty { base = "template" }
         var name = base + " copy", n = 1
         while templates.contains(where: { $0.name == name }) { n += 1; name = base + " copy \(n)" }
+        if let problem = HeraldTemplateName.problem(name) { fail("Name not usable: \(problem)."); return }
         var t = draft
         t.name = name; t.app = app
         suppressRefresh = true; defer { suppressRefresh = false }

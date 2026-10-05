@@ -69,20 +69,21 @@ extension ScreenshotMode {
     static func seedHistory(_ c: AppController) {
         for app in c.history.apps() { c.history.clear(app: app) }
         let now = Date()
-        func item(_ app: String, _ title: String, _ sub: String?, _ body: String?, _ minutesAgo: Double) -> HeraldHistoryItem {
+        func item(_ app: String, _ title: String, _ sub: String?, _ body: String?, _ minutesAgo: Double, group: String? = nil) -> HeraldHistoryItem {
             let id = UUID().uuidString
-            let n = HeraldNotification(app: app, id: id, title: title, subtitle: sub, body: body)
+            let n = HeraldNotification(app: app, id: id, title: title, subtitle: sub, body: body, group: group)
             return HeraldHistoryItem(id: id, app: app, notification: n, deliveredAt: now.addingTimeInterval(-minutesAgo * 60))
         }
         c.history.upsert(contentsOf: [
-            item("vercel", "Deploy finished", "herald-web \u{00B7} production", "Built in 42 s, no warnings.", 3),
+            item("vercel", "Deploy finished", "herald-web \u{00B7} production", "Built in 42 s, no warnings.", 3, group: "herald-web"),
             item("agent.claude-code", "Tests pass", "herald", "All 412 tests passed after the banner refactor. Ready for review.", 9),
             item("web-watcher", "Price dropped", "Studio monitor", "Now $289, was $329.", 21),
             item("calendar", "Design review in 10 minutes", "Room 4B", nil, 34),
             item(ciApp, "Build failed", "herald-relay \u{00B7} main", "Step 'lint' exited with code 1.", 58),
             item("agent.codex", "Refactor done", "relay", "Moved the socket handling into its own module. 3 files changed.", 95),
             item("cloud.build-bot", "Migration finished", nil, "All 14 tables migrated. Want me to open the pull request?", 130),
-            item("vercel", "Preview ready", "herald-web \u{00B7} gmail-section", "https://example.com/preview", 190),
+            item("vercel", "Preview ready", "herald-web \u{00B7} gmail-section", "https://example.com/preview", 190, group: "herald-web"),
+            item("vercel", "Build started", "herald-web \u{00B7} main", "Commit a1f94c2.", 200, group: "herald-web"),
             item("web-watcher", "Page changed", "Release notes", "A new section was added: 'Known issues'.", 260),
             item(ciApp, "Build passed", "herald \u{00B7} main", "Finished in 3 min 12 s.", 400),
             item("calendar", "Standup", "Starts at 9:30", nil, 1_300),

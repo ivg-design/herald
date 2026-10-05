@@ -379,6 +379,10 @@ final class ParityRouteTests: XCTestCase {
         }
         r = await call("POST", "/v1/templates/rename", ["app": "demo", "name": "ghost", "newName": "x"])
         XCTAssertEqual(r.status, 404)
+        // A stored template that already carries a reserved name (older data) can be renamed away from it.
+        XCTAssertTrue(templates.put(HeraldTemplate.blank(name: "builtin.old", app: "demo")))
+        r = await call("POST", "/v1/templates/rename", ["app": "demo", "name": "builtin.old", "newName": "old"])
+        XCTAssertEqual(r.status, 200, text(r))
 
         r = await call("PUT", "/v1/templates/default", ["app": "demo", "name": "hero copy"])
         XCTAssertEqual(r.status, 200); XCTAssertEqual(manifests.get(app: "demo")?.defaultTemplate, "hero copy")
