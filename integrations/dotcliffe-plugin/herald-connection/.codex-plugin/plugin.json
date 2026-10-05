@@ -1,0 +1,23 @@
+{
+  "interface": {
+    "displayName": "Herald Connection",
+    "shortDescription": "Notify your Mac and hear back",
+    "longDescription": "Connect Dotcliffe to the owner's Herald relay. Send banners and spoken notifications to their Mac, read delivery receipts, and read their typed or recorded replies. A reply can wake this conversation through the relay's notification.reply event once the platform subscription is verified. Text and presentation only: no commands, files or settings on the Mac.",
+    "developerName": "IVG",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive"
+    ],
+    "defaultPrompt": "Send me a Herald notification and wait for my reply."
+  },
+  "name": "herald-connection",
+  "version": "0.1.0",
+  "description": "Send notifications to the owner's Mac through their own Herald relay, and be told when they reply.",
+  "author": {
+    "name": "IVG"
+  },
+  "keywords": [],
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json",
+  "apps": "./.app.json"
+}
