@@ -16,11 +16,11 @@ export interface ReleaseInfo {
 const FALLBACK: ReleaseInfo = {
   version: "1.9.2",
   build: "24",
-  date: "2026-10-05T01:30:00Z",
+  date: "2026-10-05T22:00:00Z",
   dmgUrl: `https://github.com/${REPO}/releases/download/v1.9.2/Herald-1.9.2-build24-macOS.dmg`,
   dmgName: "Herald-1.9.2-build24-macOS.dmg",
-  sizeMB: Math.round(15266007 / 1024 / 1024),
-  sha256: "70c042d959ce8e375280b9fcb330955c92e783762db0de48ec621f70e28cd721",
+  sizeMB: Math.round(15275407 / 1024 / 1024),
+  sha256: "d3f99e2c9b22a9c44adc94c063e7428ecd733bd28e876cfa4500a66abe5f7279",
   shaUrl: `https://github.com/${REPO}/releases/download/v1.9.2/Herald-1.9.2-build24-macOS.dmg.sha256`,
   live: false,
 };

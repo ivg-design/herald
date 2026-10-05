@@ -3,6 +3,14 @@ export const PREFIX = process.env.NEXT_PUBLIC_ASSET_PREFIX || "";
 export const REPO = "ivg-design/herald";
 export const REPO_URL = `https://github.com/${REPO}`;
 export const RELEASES_URL = `${REPO_URL}/releases`;
+/** Who makes Herald: shown in the footer and on the legal pages. */
+export const DEVELOPER = {
+  name: "Ilya Gusinski",
+  studio: "IVG Design",
+  linkedin: "https://www.linkedin.com/in/ivgd",
+  portfolio: "https://www.mograph.life",
+  contact: "https://services.mograph.life/",
+};
 
 /** Static files in /public (images, fonts). */
 export function asset(path: string): string {
