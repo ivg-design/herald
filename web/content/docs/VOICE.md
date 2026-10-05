@@ -1,127 +1,158 @@
-# Herald voice: spoken notifications and voice messages
+# Make Herald speak
 
-Herald can say a notification aloud, or play a recorded voice message. The text always lands in history, so the
-log stays searchable. **Everything is local**: speech is synthesized on this Mac by a Python process (Kokoro) or
-by the system voice; no text or audio is ever sent anywhere. The only network use is the optional, one-time
-Kokoro download from GitHub, which you start yourself.
+Herald can read a notification aloud or play a recorded voice message, so you hear an event without looking at the
+screen. By the end of this guide you will have chosen a voice engine, optionally installed the Kokoro neural
+voice, and sent a spoken notification, a voice-only one, and one with its own voice. Everything runs on the Mac:
+no text or audio is sent anywhere.
 
-## Setup (Settings > Voice)
+## Before you start
 
-Pick an engine:
+- Herald is running and you can open **Settings** from its menu.
+- For the examples below, define the connection variables once. They are explained in
+  [Connect](reference/api/README.md#connect).
 
-| Engine | What it is |
-| --- | --- |
-| **Kokoro (local, natural)** | A neural voice. Optional download; see below. |
-| **System voice** | The built-in macOS voices (AVSpeechSynthesizer). Works at once; speaks directly, so there is no WAV to replay (a replay re-speaks the text). This is the default. |
-| **Off** | Nothing is spoken or played. |
+  ```sh
+  D="$HOME/Library/Application Support/Herald"
+  HERALD="http://127.0.0.1:$(cat "$D/port")"
+  TOKEN="$(cat "$D/token")"
+  ```
 
-Kokoro, either way:
+## Steps
 
-1. **Use existing installation at ~/.claude/tts**: shown when that folder holds `kokoro-v1.0.onnx`,
-   `voices-v1.0.bin` and a `venv`. Herald symlinks them into `~/Library/Application Support/Herald/tts/`;
-   nothing is copied or changed in the source.
-2. **Download Kokoro (about 340 MB)**: fetches `kokoro-v1.0.onnx` and `voices-v1.0.bin` from the kokoro-onnx GitHub
-   release (resumable; a cancelled download continues from the bytes already on disk), prints their SHA-256, then
-   builds the Python environment: `uv venv --python 3.12 tts/venv && uv pip install kokoro-onnx soundfile`, or
-   `python3 -m venv` plus pip when uv is not installed.
+### Choose an engine
 
-Then choose a default voice (af_heart, af_bella, af_nicole, am_michael, bf_emma, bm_george, and the rest the
-model reports), the speed (0.5 to 2.0), and press **Speak** to test (a test plays even when Herald is muted).
-"Speak per app" holds a Speak switch and an optional voice for each app; an app with Speak off is never spoken.
+1. Open **Settings > Voice**. The **Speech** section is at the top.
+2. Choose an engine in the **Engine** menu.
 
-The first Kokoro request loads the model (a few seconds); the worker then stays running and later requests take
-well under a second. If the worker dies it is restarted on the next request.
+   ![The Voice tab of Herald's Settings window with the Engine menu, the voice and speed controls, the quiet hours section and the per-app list](../web/public/shots/docs/settings-voice.png "Settings > Voice: the engine, voice and speed at the top, the Speak test below, then quiet hours and the per-app list.")
 
-## API
+   | Engine | What it is |
+   |---|---|
+   | **Kokoro (local, natural)** | A neural voice that sounds natural. It needs a one-time download. |
+   | **System voice** | The built-in macOS voices. It works at once and is the default. |
+   | **Off** | Nothing is spoken. Recorded audio messages still play. |
 
-`POST /v1/notify` gains three optional fields:
+3. Choose a **Voice**. With the system voice the menu lists the installed English voices, and **System default**
+   uses the voice set in macOS. With Kokoro it lists the model's voices, such as `af_heart`, `af_bella`,
+   `af_nicole`, `am_michael`, `bf_emma` and `bm_george`.
+4. Drag **Speed** between 0.5x and 2.0x. The current value shows beside the slider.
+5. Type a sentence in **Test text** and press **Speak**. You hear it even when Herald is muted. If nothing
+   plays, the reason shows in red under the field.
 
-```json
-{"app":"build","title":"Build finished","body":"All 214 tests passed",
- "speak": true,
- "audio": "/path/to/message.wav",
- "presentation": "banner"}
+If you only want the system voice, you are done with setup. Go on to [Send a spoken
+notification](#send-a-spoken-notification).
+
+### Install Kokoro
+
+Choose **Kokoro (local, natural)** as the engine. A status row shows **Kokoro is installed**, or **Kokoro is not
+installed** with what is missing. When it is not installed you have two ways to get it.
+
+1. If you already have a Kokoro setup in `~/.claude/tts` (with `kokoro-v1.0.onnx`, `voices-v1.0.bin` and a
+   `venv` folder), press **Use existing installation at ~/.claude/tts**. Herald links those files into its own
+   folder. Nothing is copied or changed in the source. The status row turns to **Kokoro is installed**.
+2. Otherwise press **Download Kokoro (about 340 MB)**. Herald downloads the two model files from the
+   kokoro-onnx release on GitHub, shows a progress bar, then builds a Python environment with `uv`, or with
+   `python3` and `pip` when `uv` is not installed. The status row turns to **Kokoro is installed** when it is
+   done.
+
+You can press **Cancel** during the download. Starting again continues from the bytes already on disk. When
+the files are in place Herald shows the SHA-256 of each one so you can compare it with the release. **Show in
+Finder** opens the folder.
+
+The first Kokoro request after you start Herald loads the model and takes a few seconds. After that the voice
+stays loaded and answers fast. An agent can start the same installation with the
+[`install_voice`](reference/mcp/apps-and-settings.md#install_voice) tool or
+[`POST /v1/voice/install`](reference/api/setup.md#post-v1voiceinstall).
+
+### Send a spoken notification
+
+Add `--speak` to a notification. Herald shows the banner and reads the title, then the body.
+
+```sh
+herald notify --app example.bidbot --title "Bid accepted" \
+  --body "Your bid of \$4,200 on the Acme RFP was accepted." --speak
 ```
 
-* `speak`: `true` says the title, then the body. Or an object `{"text":"...","voice":"af_heart","speed":1.1,"lang":"en-us"}`
-  (all optional; `text` defaults to title then body). `false` is the same as leaving it out. Text is capped at
-  2,000 characters, markdown links are read as their label.
-* `audio`: a WAV, MP3, M4A, AIFF or CAF voice message as a file path, an https URL or a `data:` URI. At most 20 MB
-  (a `data:` URI is also bound by the 1 MB request limit, so use a path or URL for larger files). The kind is
-  checked from the file's bytes, never its name; anything else is ignored. It is cached under
-  `history/audio/`. With both `speak` and `audio`, the speech plays first.
-* `presentation`: `banner` (default), `voice` (spoken only: no banner, no chime; the history entry is kept and
-  marked read), `both`. `voice` and `both` without `speak` or `audio` speak the title and body.
+The banner appears and at the same moment you hear "Bid accepted. Your bid of $4,200 on the Acme RFP was
+accepted." A small speaker control sits beside the banner's time. Press it to hear the message again.
 
-`POST /v1/speak` `{"app":"build","text":"Deploy finished","voice":"af_bella","speed":1.1,"lang":"en-us","id":"..."}`
-is a shortcut for presentation `voice`; reply `{"ok":true,"id":"..."}`. Errors: 400 for a missing app or text, a bad
-voice name (letters, digits, `_ - .`), a bad language, or a speed outside 0.5 to 2.0.
+![A Herald banner with a small speaker control beside its time](../web/public/shots/docs/banner-speech.png "A spoken banner. The speaker control beside the time plays the message again.")
 
-A voice-only notification is never lost: if Herald is muted, the app's Speak switch is off, the engine is Off, or
-the audio could not be read, it is shown as a normal banner instead.
+To say something different from what the banner shows, give the text, voice, speed and language yourself:
 
-Playback never overlaps: notifications queue in arrival order (at most 20 waiting; older ones are dropped).
-Dismiss interrupts that notification's speech, Dismiss All and the global mute stop everything. Mute silences
-speech like it silences chimes; explicit replays and the Test button ignore it.
-
-History items carry `speech: {text, voice, audioPath, durationSeconds}` (`audioPath` and `durationSeconds` are
-absent for the system voice). The History window shows a speaker button and the spoken text under such an entry;
-the button replays the cached WAV, or re-synthesizes the text if the file was pruned (Herald keeps the newest 300
-audio files).
-
-## Quiet hours (Settings > Voice > Quiet hours)
-
-Windows `{days, start, end}` in local time (`days` empty = every day; a window belongs to the day it starts, so
-Fri 22:30 to 07:30 runs into Saturday morning; an end not after the start means the next morning). Each window
-silences **Speech** (default), **Sounds** and/or **Banners**. A silenced banner has no panel: it goes to History
-(unread) and the "+N more" pill. Held-back speech is not synthesized; history shows `speech.suppressed: "quiet-hours"`
-with the text. "Speak queued messages when it ends" plays one summary ("3 messages while you were away: ...").
-`priority: "urgent"` bypasses quiet hours only for apps whose "Urgent can break quiet hours" is on (off by default).
-A voice-only notification held back this way is shown as a banner instead (unless banners are silenced too).
-
-The menu shows "Quiet until 07:30" with "Resume Now" while quiet (Resume ends the current occurrence only), or
-"Quiet for 1 Hour" otherwise.
-
-* `GET /v1/settings/quiet-hours` returns `{windows, adHoc, status:{active, speech, sounds, banners, until, source}}`.
-* `PUT /v1/settings/quiet-hours` takes any of `{"windows":[...]}` (replaces the schedule),
-  `{"resume":true}`, `{"adHoc":{"until":"07:30" | ISO date, "minutes":60, "speech":true,"sounds":true,"banners":false}}`.
-* CLI: `herald quiet --until 07:30`, `herald quiet --for 60 [--banners]`, `herald quiet off`, `herald quiet status`.
-* MCP: `get_quiet_hours`, `set_quiet_hours {windows?, until?, minutes?, banners?, resume?}`.
-
-## CLI
-
-```
-herald notify --app build --title "Build finished" --speak
-herald notify --app build --title "Build finished" --speak-text "All tests passed" --voice af_bella --speed 1.1 --lang en-us
-herald notify --app build --title "Voice note" --audio ~/note.wav --presentation voice
-herald speak  --app build --text "Deploy finished" [--voice NAME] [--speed N] [--lang L] [--id ID]
+```sh
+herald notify --app example.bidbot --title "Bid accepted" \
+  --speak-text "Good news. The Acme bid was accepted." --voice af_bella --speed 1.1 --lang en-us
 ```
 
-`--speak` (alone), `--speak-text`, `--voice`, `--speed`, `--lang`, `--audio`, `--presentation banner|voice|both`.
+The same notification over HTTP:
 
-## MCP
-
-`herald-mcp` has a `speak` tool `{app, text, voice?, speed?, lang?, id?}` and `speak`, `audio`, `presentation`
-fields on `send_notification`. See [MCP.md](MCP.md).
-
-## Swift client
-
-```swift
-try await HeraldClient.shared.speak(HeraldSpeakRequest(app: "build", text: "Deploy finished"))
-var n = HeraldNotification(app: "build", title: "Build finished")
-n.speak = HeraldSpeak()            // title, then body
-n.presentation = .both
+```sh
+curl -s -X POST "$HERALD/v1/notify" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"app":"example.bidbot","title":"Bid accepted","speak":{"text":"Good news. The Acme bid was accepted."}}'
 ```
 
-## Privacy and security
+### Send a voice-only notification
 
-* Synthesis and playback are local. The worker is a child process of Herald talking over stdin/stdout.
-* The text reaches the worker as a JSON string on stdin: nothing is interpolated into a shell command.
-* Voice, language and speed are validated before they reach the worker.
-* Audio files are accepted only when their bytes are a known audio format, at most 20 MB.
-* Spoken text is stored in history like any other notification text.
+Use `herald speak`, or `presentation: "voice"`, when you want to be heard and not seen: no banner and no chime.
+The text still goes to History, marked read, so you can search it later.
 
-## Developing against a second instance
+```sh
+herald speak --app example.bidbot --text "Deploy finished."
+```
 
-`HERALD_PORT` and `HERALD_SUPPORT_DIR` start a build beside the installed Herald with its own port, token, history
-and (for voice) its own preferences suite. `HERALD_TTS_WORKER` points a bare executable at a `tts_worker.py`.
+Over HTTP this is [`POST /v1/speak`](reference/api/notifications.md#post-v1speak):
+
+```sh
+curl -s -X POST "$HERALD/v1/speak" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"app":"example.bidbot","text":"Deploy finished."}'
+```
+
+To play a recording instead of synthesised speech, send `audio` with a file path or `https` URL:
+
+```sh
+herald notify --app example.bidbot --title "Voice note" --audio ~/note.wav --presentation voice
+```
+
+> [!NOTE]
+> A voice-only notification is never lost. If Herald is muted, the app's **Speak** switch is off, or speech
+> cannot play, Herald shows it as a normal banner instead.
+
+### Give one app its own voice
+
+1. In **Settings > Voice**, scroll to **Speak per app**. Apps appear here after their first notification.
+2. Use the switch with the app's name to allow or forbid speech for that app. An app with the switch off is never
+   spoken, whatever it sends.
+3. Use the menu on the right of the row to pick a voice for that app. **Default voice** follows the voice from
+   the **Speech** section.
+
+A voice named in the notification itself wins over the app's voice. The per-app options can also be set by an
+agent; see the [apps API](reference/api/apps.md#put-v1appssettings).
+
+## Check that it works
+
+Press **Speak** in **Settings > Voice** and listen. Then run the `herald speak` command above. You hear the text
+and a new entry appears in **History**, already marked read, with a speaker control and the spoken text under it.
+
+## If it does not work
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Nothing is spoken and no error shows. | The engine is **Off**, or Herald is muted. | Choose an engine in **Settings > Voice**, and turn off **Mute Sounds** in the menu. |
+| A voice-only notification appeared as a banner. | It could not be heard: mute, the app's **Speak** switch, the engine or a read error. | Fix the cause. The banner is the safety net, not a fault. |
+| The **Speak** test shows "Kokoro is not installed". | The model files or the Python environment are missing. | Press **Download Kokoro** or **Use existing installation**. |
+| The Kokoro download stops with a red message. | No `uv` or `python3` was found, or the download failed. | Install `uv` (for example with Homebrew), then press **Download Kokoro** again. It resumes. |
+| The first spoken message after launch is slow. | Kokoro is loading its model. | Wait a few seconds. Later messages are fast. |
+| Speech is silent at night. | A [quiet hours](reference/quiet-hours.md) window is active. | Press **Resume Now** in the menu, or change the window. History shows `suppressed: "quiet-hours"`. |
+| `400 invalid voice`. | The voice name has a space or a character outside letters, digits, `_`, `-` and `.`. | Use the model id, for example `af_heart`. |
+| The speaker control replays nothing. | The engine is **Off** and the audio file was removed. | Choose an engine again. Herald re-synthesises the text. |
+
+## Related
+
+- [Voice reference](reference/voice.md): the `speak`, `audio` and `presentation` fields, engines and behaviour.
+- [Quiet hours](reference/quiet-hours.md): keep Herald quiet on a schedule.
+- [Notifications API](reference/api/notifications.md#post-v1speak) and
+  [`herald speak`](reference/cli.md#herald-speak): send speech from code.
+- [Setup API](reference/api/setup.md): check and install Kokoro from an agent.

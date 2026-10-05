@@ -177,7 +177,25 @@ function rehypeIdPrefix(prefix?: string) {
   };
 }
 
-export function renderTree(md: string, resolve?: LinkResolver, idPrefix?: string): Root {
+/** A page's own pictures (docs/<...>/screenshots/x.png, written relative to the Markdown file) are served from /docs-img. */
+function rehypeImages(fromFile?: string) {
+  return (tree: Root) => {
+    if (!fromFile) return;
+    visit(tree, "element", (el: Element) => {
+      if (el.tagName !== "img" || typeof el.properties?.src !== "string") return;
+      const src = el.properties.src;
+      if (/^(https?:|data:|\/)/.test(src) || /(^|\/)shots\/docs\//.test(src)) return;
+      const parts: string[] = [];
+      for (const seg of [...fromFile.split("/").slice(0, -1), ...src.split("/")]) {
+        if (seg === "..") parts.pop();
+        else if (seg && seg !== ".") parts.push(seg);
+      }
+      if (parts[0] === "docs") el.properties.src = `/docs-img/${parts.slice(1).join("/")}`;
+    });
+  };
+}
+
+export function renderTree(md: string, resolve?: LinkResolver, idPrefix?: string, fromFile?: string): Root {
   const proc = unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -191,7 +209,8 @@ export function renderTree(md: string, resolve?: LinkResolver, idPrefix?: string
     .use(rehypeIdPrefix, idPrefix)
     .use(rehypeCodeMeta)
     .use(rehypeHighlight, { detect: false, ignoreMissing: true })
-    .use(rehypeLinks, resolve);
+    .use(rehypeLinks, resolve)
+    .use(rehypeImages, fromFile);
   const tree = proc.parse(md);
   return proc.runSync(tree) as Root;
 }

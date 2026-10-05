@@ -451,7 +451,7 @@ await section("cloud", async () => {
 await section("agents", async () => {
   await scrollToSel("#agents ul.mono");
   const hrefs = await page.$$eval("#agents a", (as) => as.map((a) => a.getAttribute("href")));
-  ok(hrefs.filter((h) => h && h.startsWith("/docs/more/mcp-guide") && true).length === 3 && (await page.$$eval("#agents a", (as) => as.filter((a) => a.innerText.trim() === "How to install").length)) === 3, "agents: three 'How to install' links to /docs/more/mcp-guide", JSON.stringify(hrefs));
+  ok(hrefs.filter((h) => h && h.startsWith("/docs/guides/mcp") && true).length === 3 && (await page.$$eval("#agents a", (as) => as.filter((a) => a.innerText.trim() === "How to install").length)) === 3, "agents: three 'How to install' links to /docs/guides/mcp", JSON.stringify(hrefs));
   await clickBtn("#agents", "Copy config");
   await sleep(300);
   const clip = await page.evaluate(() => navigator.clipboard.readText()).catch((e) => "ERR " + e.message);
@@ -561,19 +561,19 @@ await section("round2", async () => {
     }
   }
   // docs: solo grid without a rail, tables fit the article (no horizontal scroll anywhere; see scripts/test-docs-hscroll.mjs)
-  await load("/docs/getting-started/install", 1440, 900);
+  await load("/docs/help/report-an-issue", 1440, 900);
   ok(await page.$eval(".docs-grid", (g) => g.classList.contains("docs-grid--solo") && !document.querySelector(".docs-rail")), "docs: a page without headings drops the empty rail column");
-  await load("/docs/reference/http-api", 1440, 900);
+  await load("/docs/api/notifications", 1440, 900);
   const tbl = await page.evaluate(() => { const a = document.querySelector("#docs-main article, #docs-main").getBoundingClientRect(); return [...document.querySelectorAll(".docs-table")].map((t) => Math.round(t.getBoundingClientRect().right - a.right)); });
   ok(tbl.length > 0 && tbl.every((d) => d <= 1), "docs: every table fits inside the article (no scroller, no overflow)", tbl.join("/"));
-  await load("/docs/reference/http-api", 390, 844);
+  await load("/docs/api/notifications", 390, 844);
   ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), "docs 390: the API reference has no horizontal page overflow");
   ok(await page.evaluate(() => !!document.querySelector("html") && getComputedStyle(document.documentElement).scrollbarGutter.includes("stable")), "layout: html has scrollbar-gutter: stable (no shift when a scrollbar appears)");
 });
 
 // ============ 12 docs ============
 await section("docs", async () => {
-  await load("/docs/more/mcp-guide", 1800, 900);
+  await load("/docs/guides/mcp", 1800, 900);
   const d = await page.evaluate(() => {
     const brand = document.querySelector(".docs-brand");
     const icon = document.querySelector(".docs-brand-icon").getBoundingClientRect();

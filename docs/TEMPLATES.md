@@ -1,297 +1,410 @@
-# Grid templates (layoutVersion 2)
+# Templates
 
-> **Changed in 1.4.** The `actions` component takes `include`, `align`, `wrap` and `spacing`, and an action is
-> drawn in one cell only (first cell in reading order wins). `button` accepts `actionId` as another spelling of
-> `actionRef` and a `style` of `normal`, `prominent`, `destructive` or `cancel`; a destructive button is red
-> and asks inline before it runs. A template can set `onClick: "openApp"` so a click on the banner brings the
-> issuing app to the front. The `image` component has a Source choice (issuer image, fixed image, another image
-> field), and the Designer files every token under where its value comes from. See "One action, one cell",
-> "Button style", "Image source" and "Where a token comes from" below.
+A template is a saved banner design for one app. It decides where the title, the picture, the count and the
+buttons go, and what happens when some of that data is missing. This guide explains what templates are for,
+how a notification picks one, and how to build one step by step, preview it and share it. It is for app
+developers and for agents that design banners. For every field of the JSON, see
+[Grid, cells and layout](reference/grid-and-layout.md).
 
-A v2 template lays a notification out on a grid of cells. Each cell holds one component. Issuer data
-reaches components through `{token}` bindings. The same `GridBannerView` draws live banners, the
-Designer canvas, history previews and `POST /v1/preview`, so a preview is what you get on screen.
+## What a template is and why you want one
 
-Templates live at `~/Library/Application Support/Herald/templates/<app>/<name>.json`. Create them with
-`PUT /v1/templates`, the Designer, or the MCP `put_template` tool. v1 templates (`layout` = `imageLeft`,
-`imageRight`, `hero`, `compact`) keep rendering: they are mapped onto four built-in grid templates.
+Without a template, Herald draws every notification with a built-in layout: an optional picture, a title, a
+subtitle, a body and the buttons. That is enough for plain messages. A template lets one app give each kind
+of event its own look, for example a bid that was won, a bid that was lost and a deadline that is close,
+without sending layout details in every notification.
 
-## Template shape
+A template has three parts:
+
+- **A layout.** A grid of rows and columns, with components such as text, images, badges and buttons placed
+  in its cells. See [Grid, cells and layout](reference/grid-and-layout.md).
+- **Bindings.** Each component reads data through `{token}` placeholders, so the same template shows the
+  right values for every notification. See [Bindings and tokens](reference/bindings.md).
+- **Defaults and rules.** Default sound and behaviour, `extra` values, and rules that hide, relabel or add
+  buttons. See [Action rules](reference/actions.md).
+
+A template is stored on the Mac, one file per template, and a notification asks for it by name:
+
+```json
+{"app": "example.bidbot", "title": "Bid accepted", "template": "bid-won", "client": "Acme Corp"}
+```
+
+You can write templates three ways: in the [Designer](AUTHORING.md), with
+[`PUT /v1/templates`](reference/api/templates.md#put-v1templates), or with the MCP tool `put_template`. All
+three store the same JSON and run the same validation.
+
+## The built-in layouts
+
+Four layouts exist without being saved. Each is a grid template, 380 points wide. A notification that names
+no template is drawn with one of them. Pick one with the notification's `layout` field, or name one
+directly, for example `"template": "builtin.hero"`.
+
+| Name | Looks like | Notes |
+|---|---|---|
+| `builtin.imageLeft` | A square picture on the left, text on the right. | The default. |
+| `builtin.imageRight` | The same, mirrored. | |
+| `builtin.hero` | The picture across the top at 16:9, then the text. | |
+| `builtin.compact` | One line: app icon, title, time and a close button. | No picture, subtitle or body. |
+
+All four draw the title, the subtitle, the body, the time, the app icon, a close button and the action row.
+They collapse what is missing: without a picture there is no picture column, without a subtitle no subtitle
+row, without buttons no button row. A notification can tune them with fields that show or hide parts, limit the
+body lines and set the accent colour. Those fields are in the
+[Notifications API](reference/api/notifications.md#post-v1notify).
+
+The built-ins are also starting points. The MCP tool `get_template` returns any of them as editable JSON,
+and in the Designer **New** offers a blank 3 by 4 grid or a copy of each layout. Names that start with
+`builtin.` are reserved, so save your copy under your own name.
+
+## How a notification picks its template
+
+Herald chooses the template when the notification arrives:
+
+1. If the notification has a `template`, Herald looks for a saved template of that name for the same app.
+   A `builtin.` name selects the built-in template.
+2. If the notification names none, and the app's manifest has a `defaultTemplate` that exists as a saved
+   template, Herald uses that. The Designer's **Set as issuer default** button sets it.
+3. Otherwise Herald uses a built-in layout, chosen by the notification's `layout` field, or `imageLeft`.
+
+| Situation | Result |
+|---|---|
+| The named template does not exist, and the notification has a `title`. | The banner is drawn as sent, without the template. Herald logs the missing name. |
+| The named template does not exist, and the notification has no `title`. | The request fails with status `400`: the title is required. |
+| The notification sets a field the template also sets, such as `sound` or `buttons`. | The notification wins. The template only fills what the notification leaves out. |
+| The notification sends `"buttons": []`. | No buttons, even if the template defines some. |
+
+Names are matched per app. A template saved for `example.bidbot` is never used for another app.
+
+## Build a template step by step
+
+This walk-through builds a banner for BidBot's "Bid accepted" event. BidBot sends these fields: `title`,
+`bid`, `amount`, `client` and `image`. The steps show the cells you add. The complete template is at the end
+of the section.
+
+### Step 1: a grid and a title
+
+Start with a grid: 3 rows and 3 columns. The first column is a fixed 72 points for a picture, the middle
+column takes the leftover width, and the last column fits its content. Add one cell that shows the title.
 
 ```json
 {
-  "name": "email-accumulated", "app": "webwatcher.email", "layoutVersion": 2,
-  "collapseEmpty": true,
-  "grid": {"rows": 3, "cols": 4, "rowSizes": ["auto","auto","auto"],
-           "colSizes": ["72","fill","fill","56"], "gap": 8, "padding": 14, "width": 400},
-  "cells": [ ... ],
-  "actionRules": [ ... ],
-  "extra": {"source": "herald"},
-  "accentColor": "#2E7D32", "sound": "default", "persistent": true, "timeout": 0, "snooze": true
+  "name": "bid-won",
+  "app": "example.bidbot",
+  "grid": {
+    "rows": 3, "cols": 3,
+    "rowSizes": ["auto", "auto", "auto"],
+    "colSizes": [72, "fill", "auto"],
+    "gap": 8, "padding": 14, "width": 400
+  },
+  "cells": [
+    {"id": "title", "row": 0, "col": 1,
+     "component": {"type": "text", "binding": "{title}", "style": "title", "maxLines": 2}}
+  ]
 }
 ```
 
-| Field | Meaning |
-|---|---|
-| `layoutVersion` | `2` for grid templates. Absent or `1` means a legacy `layout`. |
-| `grid` | `rows`, `cols`, `rowSizes`, `colSizes`, `gap`, `padding`, `width` (banner width in points). |
-| `cells` | The cells, see below. |
-| `collapseEmpty` | Template default for empty components, rows and columns. Default `true`. |
-| `actionRules` | Rules over the issuer's actions, see [ACTIONS.md](ACTIONS.md). |
-| `extra` | Key/values you author. They are merged into the payload every action receives. |
-| `onClick` | What a click on the banner body does: `url` (default) opens the notification's link, `openApp` brings the issuing app to the front (see [ACTIONS.md](ACTIONS.md#open-app)). Since 1.8 a click opens only a banner that carries a link or whose template sets `openApp`; otherwise it expands cut-short text, and the close button dismisses. |
-| `title`, `body`, `url`, ... | v1 defaults still apply: the payload overrides them. |
+Rows and columns are counted from 0, so `"row": 0, "col": 1` is the top row, middle column. The template is
+valid at this point and shows only the title.
 
-## Grid
+### Step 2: a picture and a second line
 
-`rowSizes` and `colSizes` have one entry per row and column. An entry is `"auto"` (as large as its
-content), `"fill"` (shares the remaining space) or a number of points (`"72"` or `72`). `gap` is the space
-between tracks, `padding` the inset of the whole grid, `width` the banner width.
-
-## Cells
+Add the picture in the first column. It spans two rows, so it stands beside both text lines. Add the bid
+reference under the title. It spans the middle and last columns.
 
 ```json
-{"id":"title","row":0,"col":1,"rowSpan":1,"colSpan":2,"align":"topLeading","padding":0,
- "component":{"type":"text","binding":"{title}","style":"title","maxLines":2}}
+{"id": "img", "row": 0, "col": 0, "rowSpan": 2,
+ "component": {"type": "image", "binding": "{image}", "fit": "cover", "cornerRadius": 10}}
 ```
 
-`row` and `col` are 0-based; `rowSpan` and `colSpan` merge cells (default 1). `align` is one of
-`topLeading`, `top`, `topTrailing`, `leading`, `center`, `trailing`, `bottomLeading`, `bottom`,
-`bottomTrailing` and places the component inside its cell area. Cells may not overlap and must stay inside
-the grid; `validate_template` reports violations by cell id.
+```json
+{"id": "bid", "row": 1, "col": 1, "colSpan": 2,
+ "component": {"type": "text", "binding": "{bid}", "style": "subtitle", "maxLines": 1}}
+```
 
-## Bindings
+### Step 3: an amount badge
 
-A binding is a string with `{token}` placeholders: `"{title} - {count}"`, `"{image}"`. A token is read
-from the notification's top-level keys first, then from `metadata`; manifest `sample` values fill it in
-the Designer. Unknown tokens render as nothing. A component whose every bound token is absent is
-**empty**.
+Put the amount in the last column of the top row, aligned to the top right corner of its cell.
 
-### Where a token comes from
+```json
+{"id": "amount", "row": 0, "col": 2, "align": "topTrailing",
+ "component": {"type": "badge", "binding": "{amount}", "color": "#2E7D32"}}
+```
 
-The Designer's pickers file every token under one of three provenances, and the sample beside it is what a
-preview fills it with:
+### Step 4: the buttons
 
-| Group in the picker | Provenance | Meaning |
-|---|---|---|
-| From the issuer app (manifest field) | the issuer | A field the issuer's manifest declares (`sender`, `thumbnail`). The issuer promises to send it, with a type and a sample. |
-| From the notification (payload field) | the notification | A standard key (`title`, `body`, `image`, `deliveredAt`, `stack.count`...) or any other key a real notification carried or you typed as a custom token. Nobody promises it: it is absent when the notification does not send it. |
-| Set here (fixed value) | the template | An `extra.<key>` value you wrote in the template. The same for every notification. |
+Add the action row at the bottom, under the text columns. `merged` shows the app's own buttons and the ones
+you add with rules. `maxVisible` puts any more behind a `+N` menu.
 
-See [reference/bindings.md](reference/bindings.md#three-provenances).
+```json
+{"id": "buttons", "row": 2, "col": 1, "colSpan": 2,
+ "component": {"type": "actions", "source": "merged", "layout": "row", "maxVisible": 3}}
+```
+
+The button row does not span column 0. That matters in the next step.
+
+### Step 5: decide what happens when data is missing
+
+BidBot does not always send an image or an amount. By default (`collapseEmpty` is `true`) an empty component
+disappears and a row or column with nothing left closes up. Without an image, the 72 point column and its gap
+vanish and the text starts at the left edge. This is what you want for the picture. For the amount badge you
+might prefer a stable layout, so you set `emptyBehavior` on that one cell to `keep`:
+
+```json
+{"id": "amount", "row": 0, "col": 2, "align": "topTrailing",
+ "component": {"type": "badge", "binding": "{amount}", "color": "#2E7D32", "emptyBehavior": "keep"}}
+```
+
+The next section describes the rules in full.
+
+### The finished template
+
+Add a default sound and an `accentColor`, and the template is complete:
+
+```json
+{
+  "name": "bid-won",
+  "app": "example.bidbot",
+  "collapseEmpty": true,
+  "accentColor": "#2E7D32",
+  "sound": "Glass",
+  "grid": {
+    "rows": 3, "cols": 3,
+    "rowSizes": ["auto", "auto", "auto"],
+    "colSizes": [72, "fill", "auto"],
+    "gap": 8, "padding": 14, "width": 400
+  },
+  "cells": [
+    {"id": "img", "row": 0, "col": 0, "rowSpan": 2,
+     "component": {"type": "image", "binding": "{image}", "fit": "cover", "cornerRadius": 10}},
+    {"id": "title", "row": 0, "col": 1,
+     "component": {"type": "text", "binding": "{title}", "style": "title", "maxLines": 2}},
+    {"id": "amount", "row": 0, "col": 2, "align": "topTrailing",
+     "component": {"type": "badge", "binding": "{amount}", "color": "#2E7D32", "emptyBehavior": "keep"}},
+    {"id": "bid", "row": 1, "col": 1, "colSpan": 2,
+     "component": {"type": "text", "binding": "{bid}", "style": "subtitle", "maxLines": 1}},
+    {"id": "buttons", "row": 2, "col": 1, "colSpan": 2,
+     "component": {"type": "actions", "source": "merged", "layout": "row", "maxVisible": 3}}
+  ]
+}
+```
+
+### Save, preview and use it
+
+Save the JSON as `bid-won.json`. The shell examples use `$HERALD` and `$TOKEN`, defined in
+[Connect](reference/api/README.md#connect). Storing a template validates it first. An error is reported with
+the cell id and the property path.
+
+```sh
+curl -s -X PUT "$HERALD/v1/templates" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @bid-won.json
+```
+
+```json
+{"ok": true}
+```
+
+Render it before you send anything. The reply is a PNG. Fields you leave out of `data` show how the banner
+collapses:
+
+```sh
+curl -s -X POST "$HERALD/v1/preview" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"template":"bid-won","app":"example.bidbot","appearance":"dark",
+       "data":{"title":"Bid accepted","bid":"BID-4021 Brand refresh"}}' -o preview.png
+```
+
+Then use it from a notification:
+
+```sh
+curl -s -X POST "$HERALD/v1/notify" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"app":"example.bidbot","title":"Bid accepted","bid":"BID-4021 Brand refresh",
+       "amount":"$4,200","template":"bid-won"}'
+```
 
 ## Collapse semantics
 
-Empty fields can either collapse or keep their place. It is your choice, at two levels:
+Notifications do not always carry every field. A template decides what a missing field does to the layout:
+the space it would have used can close up, or it can stay as a blank. This section explains the rules
+completely.
 
-1. **Template default**: `"collapseEmpty": true | false`.
-2. **Per component**: `"emptyBehavior": "collapse" | "keep"` overrides the default for that component.
+![The Designer preview with two fields marked absent and their rows closed up, beside the Template tab](../web/public/shots/docs/designer-empty-field-collapse.png "The Fields button marks the subtitle and body absent, so their rows collapse in the preview. The Template tab on the right holds the setting.")
 
-An empty component that collapses is removed. A row or column whose cells are all collapsed (or have no
-cell) shrinks to zero, together with its gap, when `collapseEmpty` is on; with `collapseEmpty: false` it
-keeps its size, so the banner keeps a stable shape. `keep` on one component keeps its cell's track alive
-even when the template collapses. Components that never read data (`spacer`, `issuerIcon`, `actions`
-with at least one action) are never empty.
+### Empty components
 
-```json
-{"id":"subtitle","row":1,"col":1,"colSpan":2,
- "component":{"type":"text","binding":"{subject}","style":"subtitle","emptyBehavior":"collapse"}}
-```
+A component is **empty** when it has nothing to show for this notification. For a bound component that means
+every token in its binding is absent. A binding with no token is plain text and is empty only when it is
+blank. The details of tokens are in [Bindings and tokens](reference/bindings.md#empty-values).
 
-## Components
-
-Every component accepts `emptyBehavior`. All other properties are optional unless marked.
-
-| `type` | Properties |
+| Component | Empty when |
 |---|---|
-| `text` | `binding` (required), `style` (`title`, `subtitle`, `body`, `caption`, `mono`), `maxLines`, `color` (hex), `fontSize`, `weight` (`regular`, `medium`, `semibold`, `bold`), `alignment` (`leading`, `center`, `trailing`), `markdown` (default true for `body`) |
-| `image` | `binding` (an issuer `{image}`, a fixed file path or another image field, see "Image source"), `fit` (`fit`, `fill`, `cover`), `cornerRadius`, `aspectRatio`, `height` |
-| `issuerIcon` | `size` (default 22), `shape` (`circle`, `rounded`), `cornerRadius` |
-| `timestamp` | `binding` (default: delivery time), `relative` (true: "2 min ago"), `style`, `color`, `fontSize` |
-| `button` | `action` (inline action) or `actionRef` / `actionId` (id of an issuer or rule action; the two names are the same), `style` (`normal`, `prominent`, `destructive`, `cancel`) |
-| `actions` | `source` (`issuer`, `template`, `merged`), `layout` (`row`, `wrap`, `stack`), `maxVisible`, `include` (ordered action ids), `align` (`leading`, `center`, `trailing`, `spaceBetween`), `wrap` (true/false), `spacing` (0-64, default 6) |
-| `iconButton` | `symbol` (SF Symbol name), `action` or `actionRef`, `size`, `color`, `tooltip` |
-| `badge` | `binding`, `color`, `textColor` |
-| `progress` | `binding` (0 to 1 or 0 to 100), `color`, `height` |
-| `rive` | `asset` (manifest asset id) or `path`, `stateMachine`, `artboard`, `inputBindings`, `action`/`actionRef` (on click), `loop`, `aspectRatio`, `height` |
-| `spacer` | none |
+| `text` | Every line is blank or has only absent tokens. A line of plain text always counts as content. |
+| `image` | The binding has no value, or the file cannot be read, or the download fails. |
+| `badge`, `progress` | Every token in the binding is absent. |
+| `timestamp` | It has a binding and every token in it is absent. With no binding it shows the delivery time and is never empty. |
+| `stackBadge` | The banner is not part of a stack of two or more. |
+| `button`, `iconButton` | The action it points to is not in the list: hidden by a rule, not sent by the app, or drawn in another cell. A button with its own inline action is never empty. |
+| `actions` | None of the actions assigned to it exist. A notification with an **Add to Reminders** button keeps it alive. |
+| `rive` | It names no animation. |
+| `issuerIcon`, `spacer` | Never. They read no data. |
 
-`GET /v1/components` returns the same list as a machine-readable schema, with defaults.
+### Collapse or keep
 
-### One action, one cell
+When a component is empty, one of two things happens. The choice is made at two levels:
 
-An action is drawn in at most one cell, so a single list can be split across the banner. Cells are visited top
-to bottom, left to right:
+1. **The template default**, `collapseEmpty`. `true` means collapse, `false` means keep. The default is `true`.
+2. **The component**, `emptyBehavior`: `collapse` or `keep`. When set, it overrides the template default for
+   that component only.
 
-1. A `button` bound to an action id (`actionRef` or `actionId`) claims that action.
-2. An `actions` cell with `include` claims those ids, in that order.
-3. An `actions` cell without `include` shows every action of its `source` that nobody claimed.
-
-When two cells ask for the same action, the first in reading order draws it and the other shows nothing for it
-(a `button` collapses like an absent action). `validate_template` warns and names both cells. `include` ids that
-no action has show nothing (a warning when a manifest is given). `align` places the buttons across the cell
-(`spaceBetween`: first at the leading edge, last at the trailing edge, the rest spread evenly); the snooze clock
-stays on the trailing edge. `wrap: true` flows onto more lines, `wrap: false` keeps one line with "+N" for the
-rest; absent, `layout: wrap` flows and `row` does not (`stack` is always one per line).
+An empty component that **collapses** is not drawn. An empty component that **keeps** is drawn as blank, and
+its cell holds its space so the layout does not move.
 
 ```json
-{"name":"email-split","app":"webwatcher.email","layoutVersion":2,"collapseEmpty":true,
- "grid":{"rows":4,"cols":4,"rowSizes":["auto","auto","auto","auto"],"colSizes":["104","fill","fill","fill"],"gap":8,"padding":14,"width":400},
- "cells":[
-  {"id":"icon","row":0,"col":0,"rowSpan":3,"component":{"type":"issuerIcon","size":56,"shape":"rounded"}},
-  {"id":"title","row":0,"col":1,"colSpan":3,"component":{"type":"text","binding":"{title}","style":"title","maxLines":1}},
-  {"id":"sender","row":1,"col":1,"colSpan":3,"component":{"type":"text","binding":"{sender}","style":"subtitle","maxLines":1}},
-  {"id":"subject","row":2,"col":1,"colSpan":3,"component":{"type":"text","binding":"{subject}","style":"caption","maxLines":1}},
-  {"id":"read","row":3,"col":0,"component":{"type":"button","actionId":"markRead"}},
-  {"id":"more","row":3,"col":1,"colSpan":3,"component":{"type":"actions","include":["archive","delete","spam"],"align":"trailing","wrap":false}}]}
+{"id": "subject", "row": 1, "col": 1, "colSpan": 2,
+ "component": {"type": "text", "binding": "{subject}", "style": "subtitle", "emptyBehavior": "collapse"}}
 ```
 
-### Button style
+In the Designer, the **Template** tab has **Empty fields** with **Collapse** and **Leave in place**. Each
+component's **Cell** tab has **When empty** with **Template**, **Collapse** and **Keep space**.
 
-| `style` | Look | Behaviour |
-|---|---|---|
-| `normal` (also `default`) | accent-tinted capsule | runs when pressed |
-| `prominent` | solid accent capsule, white label | runs when pressed |
-| `destructive` | red label on a red-tinted, outlined capsule | asks first: an inline row "Run "Delete"?" with Cancel replaces the buttons, nothing runs until you answer |
-| `cancel` | quiet grey capsule | runs when pressed |
+### Rows and columns
 
-The old `"destructive": true` on a button still decodes (as `"style": "destructive"`). The confirmation applies
-to any action whose effective style is `destructive`, wherever it was set (the button, an issuer's manifest, an
-`actionRules` entry), and it comes before any approval the action's kind needs. It is drawn inside the banner
-and never takes focus. `style` on a button overrides the action's own.
+Collapsing a cell can empty a whole row or column. Herald decides this for each row and column:
 
-### Image source
+1. A cell is **live** when it is not collapsed. A cell that spans several tracks counts for every track it
+   covers.
+2. A row or column that has at least one live cell stays at its normal size.
+3. A row or column that cells cover, but none of them live, collapses to zero size, and its gap disappears.
+4. A row or column that no cell covers at all collapses only when `collapseEmpty` is `true`. With `false`
+   it keeps its size.
 
-In the Designer the image component's Source control writes the `binding`:
+So `emptyBehavior: "keep"` on one component keeps the tracks that component covers alive for every
+notification, even when the template collapses. And `collapseEmpty: false` keeps every track, including
+tracks no cell uses, so every banner has the same shape.
 
-| Choice | Binding | Meaning |
-|---|---|---|
-| From issuer `{image}` | `"{image}"` | The picture the sending app attached. |
-| Fixed image | a file path | A picture you pick, the same for every notification. Herald copies it to `~/Library/Application Support/Herald/template-images/<app>/` (named by a short content hash, so the same file twice is one copy). |
-| Field | `"{key}"` | Another `image` field the manifest declares (`{thumbnail}`). |
+### Worked example
 
-A fixed path is never empty while the file exists. **Bundles do not yet carry fixed images**: exporting a
-template to a bundle leaves the path pointing at this Mac, so re-pick the image after importing elsewhere.
-
-### Rive
-
-`inputBindings` maps a state-machine input name to a token or a pointer state:
-`{"count":"{count}","hover":"hover","pressed":"pressed"}`. Numeric, boolean and trigger inputs are driven
-from tokens; `hover` and `pressed` follow the mouse over the banner. A failed load renders a placeholder
-with the error and never crashes the banner.
-
-## Rich text
-
-A `text` binding may hold several lines and light markup: `**bold**`, `*italic*`, `` `mono` ``, `__underline__`,
-`~~strike~~`, spans `{{size=14 color=#FF3B30}}...{{/}}` and `{{align=center}}` at the start of a line. For full
-control use `lines` (lines of styled runs); it takes precedence over `binding`. A line whose tokens are all absent
-collapses. Everything is in [reference/components/text.md](reference/components/text.md).
+This template has 3 rows and 3 columns, and `collapseEmpty` is `true`. The picture covers rows 0 and 1 of
+column 0. The title is at row 0, column 1. The amount badge is at row 0, column 2 and is set to `keep`. The
+bid text covers row 1, columns 1 and 2. The buttons cover row 2, columns 1 and 2.
 
 ```json
-{"id":"project","row":0,"col":0,"component":{"type":"text","style":"body","lineSpacing":2,
-  "binding":"**Project:**\n{{align=trailing}}*`{project}`*"}}
+{
+  "name": "bid-won",
+  "app": "example.bidbot",
+  "collapseEmpty": true,
+  "grid": {
+    "rows": 3, "cols": 3,
+    "rowSizes": ["auto", "auto", "auto"],
+    "colSizes": [72, "fill", "auto"],
+    "gap": 8, "padding": 14, "width": 400
+  },
+  "cells": [
+    {"id": "img", "row": 0, "col": 0, "rowSpan": 2,
+     "component": {"type": "image", "binding": "{image}", "fit": "cover"}},
+    {"id": "title", "row": 0, "col": 1,
+     "component": {"type": "text", "binding": "{title}", "style": "title"}},
+    {"id": "amount", "row": 0, "col": 2,
+     "component": {"type": "badge", "binding": "{amount}", "emptyBehavior": "keep"}},
+    {"id": "bid", "row": 1, "col": 1, "colSpan": 2,
+     "component": {"type": "text", "binding": "{bid}", "style": "subtitle"}},
+    {"id": "buttons", "row": 2, "col": 1, "colSpan": 2,
+     "component": {"type": "actions", "source": "merged"}}
+  ]
+}
 ```
 
-## Symbols
+| Notification | Empty cells | What closes up |
+|---|---|---|
+| Everything present. | None. | Nothing. |
+| No `image`. | `img` | Column 0 is covered only by `img`, so it collapses with its gap. The text moves to the left edge. |
+| No `bid`, image present. | `bid` | Nothing. The image still covers row 1, so row 1 keeps the height the image needs. |
+| No `bid` and no `image`. | `bid`, `img` | Row 1 and column 0. The buttons sit directly under the title. |
+| No `amount`. | `amount` | Nothing. The badge cell is drawn blank and keeps its space, because it is set to `keep`. |
+| The app sent no buttons. | `buttons` | Row 2 collapses. The banner is shorter. |
+| Only a title. | `img`, `bid`, `buttons` | Rows 1 and 2, and column 0. Column 2 stays because `amount` keeps it alive. The banner is the title plus its padding. |
 
-`button`, `iconButton`, `actions`, `issuerIcon` and `badge` (and every action, see ACTIONS.md) can carry an SF Symbol. `symbol` is a plain name, or an object with the full styling. An unknown name is a validation warning, never an error: the component keeps its current look (an `iconButton` draws a question mark so the typo is visible).
+Without `"emptyBehavior": "keep"` on the badge, a missing `amount` would also collapse the badge cell. Column 2
+would still stay whenever the bid text or the buttons are present, because they span it.
 
-| key | values |
+With `collapseEmpty` set to `false` and no `emptyBehavior` anywhere, every banner has the shape of the first
+row of the table: nothing moves, and missing fields leave blanks. A grid with a fourth row that no cell
+covers behaves like this: with `collapseEmpty: true` the row collapses and leaves no stray gap. With `false`
+it stays at its size.
+
+### Buttons and the confirmation question
+
+While a banner asks an inline confirmation, such as "Run Delete?", every `actions` and `button` cell is
+treated as empty and collapsed, whatever its `emptyBehavior`. The question takes the place of the row. Icon
+buttons stay, because the user can always close the banner.
+
+### Testing it
+
+In the Designer, the preview bar's **Fields** button and each cell's **Preview without** checkbox mark fields
+as absent so you can watch what collapses. Over HTTP, leave keys out of `data` in
+[`POST /v1/preview`](reference/api/templates.md#post-v1preview).
+
+## Preview a template
+
+Three tools render the real banner, with the same collapsing and layout a delivery uses:
+
+| Tool | Use it to |
 |---|---|
-| `name` | an SF Symbol name; may contain a `{token}` (that is how `replace` has something to swap) |
-| `weight` | `ultraLight` `thin` `light` `regular` `medium` `semibold` `bold` `heavy` `black` |
-| `scale` | `small` `medium` `large` |
-| `placement` | `leading` (default) `trailing` `only` (drops the label); buttons only |
-| `renderingMode` | `monochrome` `hierarchical` `palette` `multicolor` |
-| `colors` | 1-3 of `#RGB`, `#RRGGBB`, `#RRGGBBAA`, `accent`, `primary`, `secondary` or a `{token}` whose value is one of those |
-| `variableValue` | 0-1, or a `{token}` bound to a numeric field (for symbols such as `wifi` or `speaker.wave.3`) |
-| `effect` | `{kind, trigger?, speed?, cumulative?, reversing?}` (macOS 14+) |
+| The Designer's live preview | See every edit at once, in light or dark, with sample data or your last real notification. See [Design a banner in the Designer](AUTHORING.md). |
+| [`POST /v1/preview`](reference/api/templates.md#post-v1preview) | Get a PNG for a saved template or a template object you send inline, at a scale from 1 to 3. |
+| The MCP tool `render_preview` | Let an agent look at the picture and fix what it sees. |
 
-Effects (the `effect` key): `kind` is `bounce`, `pulse`, `variableColor` (with `cumulative` / `reversing`), `scale`, `appear`, `disappear` or `replace`; `trigger` is `onAppear` (default), `onChange` (when a bound token changes), `onHover` or `repeating`; `speed` is 0.25-4. Effects run only in live banners and the Designer's live preview, never in `render_preview` / `/v1/preview` (those show weight, scale, mode, colours and the variable value), never on macOS 13, and never when Reduce Motion is on. Validation warns, without failing, on out-of-range `variableValue` or `speed` (both are clamped), more than 3 `colors`, `palette` without colours, `cumulative` / `reversing` on anything but `variableColor`, `appear` / `disappear` with `repeating`, and `replace` with a trigger other than `onChange`.
+The `data` argument takes one of three things:
 
-Plain name:
+- A notification-shaped object.
+- `"sample"`, to use the manifest's sample values.
+- `"last"`, for the newest real notification.
 
-```json
-{"type":"iconButton","symbol":"xmark","action":{"id":"dismiss","label":"Dismiss","kind":"dismiss"}}
-```
+Add `stackCount` to see the banner as the top of a stack. Layout is the same in light and dark, so check both mainly
+for colours.
 
-Monochrome (one colour, here a token):
+## Share a template as a bundle
 
-```json
-{"type":"button","actionRef":"markRead","symbol":{"name":"checkmark.circle","weight":"semibold","colors":["{tint}"]}}
-```
+A **bundle** is one file with the extension `.heraldtemplate`. It is a zip archive that holds the template
+and the Rive animations it plays, so a template with animations moves between Macs in one piece.
 
-Hierarchical (shades of one colour):
+| File in the archive | Holds |
+|---|---|
+| `bundle.json` | The format name and version, the template name and app, and the animation file names. |
+| `template.json` | The template, exactly as Herald stores it. |
+| `assets/<file>.riv` | Each Rive file the template plays. |
 
-```json
-{"type":"badge","binding":"{count}","symbol":{"name":"envelope.fill","renderingMode":"hierarchical","colors":["#FF3B30"]}}
-```
+To export in the Designer, press **Export…** in the bar at the top, choose where to save, and the file is
+written. To import, press **Import…**, or drop a `.heraldtemplate` file on the Designer window. Herald tells
+you which app the template is for and which animations it carries. If the bundle is for another app, a
+checkbox imports it for the app you are designing instead. If a template with that name exists you choose
+**Keep Both**, which saves the import as `name 2`, or **Replace**.
 
-Palette (2-3 colours) with a bound variable value:
+Over HTTP and MCP:
 
-```json
-{"type":"iconButton","size":30,"symbol":{"name":"wifi","renderingMode":"palette","colors":["#34C759","secondary"],"variableValue":"{signal}"},"action":{"id":"d","label":"Dismiss","kind":"dismiss"}}
-```
+- Export: [`GET /v1/templates/export`](reference/api/templates.md#get-v1templatesexport), or the MCP tool
+  `export_template_bundle`.
+- Import: [`POST /v1/templates/import`](reference/api/templates.md#post-v1templatesimport), or the MCP tool
+  `import_template_bundle`.
 
-Multicolor (the symbol's own colours; `colors` is ignored):
+What a bundle does and does not carry:
 
-```json
-{"type":"issuerIcon","size":28,"symbol":{"name":"cloud.sun.rain.fill","renderingMode":"multicolor","scale":"large"}}
-```
+- Rive files go in the bundle. On import Herald copies them into the app's assets folder. A file that is
+  already there with the same content is reused. A different file with the same name is saved under another
+  name, and the template is updated to match.
+- A fixed picture chosen in an `image` component stays on the original Mac. The bundle keeps the path, so
+  choose the picture again after importing elsewhere.
+- Script files and Apple Shortcuts are not in the bundle. Herald warns about each one on export. The
+  Shortcut must exist on the other Mac, and a script must be in its scripts folder.
+- A bundle is untrusted input. Herald validates the template, caps the number and size of entries before
+  unpacking, and ignores anything that is not the fixed layout above. A bundle may hold at most 32
+  animation files of 10 MB each and 64 MB in total, and `template.json` may be at most 2 MB.
 
-With an effect:
+## Related
 
-```json
-{"type":"iconButton","symbol":{"name":"bell.badge","effect":{"kind":"bounce","trigger":"onChange","speed":1.5}},"action":{"id":"d","label":"Dismiss","kind":"dismiss"}}
-```
-
-In the Designer, select the component and use the Symbol panel: a searchable picker over the symbols on this Mac (right-click a symbol to favourite it), weight, scale, placement, mode with colour wells, variable value and effect. `component_schema` documents the keys (`definitions.symbol`).
-
-## Examples
-
-### Email, accumulated
-
-```json
-{"name":"email-accumulated","app":"webwatcher.email","layoutVersion":2,"collapseEmpty":true,
- "grid":{"rows":3,"cols":4,"rowSizes":["auto","auto","auto"],"colSizes":["72","fill","fill","56"],
-         "gap":8,"padding":14,"width":400},
- "cells":[
-  {"id":"img","row":0,"col":0,"rowSpan":2,"component":{"type":"image","binding":"{image}","fit":"cover","cornerRadius":10}},
-  {"id":"title","row":0,"col":1,"colSpan":2,"align":"topLeading","component":{"type":"text","binding":"{title}","style":"title","maxLines":2}},
-  {"id":"badge","row":0,"col":3,"align":"topTrailing","component":{"type":"badge","binding":"{count}","color":"#E53935"}},
-  {"id":"subject","row":1,"col":1,"colSpan":2,"component":{"type":"text","binding":"{subject}","style":"subtitle","maxLines":1}},
-  {"id":"when","row":1,"col":3,"align":"trailing","component":{"type":"timestamp","binding":"{receivedAt}","relative":true,"style":"caption"}},
-  {"id":"acts","row":2,"col":0,"colSpan":4,"component":{"type":"actions","source":"merged","layout":"row","maxVisible":4}}],
- "actionRules":[{"match":"archive","relabel":"Archive it","position":0}]}
-```
-
-### Compact one-liner that keeps its shape
-
-```json
-{"name":"line","app":"example.bidbot","layoutVersion":2,"collapseEmpty":false,
- "grid":{"rows":1,"cols":3,"rowSizes":["auto"],"colSizes":["22","fill","auto"],"gap":8,"padding":10,"width":360},
- "cells":[
-  {"id":"i","row":0,"col":0,"component":{"type":"issuerIcon","size":22,"shape":"rounded"}},
-  {"id":"t","row":0,"col":1,"component":{"type":"text","binding":"{title}","style":"body","maxLines":1}},
-  {"id":"p","row":0,"col":2,"component":{"type":"progress","binding":"{progress}","height":4,"emptyBehavior":"collapse"}}]}
-```
-
-### Animated bell (Rive)
-
-```json
-{"id":"bell","row":0,"col":0,"component":{"type":"rive","asset":"bell","stateMachine":"Main",
- "inputBindings":{"count":"{count}","hover":"hover"},"height":40,
- "action":{"id":"open","label":"Open","kind":"url","url":"{url}"}}}
-```
-
-## Previewing
-
-`POST /v1/preview` renders a template offscreen and returns PNG bytes:
-
-```sh
-curl -s -H "$AUTH" -d '{"template":"email-accumulated","app":"webwatcher.email","data":"sample",
-  "appearance":"dark","scale":2}' $BASE/v1/preview -o preview.png
-```
-
-`template` is a template name or a full v2 template object; `data` is a JSON object or `"sample"` (uses the
-manifest samples). See [API.md](API.md).
+- [Design a banner in the Designer](AUTHORING.md): build the same template with the mouse.
+- [Grid, cells and layout](reference/grid-and-layout.md): every field of the template, the grid and the cell.
+- [Bindings and tokens](reference/bindings.md): how `{token}` placeholders get their values.
+- [Components](reference/components/README.md): the properties of each component.
+- [Actions](ACTIONS.md): the buttons a banner shows and the rules that change them.
+- [Templates API](reference/api/templates.md): store, preview, export and import over HTTP.

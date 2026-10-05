@@ -1,125 +1,142 @@
-# Components: what every component shares
+# Components
 
-A template cell holds exactly one component. On the wire a component is one flat JSON object whose
-`type` picks the kind. There are twelve kinds:
+A component is one piece of a banner: a line of text, a picture, a button, a progress bar. A template builds a banner by
+placing components in the cells of a grid, and each cell holds exactly one. This page explains what every component has
+in common. The twelve component pages that follow it list the properties each one accepts. It is for anyone who writes a
+template by hand, through the API or through an agent. The [Designer](../../AUTHORING.md) writes the same JSON for you.
 
-| `type` | Page | One line |
-|---|---|---|
-| `text` | [text.md](text.md) | Bound text in one of five styles, optional inline Markdown. |
-| `image` | [image.md](image.md) | A picture from a field (path, `data:` URI, https URL). |
-| `issuerIcon` | [issuerIcon.md](issuerIcon.md) | The sending app's icon, round or rounded. |
-| `timestamp` | [timestamp.md](timestamp.md) | A date field, or the delivery time; absolute or relative. |
-| `button` | [button.md](button.md) | One action as a capsule button. |
-| `actions` | [actions.md](actions.md) | The whole action row, with overflow. |
-| `iconButton` | [iconButton.md](iconButton.md) | A round icon-only button (close, snooze). |
-| `badge` | [badge.md](badge.md) | A small pill with a value (a count). |
-| `stackBadge` | [stackBadge.md](stackBadge.md) | The stack counter pill, `{stack.count}`. |
-| `progress` | [progress.md](progress.md) | A thin progress bar. |
-| `rive` | [rive.md](rive.md) and [../rive.md](../rive.md) | A Rive animation driven by fields and the pointer. |
-| `spacer` | [spacer.md](spacer.md) | Empty space that fills its cell. |
+## What a component is
 
-`GET /v1/components` (and the MCP tool `component_schema`) returns the machine-readable form of this
-reference. Every JSON example in these pages was checked against that schema and the real validator
-(`validate_template`),, including the SF Symbol examples (available from 1.3). Fences marked `jsonc` are fragments, not complete objects.
-
-## The cell around a component
-
-The component sits in a cell (see [../grid-and-layout.md](../grid-and-layout.md)):
+On the wire a component is one flat JSON object. Its `type` says which kind it is, and the other keys are that kind's
+properties. A component sits inside a cell, and the cell decides where it goes. This is a complete cell holding a `text`
+component:
 
 ```json
-{"id":"title","row":0,"col":1,"rowSpan":1,"colSpan":2,"align":"topLeading","padding":0,
+{"id":"title","row":0,"col":1,"colSpan":2,"align":"topLeading",
  "component":{"type":"text","binding":"{title}","style":"title"}}
 ```
 
-| Cell property | Type | Default | Notes |
-|---|---|---|---|
-| `id` | string | `r<row>c<col>` | Unique in the template. Validation errors name cells by id. Required by the validator when empty. |
-| `row`, `col` | integer >= 0 | required | 0-based first track. |
-| `rowSpan`, `colSpan` | integer >= 1 | 1 | Tracks covered. The cell must fit the grid and must not overlap another cell. |
-| `align` | one of nine | `topLeading` | Where the component sits inside the cell when the cell is bigger than the component. |
-| `padding` | number 0 to 64 | 0 | Inset on every side, in points. |
-| `component` | object | required | One component. |
+The cell's own fields and the grid around them are described in [The grid, cells and layout](../grid-and-layout.md). This page covers what a component adds on top of that.
 
-A cell clips its component to the cell's frame. A component never grows its track beyond what its content
-needs (see sizing in each page).
+In the Designer you add a component by dragging it from the palette onto a cell, then edit its properties in the
+inspector. The palette uses short names that differ a little from the `type` values.
 
-## 9-point alignment
+![The Designer's component palette beside the banner canvas](../../../web/public/shots/docs/designer-palette.png "The palette lists the twelve components. Drag one onto a cell of the canvas.")
 
-`align` is one of `topLeading`, `top`, `topTrailing`, `leading`, `center`, `trailing`, `bottomLeading`,
-`bottom`, `bottomTrailing`. The Designer shows it as a 3 x 3 pad in the inspector.
+![A cell selected on the Designer canvas with its properties in the inspector](../../../web/public/shots/docs/designer-cell-selected.png "Selecting a cell shows the properties of its component in the inspector on the right.")
 
-```
+## The components
+
+| `type` | Designer name | What it draws |
+|---|---|---|
+| [`text`](text.md) | Text | Bound text in one of five styles, with optional rich text and Markdown links. |
+| [`image`](image.md) | Image | A picture from a field: a file path, a `data:` URI or an https URL. |
+| [`issuerIcon`](issuerIcon.md) | App icon | The icon of the app that sent the notification, round or rounded. |
+| [`timestamp`](timestamp.md) | Time | A date field or the delivery time, as a clock time or "3 min. ago". |
+| [`button`](button.md) | Button | One action as a capsule button. |
+| [`actions`](actions.md) | Actions | Every action of the banner as a row of buttons, with an overflow menu. |
+| [`iconButton`](iconButton.md) | Icon btn | A round button with an SF Symbol: close, snooze, mark done. |
+| [`badge`](badge.md) | Badge | A small pill holding a value, such as an unread count. |
+| [`stackBadge`](stackBadge.md) | Stack count | The pill that counts the notifications folded into a stack. |
+| [`progress`](progress.md) | Progress | A thin progress bar. |
+| [`rive`](rive.md) | Rive | A Rive animation driven by fields and the pointer. |
+| [`spacer`](spacer.md) | Spacer | Empty space that fills its cell. |
+
+`GET /v1/components` and the MCP tool `component_schema` return the machine-readable form of these pages. See
+[Templates API](../api/templates.md) and [MCP template tools](../mcp/templates.md).
+
+## What every component shares
+
+### Binding to fields
+
+Most components show something that changes from one notification to the next. They do that with a `binding`: a piece of text with `{token}` placeholders, such as `"{title}"` or `"{count} new from {sender}"`.
+
+- Herald replaces each token with the value of the field of the same name from the notification, the manifest or the template's `extra` values.
+- A token is made of letters, digits, `_`, `.` and `-`.
+- Text in an action's `label`, `url` and `input` takes tokens too.
+- A component whose properties are fixed, such as `spacer` or `issuerIcon`, has no binding.
+
+Where values come from is described in [Bindings and tokens](../bindings.md).
+
+### Empty components and `emptyBehavior`
+
+A component that has tokens and finds every one of them absent or blank has nothing to show. It is **empty**. What
+happens next is the choice of `emptyBehavior`, which every component except `spacer` accepts:
+
+| Value | What happens to an empty component |
+|---|---|
+| `collapse` | It disappears, and a row or column left with nothing in it shrinks to zero size, gap included. |
+| `keep` | It stays as a blank cell that holds its size, so banners from one app keep one shape. |
+| omitted | The template's `collapseEmpty` decides. It is `true` by default, which means `collapse`. |
+
+Each component page says what makes that component empty. How rows and columns collapse is described in
+[the collapse planner](../grid-and-layout.md#how-sizes-are-solved).
+
+A question that a banner asks inline, such as "Run this command?", takes the place of the action buttons. While it is
+shown, every `actions` and `button` cell counts as collapsed whatever its `emptyBehavior` says. `iconButton` cells stay,
+so the banner can always be dismissed.
+
+### Alignment inside the cell
+
+A cell can be larger than its component. The cell's `align` places the component inside it. It has nine values:
+
+```text
 topLeading     top      topTrailing
 leading        center   trailing
 bottomLeading  bottom   bottomTrailing
 ```
 
-The horizontal part (`leading`, centre, `trailing`) also sets the text alignment of a `text` component that
-has no `alignment` of its own. Components that fill their cell's width (`image`, `progress`, `actions`) show
-the effect only in the vertical direction.
+The default is `topLeading`. In the Designer `align` is a 3 by 3 pad in the inspector. Two details matter:
 
-## Empty behaviour
+- The horizontal part also sets how the lines of a `text` component are aligned when the component has no `alignment` of its own.
+- A component that fills its cell's width (`image`, `progress`, `actions`) is affected only in the vertical direction.
 
-Every component except `spacer` accepts `emptyBehavior`:
+### Colours
 
-| Value | Meaning |
+Colour properties (`color`, `textColor`) take one of two kinds of value:
+
+- A hex colour: `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA`.
+- A keyword: `accent` (the template's `accentColor`, else the system accent), `primary` or `secondary`.
+
+Keywords follow the system appearance. Hex colours on text, icons and progress bars are adjusted until they are legible
+on the current light or dark appearance, so one hex value works in both. Badge pills are the exception and are drawn
+exactly as written. Nothing in a template depends on the appearance, so you do not write separate light and dark
+versions.
+
+### Symbols
+
+Five components can carry an SF Symbol: `button`, `actions`, `iconButton`, `issuerIcon` and `badge`. A symbol is either a plain name such as `"bell.badge"` or an object that adds weight, scale, rendering mode, colours and an effect. The full format is in [SF Symbols](../symbols.md).
+
+### Actions
+
+Four components work with actions. Actions are described in [Actions](../actions.md).
+
+| Component | What it does with actions |
 |---|---|
-| `collapse` | The component disappears when it has nothing to show, and a row or column left with nothing collapses to zero size (no gap either). |
-| `keep` | The component stays, blank, and its cell keeps its size, so banners from one issuer keep one shape. |
-| omitted | Follow the template's `collapseEmpty` (default `true`, which means `collapse`). |
+| `button` | Shows one action, written inline in an `action` object or named by an `actionRef`. |
+| `iconButton` | Shows one action in the same two ways. |
+| `actions` | Shows the whole list of resolved actions: the issuer's actions plus the template's, after the template's `actionRules`. |
+| `rive` | Runs one action when the animation is clicked. |
 
-What "empty" means differs per component: it is listed in each page under "Empty when". The planner that
-turns that into collapsed rows and columns is described in [../grid-and-layout.md](../grid-and-layout.md#collapse-planner).
+An action is drawn in at most one cell of a template, which lets you split one list across several cells:
 
-A pending inline confirmation (a "Run this command?" question) replaces the action row: every `actions` and
-`button` cell is treated as collapsed while it is shown, whatever its `emptyBehavior` says. `iconButton`
-cells stay, so the banner can always be dismissed.
+- A `button` with an `actionRef` claims that action.
+- An `actions` cell with `include` claims the ids it lists.
+- An `actions` cell without `include` shows what is left.
 
-## Bindings and tokens
+[The actions component](actions.md#one-action-one-cell) explains the rules.
 
-Text-like properties (`binding`, and an inline action's `label`, `url`, `input`) hold `{token}`
-placeholders. A token is letters, digits, `_`, `.` or `-`. See [../bindings.md](../bindings.md) for where
-values come from. In short: a component is empty when it has tokens and every one of them is absent or
-blank; absent tokens inside a mixed binding become empty text and the result is trimmed.
+### Static previews
 
-## Colours
+A preview that is drawn without a window cannot draw menus or animations. The preview endpoint, the MCP tool
+`render_preview` and History thumbnails draw menus (the snooze clock, the "+N" overflow) as static labels, symbol
+effects as still symbols, and a `rive` component as a dashed placeholder box of the right size. To test a Rive component
+without a window, see [Testing without a window](../rive.md#testing-without-a-window).
 
-Colour properties (`color`, `textColor`, and `accentColor` on the template) take:
+## Related
 
-- `#RGB`, `#RGBA`, `#RRGGBB` or `#RRGGBBAA`;
-- or the keywords `accent` (the template `accentColor`, else the system accent), `primary`, `secondary`.
-
-`accentColor` on the template itself takes hex only. Hex colours on text, icons and progress bars are nudged
-until they are legible on the current appearance, so one hex works in light and dark; keywords follow the
-system appearance. Badge pills are drawn exactly as given (see [badge.md](badge.md)).
-
-## Light and dark
-
-Banners follow the system appearance. Nothing in a template is appearance specific: use keywords
-(`primary`, `secondary`, `accent`) or hex colours (which are legibility-adjusted). To check both, render twice:
-`POST /v1/preview` with `"appearance":"light"` and `"dark"`, the MCP `render_preview`, or the Designer's
-sun/moon switch.
-
-## Actions wiring
-
-Three components can run an action: `button` and `iconButton` (inline `action` or an `actionRef`), `rive`
-(on click), and `actions` shows the whole resolved list. The resolved list is the issuer's actions plus the
-template's, after `actionRules`. See [../actions.md](../actions.md).
-
-## Static previews
-
-Offscreen renders (`POST /v1/preview`, MCP `render_preview`, history previews) cannot draw AppKit-backed
-views. Menus (the snooze clock, the "+N" overflow) are drawn as static labels and `rive` is drawn as a labelled
-dashed placeholder box of the right size. Use `POST /v1/rive/check` to test a Rive component without a window
-(see [../rive.md](../rive.md#testing-without-a-window)). SF Symbol effects are not drawn in static previews
-either (see [../symbols.md](../symbols.md)).
-
-## Limits
-
-| Limit | Value |
-|---|---|
-| Cells per template | 100 |
-| Grid tracks per axis | 1 to 12 |
-| Banner width | 160 to 800 points |
-| Template file size | 2 MB (larger files are ignored on read) |
-| Gap, padding, cell padding | 0 to 64 points |
+- [The grid, cells and layout](../grid-and-layout.md): the cell fields, sizing and the collapse planner.
+- [Designing a banner](../../AUTHORING.md): build a template in the Designer.
+- [Templates](../../TEMPLATES.md): what a template is and how a notification picks one.
+- [Bindings and tokens](../bindings.md): where `{token}` values come from.
+- [Actions](../actions.md): action kinds, rules and confirmation.

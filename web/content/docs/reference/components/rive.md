@@ -1,97 +1,29 @@
-# rive
+# Rive component
 
-A Rive animation inside a banner cell. This page is the property reference; preparing the file, uploading it
-and troubleshooting are in [../rive.md](../rive.md).
+The `rive` component plays a Rive animation inside a cell: a bell that rings when the count goes up, a spinner, a small
+character that reacts to the pointer. The Designer calls it **Rive**. The animation's state machine inputs can follow
+fields of the notification and the position of the pointer, and a click on it can run an action.
 
-## Properties
+This page is the property reference. Preparing the file in the Rive editor, getting it into Herald, and troubleshooting
+are in [Rive in Herald](../rive.md).
 
-| Property | Type | Default | Allowed values / notes |
-|---|---|---|---|
-| `type` | string | required | `"rive"` |
-| `asset` | string | none | Id of an asset the issuer's manifest declares (or of a stored copy, `<id>.riv`). Wins over `path` when both are set. |
-| `path` | string | none | A `.riv` file: absolute, `~/...`, a `file:` URL, or a name relative to the app's assets folder (no `..`). Remote URLs are refused. |
-| `stateMachine` | string | the manifest asset's, else the file's default, else its first | State machine name. |
-| `artboard` | string | the file's default artboard | Artboard name. |
-| `inputBindings` | object | `{}` | Map of state machine input name to a `{token}` / literal, or to the keywords `hover` / `pressed`. |
-| `action` | action object or string | none | Clicking the animation runs this action (inline). |
-| `actionRef` | string | none | Clicking the animation runs this resolved action by id. |
-| `loop` | boolean | the animation's own | Only for a file with no state machine (a linear animation): `true` loops, `false` plays once. |
-| `aspectRatio` | number > 0 | the artboard's own | Width / height of the box. |
-| `height` | number > 0 | derived | Fixed height in points. |
-| `emptyBehavior` | string | template default | `collapse` or `keep`. |
-
-A component needs an `asset` or a `path`; otherwise validation fails. With a manifest, an `asset` that the
-manifest does not declare, or an input name the manifest asset's `inputs` list does not contain, is a warning.
-
-## Bindings and tokens
-
-`inputBindings` values are bound per input, see [../rive.md](../rive.md#inputs-and-how-fields-drive-them):
-
-| Value | Meaning |
-|---|---|
-| `"{count}"` | A single token: the field's own value, so a number stays a number. |
-| `"3"` or `"{count} new"` | Literal or mixed text: bound as the substituted text. |
-| `"hover"` / `"pressed"` (any case) | Driven by the mouse over the animation, never by data. |
-
-## Sizing
-
-- `height` fixes the height; the width follows from `aspectRatio` (or the artboard's ratio) when not given.
-- With no `height`, the box takes the width of its cell and the height from the aspect ratio (explicit, else
-  the artboard's, else 4:1).
-- The animation is scaled with `contain` (whole artboard visible), centred.
-- The box is clamped to 1 to 2000 points on each side. A failed load is 44 points high.
-
-## 9-point alignment
-
-The box fills the cell width; alignment only positions it when the cell is larger than the box (fixed-height
-rows). Match the artboard's proportions to the box and there is nothing to align.
-
-## Empty behaviour
-
-Empty only when neither `asset` nor `path` is set (which validation rejects anyway). Tokens in
-`inputBindings` do **not** make it empty: an animation with absent fields still plays, and an absent token
-leaves its input alone.
-
-## Light and dark
-
-Rive draws exactly what is in the file. Banners are translucent over the desktop and the animation is drawn
-on a transparent background, so design with transparent artboards and colours that work on both. Herald does
-not switch Rive themes or inputs on appearance; add a boolean input and bind it to a field if you need it.
-
-## Actions wiring
-
-- With `action` or `actionRef`, a click on the animation (mouse down and up inside it) runs that action, the
-  pointer becomes a pointing hand and VoiceOver sees a button. Without either, clicks fall through to the
-  banner body (it still tracks hover).
-- A `pressed` binding also makes the animation take clicks, so the press can drive the state machine.
-- Gates are the same as for [button.md](button.md#actions-wiring).
-
-## Static previews
-
-`POST /v1/preview`, MCP `render_preview` and history previews draw a dashed placeholder with the asset name
-at the right size, not the animation. Check the animation with `POST /v1/rive/check`.
-
-## Examples
-
-A bell that rings when `count` changes, reacts to hover and opens the message on click:
+**Minimal example**
 
 ```json
-{"type":"rive","asset":"bell","stateMachine":"Main",
- "inputBindings":{"count":"{count}","hover":"hover"},"height":40,
- "action":{"id":"open","label":"Open","kind":"url","url":"{url}"}}
+{"type":"rive","asset":"bell"}
 ```
 
-A loop-once linear animation from a file in the issuer's assets folder, kept in place:
+This plays the file that the app's manifest declares as the asset `bell`, using the asset's state machine or the file's
+default.
+
+**Realistic example**
+
+A bell next to a title and a count. The bell rings when `count` changes, reacts when the pointer is over it, and marks the
+message read when it is clicked.
 
 ```json
-{"type":"rive","path":"spinner.riv","loop":true,"aspectRatio":1,"height":24,"emptyBehavior":"keep"}
-```
-
-In a complete template next to a title:
-
-```json
-{"name":"rive-demo","app":"webwatcher.email","layoutVersion":2,"collapseEmpty":true,
- "grid":{"rows":2,"cols":3,"rowSizes":["auto","auto"],"colSizes":["48","fill","auto"],"gap":8,"padding":14,"width":400},
+{"name":"rive-demo","app":"example.bidbot","layoutVersion":2,"collapseEmpty":true,
+ "grid":{"rows":2,"cols":3,"rowSizes":["auto","auto"],"colSizes":[48,"fill","auto"],"gap":8,"padding":14,"width":400},
  "cells":[
   {"id":"bell","row":0,"col":0,"rowSpan":2,"align":"topLeading",
    "component":{"type":"rive","asset":"bell","stateMachine":"Main","height":40,
@@ -101,11 +33,129 @@ In a complete template next to a title:
   {"id":"sub","row":1,"col":1,"colSpan":2,"component":{"type":"text","binding":"{subject}","style":"subtitle"}}]}
 ```
 
+**Properties**
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `type` | string | required | Always `"rive"`. |
+| `asset` | string | none | The id of an asset that the app's manifest declares, or of a stored copy. It wins over `path` when both are set. |
+| `path` | string | none | A `.riv` file instead of an asset. The accepted forms are listed under the table. |
+| `stateMachine` | string | the asset's, else the file's default, else its first | The name of the state machine to play. |
+| `artboard` | string | the file's default | The name of the artboard to draw. |
+| `inputBindings` | object | none | Maps the name of a state machine input to a `{token}`, a literal, or the keyword `hover` or `pressed`. See [Inputs](#inputs). |
+| `action` | object | none | An inline action that a click on the animation runs. |
+| `actionRef` | string | none | The id of a resolved action that a click on the animation runs. |
+| `loop` | boolean | the animation's own | For a file with no state machine only: `true` loops the animation and `false` plays it once. |
+| `aspectRatio` | number | the artboard's own | Width divided by height of the box, above 0. |
+| `height` | number | derived | A fixed height in points, above 0. |
+| `emptyBehavior` | string | template default | `collapse` or `keep`. See [Empty animations](#empty-animations). |
+
+`path` accepts these forms:
+
+- An absolute path.
+- `~/...`.
+- A `file:` URL.
+- A name relative to the app's assets folder. A relative path cannot contain `..`.
+
+Remote URLs are refused.
+
+The component needs an `asset` or a `path`. Without one the validator reports an error. When a manifest is given, two cases are a warning:
+
+- An `asset` that the manifest does not declare.
+- An input name that the asset's `inputs` list does not contain.
+
+## What plays
+
+Herald loads the file, checks that it is a `.riv` file of at most 10 MB, and plays it with the whole artboard visible and
+centred in its box. The state machine is the first of these that exists: `stateMachine`, the manifest asset's state
+machine, the file's default, then the file's first. A file with no state machine plays its first animation, and `loop`
+chooses between looping and playing once.
+
+If the file cannot be found, is too large, is not a Rive file, or names an artboard or state machine that does not exist,
+the cell shows a dashed placeholder that gives the reason, for example `no state machine "main" (available: Main)`. The
+banner is not affected otherwise.
+
+## Inputs
+
+Each entry of `inputBindings` connects one input of the state machine to a value. Herald tells number, boolean and trigger
+inputs apart by asking the state machine.
+
+| Value | Meaning |
+|---|---|
+| `"{count}"` | One token. The field's own value is used, so a number stays a number. |
+| `"3"` or `"{count} new"` | A literal or mixed text. The substituted text is the value. |
+| `"hover"` or `"pressed"`, in any case | The pointer drives the input and data never does. |
+
+How a value is applied depends on the input:
+
+| Input kind | A field value is applied as | `hover` and `pressed` |
+|---|---|---|
+| Number | The number. A list gives its length, a boolean gives 1 or 0, and text is read as a number when it can be. | 1 while active, else 0. |
+| Boolean | Its truthiness. `false`, `no`, `off`, `0`, an empty text and an empty list are false. | True while active. |
+| Trigger | It fires when the value changes to something true. A bell can ring when `{count}` goes up. | It fires when the pointer becomes active. |
+
+A token that is absent leaves its input alone. An input name the state machine does not have is ignored without an error.
+Names are case-sensitive.
+
+The two keywords are:
+
+- `hover` is true while the pointer is over the animation.
+- `pressed` is true while the mouse button is held down on it.
+
+Herald does not pass pointer movement to the file, so a Rive "pointer enter", "exit" or "move" listener does not fire. Use a boolean input bound to `hover` instead. Mouse down, drag and up are passed on, but only when the animation takes clicks, which it does when it has an `action` or `actionRef` or a `pressed` binding.
+
+## Clicking
+
+With an `action` or `actionRef`, a click on the animation runs that action. A click is a press and release inside the
+animation. The pointer becomes a pointing hand over it and VoiceOver treats it as a button. Without either, clicks fall
+through to the banner, which still tracks hover. The action runs with the same gates as for a
+[button](button.md#which-action-runs).
+
+## Sizing and alignment
+
+- `height` fixes the height. The width then follows from `aspectRatio`, or from the artboard's proportions.
+- Without `height`, the box takes the width of its cell and a height from the aspect ratio: yours, else the artboard's,
+  else 4 to 1.
+- Each side is limited to 1 through 2000 points. A placeholder for a failed load is 44 points high.
+- The box fills the cell width. Alignment only positions it when the cell is larger than the box, for example in a
+  fixed-height row.
+
+## Light and dark
+
+Herald draws exactly what is in the file, on a transparent background over the translucent banner. Design with a
+transparent artboard and colours that work on both appearances. Herald does not switch Rive themes on its own. To react to
+the appearance, add a boolean input and bind it to a field.
+
+## Empty animations
+
+The component is empty only when neither `asset` nor `path` is set, which the validator rejects anyway. Tokens in
+`inputBindings` do not make it empty: an animation with absent fields still plays.
+
+## Static previews
+
+The preview endpoint, the MCP tool `render_preview` and History thumbnails draw a dashed placeholder with the asset name
+at the right size, not the animation. To check the animation without a window, use the Rive check described in
+[Testing without a window](../rive.md#testing-without-a-window), or look at a live banner.
+
+## Accepted older forms
+
+| Older form | Current form |
+|---|---|
+| `"action": "markRead"` (a string) | `"actionRef": "markRead"` |
+
 ## Common mistakes
 
 | Mistake | What happens | Fix |
 |---|---|---|
-| State machine or input names with the wrong case | `no state machine "main" (available: Main)` placeholder; unknown inputs are silently ignored. | Names are case-sensitive; copy them from `POST /v1/rive/check`. |
-| Binding a text value to a number input | A non-numeric string is ignored. | Bind a numeric field, or a list (its length). |
-| Expecting a Rive hover listener to fire | Pointer-move events are not forwarded to Rive. | Use a boolean input and `"hover":"hover"`. |
-| Checking the animation with `render_preview` | Shows a placeholder. | Use `/v1/rive/check`, or look in the live banner. |
+| A state machine name with the wrong case. | The placeholder reads `no state machine "main" (available: Main)`. | Copy the names from `POST /v1/rive/check`. |
+| An input name with the wrong case. | The input is ignored without an error. | Copy the names from `POST /v1/rive/check`. |
+| Binding a text value to a number input. | Text that is not a number is ignored. | Bind a numeric field, or a list, which gives its length. |
+| Expecting a Rive hover listener to fire. | Pointer movement is not passed to the file. | Use a boolean input and `"hover":"hover"`. |
+| Checking the animation with `render_preview`. | It shows a placeholder. | Use `POST /v1/rive/check`, or look at a live banner. |
+
+## Related
+
+- [Rive in Herald](../rive.md): preparing the file, getting it into Herald and troubleshooting.
+- [Manifests](../manifests.md): declaring a Rive asset and its inputs.
+- [Diagnostics API](../api/diagnostics.md#post-v1rivecheck): `POST /v1/rive/check`.
+- [Actions](../actions.md): what a click on the animation can run.

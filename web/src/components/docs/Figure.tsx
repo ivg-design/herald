@@ -28,11 +28,13 @@ export default function Figure({ "data-figure": raw }: { "data-figure"?: string 
   const shown = dark && darkSrc ? darkSrc : src;
   const shown2x = dark && darkSrc ? darkSrc2x : src2x;
   const srcSet = shown2x ? `${shown} 1x, ${shown2x} 2x` : undefined;
+  // A capture much taller than it is wide (a whole Settings tab) shows its top part; the larger view has all of it.
+  const tall = !!width && !!height && height / width > 1.45;
   const open = () => dialog.current?.showModal();
   const close = () => dialog.current?.close();
 
   return (
-    <figure className="docs-figure">
+    <figure className="docs-figure" data-tall={tall ? "" : undefined}>
       <div className="docs-figure-frame">
         <button type="button" className="docs-figure-open" onClick={open} aria-label={`Open a larger view: ${alt}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -44,6 +46,7 @@ export default function Figure({ "data-figure": raw }: { "data-figure"?: string 
           ))}
           <span className="docs-figure-zoom" aria-hidden>
             <Maximize2 size={14} />
+            {tall && <span>Show the whole capture</span>}
           </span>
         </button>
       </div>

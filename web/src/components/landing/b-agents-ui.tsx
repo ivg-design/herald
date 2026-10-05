@@ -10,9 +10,9 @@ import { copyText } from "./b-hooks";
 
 const SNIPPET = '{"mcpServers":{"herald":{"command":"herald-mcp"}}}';
 const ROWS: { name: string; href?: string }[] = [
-  { name: "Claude Code", href: "/docs/more/mcp-guide#claude-code" },
-  { name: "Codex CLI", href: "/docs/more/mcp-guide#codex" },
-  { name: "Claude Desktop", href: "/docs/more/mcp-guide#one-click-settings--mcp" },
+  { name: "Claude Code", href: "/docs/guides/mcp#claude-code" },
+  { name: "Codex CLI", href: "/docs/guides/mcp#codex" },
+  { name: "Claude Desktop", href: "/docs/guides/mcp#one-click-settings--mcp" },
   { name: "Generic (JSON)" },
 ];
 

@@ -8,7 +8,7 @@ import { renderTree, type LinkResolver } from "@/lib/markdown";
 import CodeBlock from "./CodeBlock";
 import Figure from "./Figure";
 import { asset } from "@/lib/config";
-import { HOTSPOTS, shotName, shots } from "@/lib/figures";
+import { HOTSPOTS, pngSize, publicFileExists, shotName, shots } from "@/lib/figures";
 
 function DocLink({ href, children, ...rest }: ComponentProps<"a">) {
   const h = href ?? "";
@@ -283,7 +283,10 @@ function labels(parent: Root | Element) {
     const next = j >= 0 ? (kids[j] as Element) : null;
     if (next && next.tagName === "pre") {
       next.properties = { ...next.properties, dataTitle: label };
-      const prev = out[out.length - 1];
+      // The pair to join is the last element pushed; blank text between two blocks does not separate them.
+      let pi = out.length - 1;
+      while (pi >= 0 && out[pi].type === "text" && !(out[pi] as Text).value.trim()) pi--;
+      const prev = pi >= 0 ? out[pi] : undefined;
       if (label === "Example response" || label === "Example result" || label === "Output") {
         if (prev && prev.type === "element" && prev.tagName === "div" && (prev.properties?.className as string[] | undefined)?.includes("example-pair") && prev.children.length === 1) {
           prev.children.push(next);
@@ -315,12 +318,32 @@ function figures(parent: Root | Element) {
     const solid = (c.children as ElementContent[]).filter((x) => !(x.type === "text" && !x.value.trim()));
     if (solid.length !== 1 || solid[0].type !== "element" || solid[0].tagName !== "img") return;
     const img = solid[0];
-    const name = shotName(String(img.properties?.src ?? ""));
-    if (!name) return;
+    const raw = String(img.properties?.src ?? "");
+    const name = shotName(raw);
     const all = shots();
-    const shot = all.get(name);
-    const darkName = name.replace(/(\.[a-z0-9]+)$/i, "-dark$1");
-    const spots = HOTSPOTS[name];
+    let src: string, src2x: string | undefined, darkSrc: string | undefined, darkSrc2x: string | undefined;
+    let size: { width?: number; height?: number } | null = null;
+    let scale = 1;
+    let spots: { x: number; y: number }[] | undefined;
+    if (name) {
+      const shot = all.get(name);
+      const darkName = name.replace(/(\.[a-z0-9]+)$/i, "-dark$1");
+      const dark = all.get(darkName);
+      const base = (f?: string) => (f ? `/shots/docs/${f.replace(/^.*\//, "")}` : undefined);
+      src = `/shots/docs/${name}`;
+      src2x = base(shot?.file2x);
+      darkSrc = dark ? `/shots/docs/${darkName}` : undefined;
+      darkSrc2x = base(dark?.file2x);
+      size = shot?.width && shot?.height ? { width: shot.width, height: shot.height } : pngSize(src);
+      spots = HOTSPOTS[name];
+    } else if (raw.startsWith("/docs-img/")) {
+      // An example's own render: drawn at 1.5x, and paired light/dark by file name.
+      src = raw;
+      const twin = raw.replace(/-light(\.[a-z0-9]+)$/i, "-dark$1");
+      if (twin !== raw && publicFileExists(twin)) darkSrc = twin;
+      size = pngSize(raw);
+      scale = 1.5;
+    } else return;
     if (spots) {
       const next = kids.slice(i + 1).find((x) => x.type === "element") as Element | undefined;
       if (next && next.tagName === "ol") next.properties = { ...next.properties, className: ["figure-legend"] };
@@ -330,14 +353,14 @@ function figures(parent: Root | Element) {
       tagName: "doc-figure",
       properties: {
         dataFigure: JSON.stringify({
-          src: asset(`/shots/docs/${name}`),
-          src2x: shot?.file2x ? asset(`/shots/docs/${shot.file2x.replace(/^.*\//, "")}`) : undefined,
-          darkSrc2x: all.get(darkName)?.file2x ? asset(`/shots/docs/${all.get(darkName)!.file2x!.replace(/^.*\//, "")}`) : undefined,
-          darkSrc: all.has(darkName) ? asset(`/shots/docs/${darkName}`) : undefined,
+          src: asset(src),
+          src2x: src2x ? asset(src2x) : undefined,
+          darkSrc: darkSrc ? asset(darkSrc) : undefined,
+          darkSrc2x: darkSrc2x ? asset(darkSrc2x) : undefined,
           alt: String(img.properties?.alt ?? ""),
           caption: img.properties?.title ? String(img.properties.title) : undefined,
-          width: shot?.width,
-          height: shot?.height,
+          width: size?.width ? Math.round(size.width / scale) : undefined,
+          height: size?.height ? Math.round(size.height / scale) : undefined,
           hotspots: spots,
         }),
       },

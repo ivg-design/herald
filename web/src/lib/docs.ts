@@ -22,6 +22,14 @@ export interface DocPage {
 
 let cache: DocPage[] | null = null;
 
+/** Markdown files that are an index on GitHub and have no page of their own here. */
+const ALIASES: Record<string, string> = {
+  "docs/reference/README.md": "/docs",
+  "docs/examples/README.md": "/docs/examples/bidbot",
+  "README.md": "/docs",
+  "CHANGELOG.md": "/changelog",
+};
+
 const REPORT_ISSUE_MD = `Found a bug, a gap in these docs, or a banner that does not look the way you designed it?
 
 Open an issue and include:
@@ -83,6 +91,7 @@ export function makeResolver(fromFile: string): LinkResolver {
       return here ? `${here.href}${frag}` : null;
     }
     const target = posix.normalize(posix.join(posix.dirname(fromFile), pathPart)).replace(/^\.\//, "");
+    if (ALIASES[target]) return ALIASES[target];
     if (target.endsWith(".md")) {
       const same = pages.filter((p) => p.file === target);
       const byHeading = hash ? same.find((p) => p.headings.some((h) => h.id === hash)) : undefined;
@@ -95,7 +104,7 @@ export function makeResolver(fromFile: string): LinkResolver {
 }
 
 export function renderPageTree(page: DocPage): Root {
-  return renderTree(page.source, makeResolver(page.file));
+  return renderTree(page.source, makeResolver(page.file), undefined, page.file);
 }
 
 /** Flat search index: titles and headings only. */

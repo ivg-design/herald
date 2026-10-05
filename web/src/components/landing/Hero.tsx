@@ -749,7 +749,7 @@ export default function Hero({ release }: { release: ReleaseInfo }) {
                   <Download size={18} aria-hidden />
                   Download Herald · {release.version}
                 </SiteLink>
-                <SiteLink href="/docs/reference/http-api" className="btn btn-ghost">
+                <SiteLink href="/docs/api/overview" className="btn btn-ghost">
                   Read the API docs
                 </SiteLink>
                 <button type="button" className="btn btn-ghost" onClick={run}>

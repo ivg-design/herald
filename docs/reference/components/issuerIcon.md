@@ -1,69 +1,76 @@
-# issuerIcon
+# Issuer icon component
 
-The sending app's icon: the `icon` from `POST /v1/register` or the manifest, else a generic app icon.
+The `issuerIcon` component draws the icon of the app that sent the notification, so a banner shows which app is talking.
+The Designer calls it **App icon**. The icon comes from the app's registration or manifest, not from a field, so it is
+the same on every banner from that app. If the app has no icon, Herald draws a generic app icon. For a different
+picture on every banner use [`image`](image.md).
 
-## Properties
+**Minimal example**
 
-| Property | Type | Default | Allowed values / notes |
+```json
+{"type":"issuerIcon"}
+```
+
+This draws the icon 22 points wide with rounded corners.
+
+**Realistic example**
+
+A 32 point round icon that spans the first two rows, with a title and a subject beside it.
+
+```json
+{"name":"icon-demo","app":"example.bidbot","layoutVersion":2,"collapseEmpty":true,
+ "grid":{"rows":2,"cols":2,"rowSizes":["auto","auto"],"colSizes":[40,"fill"],"gap":6,"padding":12,"width":380},
+ "cells":[
+  {"id":"icon","row":0,"col":0,"rowSpan":2,"align":"topLeading",
+   "component":{"type":"issuerIcon","size":32,"shape":"circle"}},
+  {"id":"title","row":0,"col":1,"component":{"type":"text","binding":"{title}","style":"title"}},
+  {"id":"body","row":1,"col":1,"component":{"type":"text","binding":"{body}","style":"subtitle"}}]}
+```
+
+**Properties**
+
+| Property | Type | Default | Description |
 |---|---|---|---|
-| `type` | string | required | `"issuerIcon"` |
-| `size` | number 8 to 128 | 22 | Side in points. |
-| `shape` | string | `rounded` | `rounded` or `circle`. |
-| `cornerRadius` | number >= 0 | 22 % of `size` | Points. Ignored for `circle`. |
-| `emptyBehavior` | string | template default | Accepted, but the component is never empty. |
-| `symbol` | name or object | none | **Available from 1.3.** An SF Symbol drawn instead of the app icon; the app icon is the fallback when the name is unknown. See [../symbols.md](../symbols.md). |
+| `type` | string | required | Always `"issuerIcon"`. |
+| `size` | number | `22` | The side of the icon in points, from 8 to 128. |
+| `shape` | string | `rounded` | `rounded` draws a rounded square and `circle` draws a circle. |
+| `cornerRadius` | number | 22 percent of `size` | The corner radius in points for `rounded`. It must be 0 or more and is ignored for `circle`. |
+| `symbol` | name or object | none | An SF Symbol drawn instead of the app's icon. The app's icon is drawn when the name is not a symbol on this Mac. See [SF Symbols](../symbols.md). |
+| `emptyBehavior` | string | none | Accepted, but it has no effect because the component is never empty. |
 
-## Bindings and tokens
+## Where the icon comes from
 
-None. The icon comes from the app record (`icon` is a file path or `data:image/png;base64,...`, at most
-256 KB), not from a field. The icon's tooltip is the app's display name (`appName`).
+The icon is part of the app record. It is the `icon` that the app gave when it registered with [`POST /v1/register`](../api/apps.md#post-v1register) or that its [manifest](../manifests.md) declares. Two facts about it:
 
-## Sizing
+- It is a file path or a `data:image/png;base64,...` URI of at most 256 KB.
+- Its tooltip is the app's display name, the `appName` of the manifest. Hovering over the icon on a banner shows it.
 
-Exactly `size` x `size` points. In an `auto` column or row it sets the track's size; in a fixed 40 pt column a
-32 pt icon sits inside it according to the cell's alignment.
+An icon is drawn as supplied, so it looks the same in light and dark appearance. A symbol follows its rendering mode and
+colours. Without colours a symbol is drawn in the primary text colour at about 62 percent of `size`.
 
-## 9-point alignment
+## Sizing and alignment
 
-Matters whenever the cell is bigger than the icon, for example `topLeading` for an icon that spans two rows.
+The icon is exactly `size` by `size` points.
 
-## Empty behaviour
+- In an `auto` column or row it sets the size of the track.
+- In a fixed 40 point column a 32 point icon sits inside the column where the cell's `align` puts it.
+- Alignment matters whenever the cell is larger than the icon, for example `topLeading` for an icon that spans two rows.
 
-Never empty (it always has an icon to draw), so `emptyBehavior` has no effect.
+## Empty icons
 
-## Light and dark
-
-The icon is drawn as supplied. A symbol (1.3) follows its rendering mode and colours.
-
-## Actions wiring
-
-None.
-
-## Examples
-
-The default small icon:
-
-```json
-{"type":"issuerIcon","size":22,"shape":"rounded"}
-```
-
-A circular 32 pt avatar spanning the first two rows:
-
-```json
-{"id":"icon","row":0,"col":0,"rowSpan":2,"align":"topLeading",
- "component":{"type":"issuerIcon","size":32,"shape":"circle"}}
-```
-
-A symbol in place of the icon (available from 1.3):
-
-```json
-{"type":"issuerIcon","size":24,"symbol":{"name":"envelope.badge","renderingMode":"palette","colors":["accent","primary"]}}
-```
+An icon is never empty, because there is always something to draw. `emptyBehavior` has no effect.
 
 ## Common mistakes
 
 | Mistake | What happens | Fix |
 |---|---|---|
-| Expecting a field-driven icon | The icon never changes per notification. | Use an `image` bound to a field for per-notification art. |
-| `size` of 4 or 200 | Validation error (8 to 128). | Stay in range. |
-| Setting `cornerRadius` with `circle` | Ignored. | Use `rounded`. |
+| Expecting the icon to change from one notification to the next. | It never does, because it comes from the app record. | Use an `image` bound to a field for per-notification art. |
+| A `size` of 4 or 200. | The validator reports an error. | Stay between 8 and 128. |
+| Setting `cornerRadius` with `circle`. | It is ignored. | Use `rounded`. |
+
+## Related
+
+- [Image component](image.md): a picture that changes with every notification.
+- [Manifests](../manifests.md): the `icon` and `appName` of an app.
+- [SF Symbols](../symbols.md): drawing a symbol in place of the icon.
+- [Designing a banner](../../AUTHORING.md): adding the **App icon** component in the Designer.

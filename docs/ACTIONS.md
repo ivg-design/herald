@@ -1,179 +1,292 @@
-# Two-way actions
+# Two-way notifications
 
-> **Changed in 1.4.** New action kind `openApp` (brings an app to the front; no confirmation). Button `style` is
-> now `normal`, `prominent`, `destructive` or `cancel`, and a destructive action asks inline before it runs,
-> whether it came from a template or from the issuer. The `actions` component can split the list with `include`
-> and an action is drawn in one cell only; `button` accepts `actionId` as an alias of `actionRef`. A template can
-> make the banner click open the issuing app with `onClick: "openApp"`.
+A notification does not have to end at the banner. It can carry buttons that open a link, call your server back, take a
+typed answer or run a command on the Mac. This guide shows how to add each kind and what the user sees when they press
+it. When you finish you will have a banner with working buttons and a program that hears what the user chose. The full
+list of fields, kinds and rules is in the [actions reference](reference/actions.md).
 
-A button on a banner can run something the **issuer** supplied (a callback to the sending app, a URL, a
-command) or something **you** added in the template (a shell command, a script, an Apple Shortcut), or
-both. Herald merges the two lists, lets template rules rewrite the result, and hands every action the
-merged payload.
+## Before you start
 
-## Action shape
+- Herald is running, and you can send a notification. If not, follow [Send your first notification](getting-started.md).
+- The examples use `$HERALD` and `$TOKEN`. Define them once as shown in
+  [Connect](reference/api/README.md#connect).
+- The examples send as the fictional app `example.bidbot`. Use your own app id.
 
-```json
-{"id":"followup","label":"Follow up","kind":"shortcut","style":"default",
- "shortcut":"Create follow-up","input":"{title}\n{url}"}
-```
+## How buttons work
 
-| Field | Meaning |
-|---|---|
-| `id` | Stable id; rules and `actionRef` match on it. Derived from the label when omitted. |
-| `label` | Button text. |
-| `kind` | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `dismiss`, `snooze`. May be left out when one of `shortcut`, `script`, `command`, `callback`, `url`, `bundleId` / `path` is present. |
-| `style` | `normal`, `prominent`, `destructive` (red, asks before running), `cancel`; `default` means `normal`. |
-| `url` / `callback` / `command` / `script` / `shortcut` | The one property that belongs to the kind. |
-| `bundleId` / `path` | For `openApp`: the app's bundle id, or its path (ends in `.app`, `~` expanded). Both optional. |
-| `input` | For `shortcut`: text with bindings. Absent means the full JSON payload. |
-| `snoozeMinutes` | For `snooze` (default 15). |
+A button is part of the notification. You send it in `buttons`, and each button does one thing. Herald draws it on the
+banner, waits for the user to press it, then does what the button says and closes the banner.
 
-v1 buttons (`label` plus one of `url`, `command`, `callback`) are still accepted everywhere an action is.
+![A banner with three buttons under its text](../web/public/shots/docs/banner-actions.png "A banner with Accept, Decline and Reply. Each button is one entry of the buttons list.")
 
-## Kinds
+The buttons you send are the **issuer's** buttons. You can also declare them once in the app's
+[manifest](reference/manifests.md#actions), and the user can hide, rename or add to them in the Designer without
+changing your code. [Where actions come from](reference/actions.md#where-actions-come-from) explains the merge.
 
-- `url`: opens `http`, `https` or `mailto` URLs only. Bindings are filled in.
-- `callback`: POSTs `{"notificationId","app","action","payload"}` to the callback URL; a 2xx dismisses the
-  banner (see [API.md](API.md#callbacks)).
-- `command`: runs through `/bin/zsh -lc` after a confirmation (below). The command text is never interpolated:
-  the merged payload arrives on stdin as JSON and in `HERALD_*` environment variables (`HERALD_APP`,
-  `HERALD_NOTIFICATION_ID`, `HERALD_ACTION_ID`, `HERALD_ACTION_KIND`, `HERALD_TEMPLATE`, `HERALD_FIELD_<name>`,
-  `HERALD_EXTRA_<name>`).
-- `script`: runs a file from `~/Library/Application Support/Herald/scripts/` (a relative name, no `..`)
-  with the merged payload JSON on stdin. The file must be executable.
-- `shortcut`: runs `/usr/bin/shortcuts run "<name>" --input-path <file>`. With `input` set, the file holds
-  that text with bindings filled in; without it, the file holds the full merged payload as JSON.
-- `openApp`: brings an application to the front, see [Open app](#open-app).
-- `dismiss`, `snooze`: built in.
+## Add a button that opens a link
 
-## Open app
+A link button is the simplest: it opens a page in the default browser. It needs no registration and no approval.
 
-`openApp` runs no code, so it needs no confirmation, from an issuer or a template. Herald itself stays in the
-background. The application is the first of these that exists on this Mac:
+1. Send a notification with a `url` button.
 
-1. the action's `bundleId`;
-2. the action's `path`;
-3. the manifest's `appBundleId`;
-4. the manifest's `appPath`;
-5. the bundle id the issuer registered with;
-6. the app named like the manifest's `appName` (`<appName>.app` in the Applications folders).
+   ```sh
+   curl -s -X POST "$HERALD/v1/notify" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{
+       "app": "example.bidbot",
+       "id": "bid-42",
+       "title": "Bid accepted",
+       "body": "Your bid of $4,200 was accepted.",
+       "buttons": [{"label": "Open bid", "url": "https://example.com/bids/42"}]
+     }'
+   ```
 
-With neither `bundleId` nor `path` an `openApp` action opens the issuing app. If nothing resolves, nothing
-happens: the banner stays, shows "Action failed - no installed application found", and History keeps the
-note "<label>: no installed application found" (`actionNote`). `validate_template` reports it as a warning,
-not an error, since the template may be written for another Mac.
+   The banner appears with an **Open bid** button.
 
-| Where | Form |
-|---|---|
-| Template rule | `{"add":{"id":"open-ww","label":"Open WebWatcher","kind":"openApp"}}` |
-| Manifest action (issuer) | `{"id":"open","label":"Open WebWatcher","kind":"openApp"}`, optional `bundleId` / `path`; the manifest also takes `appBundleId` and `appPath` |
-| Payload button (issuer) | `{"label":"Open","openApp":{"bundleId":"com.apple.mail"}}` |
-| Banner click | template option `"onClick": "openApp"` (default `"url"`) |
+2. Press **Open bid**.
 
-## Merging: issuer plus template
+   The page opens in your browser and the banner closes. Only `http`, `https` and `mailto` links open.
 
-The resolved list is the issuer's actions (from the payload `buttons`/`actions`, or the manifest's
-`actions` for `actionIds`) followed by the template's additions, passed through `actionRules` in order.
-The manifest's actions are not shown just because it declares them: a notification has to send `buttons` (or
-`actions`, the same list under its documented name) or name manifest actions with `actionIds: ["markRead"]`.
-A sample preview (the Designer, `render_preview` with sample data) stands in for an issuer that names every
-declared action, and says so; a preview of real data shows only what that data sends. One function
-(`ActionResolver.issuerSource`) resolves all of this for the banner, the press, the preview and the Designer.
+## Add a button that calls your server
 
-```json
-"actionRules": [
-  {"match":"markRead","hide":true},
-  {"match":"archive","relabel":"Archive it","style":"destructive","position":0},
-  {"add":{"id":"followup","label":"Follow up","kind":"shortcut","shortcut":"Create follow-up","input":"{title}\n{url}"}}
-]
-```
+A callback button tells your program which button the user pressed. Herald sends one HTTP request to a URL you give it.
+Use it for anything your program has to decide, such as accepting an offer.
 
-| Rule | Effect |
-|---|---|
-| `match` | Selects issuer or template actions by id or label (case-insensitive); `"*"` selects all. |
-| `hide: true` | Removes the matched actions. |
-| `relabel`, `style`, `position` | Change the label, style (`normal`, `prominent`, `destructive`, `cancel`) or 0-based position of the matched actions. |
-| `add` | Appends a new template-owned action (at `position` if given). Same id replaces. |
+1. Start a server that listens on your Mac. This one prints each press and answers `200`.
 
-An `actions` component with `source: "issuer"`, `"template"` or `"merged"` decides which origin it shows
-(`include` narrows it to named ids, and `align`, `wrap` and `spacing` arrange the buttons); a `button` or
-`iconButton` points at one action by `actionRef` (a `button` also accepts `actionId`, the same thing). Template rules also apply to buttons
-sent with the notification, so you can relabel an issuer's button without touching the issuer.
+   ```python
+   from http.server import BaseHTTPRequestHandler, HTTPServer
+   import json
 
-## One action, one cell
+   class Hook(BaseHTTPRequestHandler):
+       def do_POST(self):
+           size = int(self.headers["Content-Length"])
+           event = json.loads(self.rfile.read(size))
+           print(event["notificationId"], event["action"], event.get("payload"))
+           self.send_response(200)   # any 2xx closes the banner
+           self.end_headers()
 
-An action is drawn in at most one cell of a template. Cells are visited top to bottom, left to right: a `button`
-bound by `actionRef` / `actionId` claims its action, an `actions` cell with `include` claims those ids in that
-order, and an `actions` cell without `include` shows what nobody claimed. When two cells ask for the same
-action the first in reading order draws it and the other renders empty (validation warns, naming both). That
-is how one action list is split across a banner; see [TEMPLATES.md](TEMPLATES.md#one-action-one-cell).
+   HTTPServer(("127.0.0.1", 5123), Hook).serve_forever()
+   ```
 
-## Destructive actions
+2. Tell Herald where the server is, by registering the app with a `callbackURL`.
 
-An action whose effective style is `destructive` (set by the issuer, the manifest, a rule or the button) is drawn
-with a red label and asks first: pressing it replaces the buttons with an inline "Run "Delete"?" row and Cancel,
-every time. It applies to template buttons and issuer actions alike, and comes before any approval the kind
-itself needs (a command's permission, a template's confirmation). The question is drawn in the banner and never
-takes focus. Old templates with `"destructive": true` on a button still work.
+   ```sh
+   curl -s -X POST "$HERALD/v1/register" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"app": "example.bidbot", "appName": "BidBot", "callbackURL": "http://127.0.0.1:5123/herald"}'
+   ```
 
-## Symbols on actions
+   The reply is `{"ok": true}`. You can instead put a `url` inside each button's `callback`. See
+   [`POST /v1/register`](reference/api/apps.md#post-v1register).
 
-An action can carry an SF Symbol, drawn on its button (a `button`, the `actions` row, an `iconButton`): `{"id":"archive","label":"Archive","kind":"command","command":"...","symbol":"archivebox"}`. `symbol` is a name or the full styling object (weight, scale, placement, renderingMode, colors, variableValue, effect; see TEMPLATES.md, "Symbols"). A component's own `symbol` is the default for the buttons it draws, and the action's `symbol` wins.
+3. Send a notification with callback buttons.
 
-A rule can give a symbol to existing actions without touching the issuer: `{"match":"markRead","symbol":{"name":"checkmark.circle.fill","renderingMode":"palette","colors":["white","#34C759"]}}` (`match: "*"` for all). `add_action_rule` accepts `symbol` on the rule and on an added action; an unknown name is a warning and the button simply has no symbol.
+   ```sh
+   curl -s -X POST "$HERALD/v1/notify" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{
+       "app": "example.bidbot",
+       "id": "bid-43",
+       "title": "Counter-offer from Acme",
+       "body": "They offer $3,900. Accept?",
+       "persistent": true,
+       "buttons": [
+         {"label": "Accept", "callback": {"payload": {"decision": "accept"}}},
+         {"label": "Decline", "style": "destructive", "callback": {"payload": {"decision": "decline"}}}
+       ]
+     }'
+   ```
 
-## The look of each button
+   The banner stays on screen until you press a button.
 
-Every action has its own look: it shows its text, an icon with its text, or an icon only. In the Designer, open the Actions tab: each row,
-for the issuer's buttons (from the manifest) and for the ones you added, has **Shows** (Text, Icon and text, Icon only) and its own icon
-picker with the full symbol styling (weight, scale, mode, colours, effect). Buttons that share a cell no longer share one icon. The reset
-arrow on a row puts the action back as the issuer sent it, which also undoes an icon change. The form for adding or editing an action has
-the same **Shows** choice; an **Icon only** action needs no label, and a label you give it is used as the tooltip.
+4. Press **Accept**.
 
-In template JSON the look is the action's `symbol`. For an issuer's action it is a rule with `match` and `symbol`; for an action you
-added it is `symbol` on the action itself. `placement` is `leading` (the default), `trailing` or `only`, and `only` drops the label:
+   Your server prints `bid-43 Accept {'decision': 'accept'}` and the banner closes. **Decline** is styled
+   `destructive`, so Herald asks **Run "Decline"?** first and only then sends the request.
+
+The server received this body. The `action` field is the label of the button, and `payload` is the data you attached.
 
 ```json
-{"actionRules":[
-  {"match":"markRead","symbol":{"name":"checkmark.circle","placement":"only"}},
-  {"add":{"id":"archive","label":"Archive","kind":"command","command":"/usr/local/bin/archive",
-          "symbol":{"name":"archivebox","placement":"only"}}}
-]}
+{
+  "notificationId": "bid-43",
+  "app": "example.bidbot",
+  "action": "Accept",
+  "payload": {"decision": "accept"}
+}
 ```
 
-Text only is an action with no `symbol`. The same fields are in [reference/symbols.md](reference/symbols.md) and
-[reference/actions.md](reference/actions.md#rules-actionrules).
+Answer with a `2xx` status once the work is done. Any other status keeps the banner on screen and shows **Action
+failed**, so the user can try again. Herald waits 5 seconds and retries once after a temporary failure.
+[Callbacks](reference/actions.md#callbacks) has the timing, the retry rules and the answers Herald accepts.
 
-## Augmenting the payload
+> [!NOTE]
+> A callback to a host that is not this Mac asks the user first. The banner shows **Send BidBot's button action to
+> HOST?** with **Send once** and **Always allow HOST**. Addresses on this Mac never ask.
 
-Every action receives the **merged payload**: the issuer's top-level fields, its `metadata`, and the
-template's `extra` key/values you authored (template `extra` wins on a key clash). Callbacks include it
-under `payload`, so you can enrich what an issuer's app hears back. Bindings in `input`, `command` and
-`url` read from the same merged data.
+## Add a reply field
 
-## Apple Shortcuts
+A reply button turns the banner into a small form. The user types an answer and sends it, without opening any window.
+Use it when you need a sentence, not a choice.
 
-Herald lists installed shortcuts with `shortcuts list` (`GET /v1/shortcuts`, MCP `list_shortcuts`, and a
-picker in the Designer: "Run shortcut..."). `shortcuts run` is headless, so a template's shortcut action is
-confirmed like a script: Herald shows the shortcut's name and its input the first time it would run, and asks
-again when either changes. It only runs when you press the button. Text input goes to the shortcut's
-"Receive input from" action; JSON input arrives as a file.
+1. Send a persistent notification with a `reply` button. The field needs the banner to stay on screen, so use
+   `persistent`.
 
-## Security
+   ```sh
+   curl -s -X POST "$HERALD/v1/notify" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{
+       "app": "example.bidbot",
+       "id": "bid-44",
+       "title": "Counter-offer from Acme",
+       "body": "What should we answer?",
+       "persistent": true,
+       "buttons": [{"label": "Reply", "reply": {"placeholder": "Message to Acme"}}]
+     }'
+   ```
 
-- Nothing runs on delivery. Actions run only when you press the button. `openApp`, `url`, `dismiss` and `snooze` run no code and need no confirmation (`openApp` only activates an app; a `destructive` style still asks first).
-- **Issuer commands** (`command` buttons sent in a notify) need `allowCommands` requested by the app and
-  confirmed in Settings > Apps, as in 1.0.
-- **Template-authored commands, scripts and shortcuts** (rule `add`s, inline component actions and a
-  template's default `buttons`) are yours. Herald asks once per template, showing the command, the script's
-  name, SHA-256 and text, or the shortcut's name and input, the first time it would run. "Always Allow This
-  Template" is bound to exactly what was shown: if a command is edited, a script file changes (its hash) or a
-  shortcut's name or input changes, Herald asks again. When such an action took the place of one of the
-  issuer's own buttons (same id), the prompt says which button it replaced and that the issuer will not hear
-  about the press.
-- Scripts must live under the `scripts` folder; paths outside it are refused.
-- Scripts receive the data on stdin, not on the command line, so prefer a script over a `command` when the
-  action handles text from untrusted senders (an email subject can contain anything).
-- Callbacks to a non-loopback host still need your approval; redirects are never followed.
-- The MCP can create and edit templates and actions but cannot press a button.
+2. Press **Reply** on the banner.
+
+   The buttons give way to a text field with the placeholder **Message to Acme**, a **Send** button and a close button.
+
+   ![A banner with a text field and a Send button in place of its buttons](../web/public/shots/docs/banner-reply.png "The reply field replaces the buttons inside the banner. The close button brings them back.")
+
+3. Type an answer and press **Send**.
+
+   The banner closes. Herald stores the answer on the notification in History and in the app's reply queue.
+
+4. Read the answer. If your program can wait, ask Herald to hold the request until the reply exists.
+
+   ```sh
+   curl -s "$HERALD/v1/replies/wait?app=example.bidbot&id=bid-44&timeout=60" \
+     -H "Authorization: Bearer $TOKEN"
+   ```
+
+   ```json
+   {
+     "replied": true,
+     "reply": {
+       "notificationId": "bid-44",
+       "app": "example.bidbot",
+       "text": "Counter at $4,000",
+       "repliedAt": "2026-10-02T14:21:07.000Z",
+       "title": "Counter-offer from Acme"
+     }
+   }
+   ```
+
+   If no one replies within the timeout, the answer is `{"replied": false, "timedOut": true}`. The parameters are in
+   [`GET /v1/replies/wait`](reference/api/replies.md#get-v1replieswait).
+
+   To read the queue without waiting, use [`GET /v1/replies`](reference/api/replies.md#get-v1replies).
+
+There are other ways to receive a reply:
+
+- An agent reads the same answer with the MCP tools [`wait_for_reply`](reference/mcp/notifications.md#wait_for_reply) and
+  [`get_replies`](reference/mcp/notifications.md#get_replies).
+- A program that runs a server can give the reply button a `callback`. The typed text arrives as `payload.reply` in the
+  request.
+- Notifications that come through the cloud relay can carry a voice reply, where the banner records and transcribes the
+  answer on the Mac.
+
+![A banner recording a voice reply, with Stop and a close button](../web/public/shots/docs/banner-record.png "A voice reply shows the elapsed time. Stop ends the recording and Send uploads it.")
+
+See [Cloud](CLOUD.md) for the relay.
+
+## Add a command button
+
+A command button runs a shell command on the Mac as the user. Because that is powerful, Herald only runs a command
+from an app the user has trusted.
+
+1. Register the app and say it wants to run commands.
+
+   ```sh
+   curl -s -X POST "$HERALD/v1/register" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{"app": "example.bidbot", "appName": "BidBot", "allowCommands": true}'
+   ```
+
+   Asking is not enough. The user still has to agree, in the next steps.
+
+2. Send a notification with a `command` button.
+
+   ```sh
+   curl -s -X POST "$HERALD/v1/notify" \
+     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+     -d '{
+       "app": "example.bidbot",
+       "id": "bid-45",
+       "title": "Report ready",
+       "persistent": true,
+       "buttons": [{"label": "Open report", "command": "open ~/Reports/bids.pdf"}]
+     }'
+   ```
+
+3. Press **Open report**.
+
+   The buttons give way to a question in the banner: **Run this command for BidBot?** The command is shown in a box,
+   with **Run once**, **Always allow BidBot** and **Cancel**.
+
+   ![A banner asking whether to run a command, showing the command in a box](../web/public/shots/docs/banner-confirm.png "The question names the app and shows the exact command before anything runs.")
+
+4. Press **Run once**.
+
+   The command runs and the banner closes. **Always allow BidBot** turns on **Allow this app to run commands**
+   under **Settings > Apps**, so later presses run at once. Turn the switch off to ask again.
+
+If the app never registered with `allowCommands`, the press fails with **commands are not allowed for BidBot** and
+nothing runs. The command text is never edited. The notification's data arrives on standard input as JSON and in
+`HERALD_*` environment variables, so a sender's text can never become part of a command line. See
+[What a process receives](reference/actions.md#what-a-process-receives).
+
+> [!WARNING]
+> A command runs with your user permissions. Allow commands only for apps you trust, and use a template script rather
+> than a command when the action handles text from strangers.
+
+## Change the buttons without changing the sender
+
+You can change an app's buttons yourself, in the Designer, without asking the app to change. Open the template, choose
+the **Actions** tab, and you see the app's buttons followed by the ones you added. For each of the app's buttons you can:
+
+- Hide it, rename it, or change its style.
+- Move it, or give it an icon.
+
+You can also add your own button: a link, a shell command, a script or an Apple Shortcut.
+
+![The Actions tab of the Designer, with the issuer's buttons and the buttons you added](../web/public/shots/docs/designer-inspector-actions.png "Each row has its own Shows control, so one button can show an icon while its neighbour shows text.")
+
+Code you add this way, such as a command, a script or a Shortcut, is confirmed once for the template the first time it
+runs. Herald asks again if the code changes. **Settings > Actions** lists the confirmations, with a **Revoke** button
+for each.
+
+![The Actions tab of Settings, listing the scripts folder and the templates whose code is confirmed](../web/public/shots/docs/settings-actions.png "A template shows Confirmed, Changed since confirmed or Not confirmed yet.")
+
+[Designing a banner](AUTHORING.md) walks through the Designer. The rules and fields are in
+[Action rules](reference/actions.md#action-rules).
+
+## Check that it works
+
+Send the link notification from the first section and press its button. If the page opens and the banner closes, the
+button path works. For a callback, watch your server print the press. To see the buttons without a real send, use the
+Designer's preview, which shows every action the manifest declares.
+
+## If it does not work
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The banner shows **Action failed** with `no callback URL`. | The button has no `callback.url` and the app has no `callbackURL`. | Register the app with a `callbackURL`. |
+| The banner shows **Action failed** with `connection refused`. | Nothing listens at the callback address. | Start your server, or correct the address. |
+| The banner shows **Action failed** with `HTTP 500`. | Your server answered with an error. | Fix the server. Herald retried once already. |
+| The banner shows **commands are not allowed for BidBot**. | The app was not registered with `allowCommands`. | Register with `allowCommands: true`, then press the button again. |
+| `send_notification` refuses a command button. | The MCP tool blocks shell commands unless asked. | Pass `allowCommandButtons: true`, or send the button through the API. |
+| A link button shows `this link type is not allowed`. | The link uses a scheme other than `http`, `https` or `mailto`. | Use one of those schemes. |
+| The banner closes before the user can answer. | A timeout or the app's defaults closed it. | Send with `"persistent": true`. |
+
+## Related
+
+- [Actions reference](reference/actions.md): every kind, field, rule, approval and failure.
+- [Manifests](reference/manifests.md): declare an app's buttons once and offer them by id.
+- [Notifications API](reference/api/notifications.md#button-object): the button object a notification sends.
+- [Replies API](reference/api/replies.md): read what the user typed, and the callback request.
+- [App settings API](reference/api/apps.md): registration and per-app approvals.
+- [Designing a banner](AUTHORING.md): the Designer and its **Actions** tab.

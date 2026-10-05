@@ -43,7 +43,7 @@
 
 ### Added
 
-- `integrations/dotcliffe-plugin`: the Herald Connection plugin wrapper that registers the relay with Dotcliffe's host as an
+- `integrations/dot-plugin`: the Herald Connection plugin wrapper that registers the relay with an OpenAI dot's host as an
   app, which is what lets the host subscribe to reply events.
 
 Upgrade the relay from Settings > Cloud to get the fix. Relay: 169 tests.

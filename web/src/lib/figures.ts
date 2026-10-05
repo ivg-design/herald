@@ -36,6 +36,21 @@ export function shots(): Map<string, Shot> {
   return out;
 }
 
+/** The size of a PNG in public/, from its header: pictures outside the manifest still reserve their space. */
+export function pngSize(publicPath: string): { width: number; height: number } | null {
+  try {
+    const b = readFileSync(join(process.cwd(), "public", publicPath));
+    if (b.length < 24 || b.toString("ascii", 1, 4) !== "PNG") return null;
+    return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+  } catch {
+    return null;
+  }
+}
+
+export function publicFileExists(publicPath: string): boolean {
+  return existsSync(join(process.cwd(), "public", publicPath));
+}
+
 const DOC_SHOT = /(?:^|\/)shots\/docs\/([^/?#]+)$/;
 
 /** The file name of a docs screenshot path, or null for any other image. */
@@ -46,4 +61,15 @@ export function shotName(src: string): string | null {
 
 /** Numbered callouts over a capture, as percentages of its width and height. The legend is the ordered list that
  *  follows the image in the Markdown, so the page reads the same on GitHub; item n belongs to hotspot n. */
-export const HOTSPOTS: Record<string, { x: number; y: number }[]> = {};
+export const HOTSPOTS: Record<string, { x: number; y: number }[]> = {
+  // docs/AUTHORING.md: mode bar, issuer and templates, palette, live preview, editor bar, grid canvas, inspector
+  "designer-overview.png": [
+    { x: 20.5, y: 13.2 },
+    { x: 19.5, y: 19.5 },
+    { x: 20.5, y: 43.7 },
+    { x: 46, y: 27 },
+    { x: 37, y: 55.4 },
+    { x: 33, y: 74 },
+    { x: 91.5, y: 17.2 },
+  ],
+};

@@ -34,4 +34,19 @@ function walk(src, dst) {
   }
 }
 walk(join(repo, "docs"), join(out, "docs"));
+
+// Pictures a docs page shows from its own `screenshots` folder (the examples) are served from public/docs-img/<path under docs/>.
+const img = join(web, "public", "docs-img");
+rmSync(img, { recursive: true, force: true });
+function pictures(src, rel) {
+  for (const name of readdirSync(src)) {
+    const s = join(src, name);
+    if (statSync(s).isDirectory()) pictures(s, join(rel, name));
+    else if (/\/screenshots$/.test(src) && /\.(png|jpe?g|webp|gif)$/i.test(name)) {
+      mkdirSync(join(img, rel), { recursive: true });
+      copyFileSync(s, join(img, rel, name));
+    }
+  }
+}
+pictures(join(repo, "docs"), "");
 console.log("sync-content: copied README, CHANGELOG, clients and docs into web/content");
