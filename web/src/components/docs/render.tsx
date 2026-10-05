@@ -8,7 +8,7 @@ import { renderTree, type LinkResolver } from "@/lib/markdown";
 import CodeBlock from "./CodeBlock";
 import Figure from "./Figure";
 import { asset } from "@/lib/config";
-import { HOTSPOTS, pngSize, publicFileExists, shotName, shots } from "@/lib/figures";
+import { HOTSPOTS, focusOf, pngSize, publicFileExists, shotName, shots } from "@/lib/figures";
 
 function DocLink({ href, children, ...rest }: ComponentProps<"a">) {
   const h = href ?? "";
@@ -362,6 +362,7 @@ function figures(parent: Root | Element) {
           width: size?.width ? Math.round(size.width / scale) : undefined,
           height: size?.height ? Math.round(size.height / scale) : undefined,
           hotspots: spots,
+          focus: focusOf(raw),
         }),
       },
       children: [],

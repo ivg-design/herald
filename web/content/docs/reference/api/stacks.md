@@ -21,7 +21,7 @@ What "belong together" means is the **stacking level**.
 There is one global level, and each app can override it. The concept is explained in full, with examples, in
 the [stacking reference](../stacking.md).
 
-![A closed stack of banners with a count badge](../../../web/public/shots/docs/banner-stack-closed.png "A closed stack. The card on top is the newest notification and the badge counts the rest.")
+![A closed stack of banners with a count badge reading 3](../../../web/public/shots/docs/banner-stack-closed.png "A closed stack. The card on top is the newest notification and the badge counts the notifications in the stack.")
 
 ## Endpoints
 

@@ -97,7 +97,9 @@ designer.png: PNG image data, 2200 x 1640, 8-bit/color RGBA
 
 - A `rive` cell is drawn as a labelled placeholder, as in a banner preview.
 
-![The Designer window as drawn by a snapshot, with a cell selected](../../../web/public/shots/docs/designer-cell-selected.png "A snapshot with select set to a cell id shows that cell selected and its properties in the inspector.")
+The picture is the whole Designer window, like this one:
+
+![The Designer window as drawn by a snapshot, with a title text cell selected](../../../web/public/shots/docs/designer-cell-selected.png "A snapshot with select set to a cell id shows that cell selected and its properties in the inspector.")
 
 ### `POST /v1/designer/snapshot`
 

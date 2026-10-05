@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.2 (Build 21) - 2026-10-04
+
+### Fixed
+
+- Settings > General: the reset button reads "Reset to 48617", without a thousands separator in the port number.
+- Designer: the preview header and an action row's caption no longer end in "…" at the default window width.
+- Settings > Cloud: "Last relay items" shows a connector's name (ChatGPT) instead of its key slug.
+
+### Added
+
+- A Debug-only screenshot mode that draws every window offscreen for the documentation
+  (`scripts/docs-screenshots.sh`); nothing of it is in release builds.
+
 ## 1.8.1 (Build 20) - 2026-10-04
 
 ### Fixed

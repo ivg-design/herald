@@ -15,7 +15,7 @@ notifications and design templates. Installing it means adding an entry to the c
 file. Herald keeps a backup of the file it edits. Installing also registers the agent as an app in Herald, so
 its notifications arrive with the agent's name and icon.
 
-![The MCP tab of Herald's Settings, listing the clients with an Install button for each](../../../web/public/shots/docs/settings-mcp.png "Settings > MCP. Each Install button does what POST /v1/mcp/install does for that client.")
+![The MCP tab of Herald's Settings, listing the clients with an Install or Reinstall button for each](../../../web/public/shots/docs/settings-mcp.png "Settings > MCP. The Install button does what POST /v1/mcp/install does for that client.")
 
 ## Endpoints
 

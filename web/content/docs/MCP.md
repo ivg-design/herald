@@ -18,7 +18,7 @@ Once connected, the agent can do three things:
 
 1. Click the Herald bell in the menu bar, choose **Settings**, and open the **MCP** tab.
 
-   ![The MCP tab of Herald's Settings: the Server section with its path and Test connection, one row per client with its status, and the Command line tool section](../web/public/shots/docs/settings-mcp.png "Settings > MCP. Each client row shows Installed, Not installed or Client not found, and an Install or Reinstall button.")
+   ![The MCP tab of Herald's Settings: the Server section with its path and Test connection, one row per client with its status, and the Command line tool section](../web/public/shots/docs/settings-mcp.png "Settings > MCP. Each client row shows Installed or Not installed and a Reinstall or Install button.")
 
    The **Server** section shows the path of the bundled server. Herald.app carries it in `Herald.app/Contents/Helpers/`, signed with the app.
 

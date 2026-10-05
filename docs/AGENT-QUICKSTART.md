@@ -11,7 +11,7 @@ This is the shortest path from nothing to an agent that can put a banner on your
 
 1. Click the Herald bell, choose **Settings**, and open the **MCP** tab.
 
-   ![The MCP tab of Herald's Settings with one row per client](../web/public/shots/docs/settings-mcp.png "Settings > MCP. Press Install on the row of your client.")
+   ![The MCP tab of Herald's Settings with a row for Claude Code, Codex and Claude Desktop, and a Generic client](../web/public/shots/docs/settings-mcp.png "Settings > MCP. Press Install on the row of your client. A client that is installed already shows Reinstall.")
 
    The tab lists Claude Code, Codex, Claude Desktop and Generic.
 

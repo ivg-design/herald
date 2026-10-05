@@ -15,7 +15,7 @@ ChatGPT cannot take a pasted key. For it, see [Connect ChatGPT](connect-chatgpt.
 
 1. Open **Settings > Cloud** and find the **Agent keys** section.
 
-   ![The Cloud tab of Settings with the Agent keys section](../../web/public/shots/docs/settings-cloud-paired.png "Agent keys is near the bottom of the Cloud tab: a name field, the Agent menu and the Create key button.")
+   ![The Cloud tab of Settings with the Agent keys section](../../web/public/shots/docs/settings-cloud-paired.png#focus=74 "Agent keys is near the bottom of the Cloud tab: a name field, the Agent menu and the Create key button.")
 
 2. Type a name for the key, for example `build-bot`, choose the agent in the **Agent** menu (**Claude**,
    **Codex** or **Other**), and press **Create key**.
@@ -104,7 +104,7 @@ Every cloud banner has two buttons for answering:
   until you press it, and macOS asks for the microphone the first time. The recording is transcribed on your
   Mac, and the agent receives the transcript and a link to the audio.
 
-  ![A banner with the recording strip open](../../web/public/shots/docs/banner-record.png "Record shows the elapsed time out of 60 seconds, with Stop and a button to cancel.")
+  ![A banner with the recording strip open: a red dot, 0:07 of 60 s, a Stop button and a cancel cross](../../web/public/shots/docs/banner-record.png "Record shows the elapsed time out of 60 seconds, with Stop and a button to cancel.")
 
 An agent can hide **Record** for a notification, and it can ask the relay to tell it the moment you reply. See
 [Reply events](reply-events.md).

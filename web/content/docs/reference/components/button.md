@@ -30,7 +30,7 @@ Apple Shortcut with the title and link as its input and shows an icon next to it
               "input":"{title}\n{url}","symbol":"flag"}}}]}
 ```
 
-![A banner with action buttons under its text](../../../web/public/shots/docs/banner-actions.png "Each capsule under the text is an action. A button component draws one of them in a cell of its own.")
+![A banner with four buttons under its text: Open log, an icon-only button, Dismiss and Post to Slack](../../../web/public/shots/docs/banner-actions.png "Each capsule under the text is an action. A button component draws one of them in a cell of its own.")
 
 **Properties**
 
@@ -107,7 +107,9 @@ symbol picker. The same **Shows** control sits in the form that adds or edits an
 
 ![The Actions tab of the Designer inspector with a Shows menu on each action](../../../web/public/shots/docs/designer-inspector-actions.png "Each action in the Buttons list has its own Shows menu and icon.")
 
-![The form for adding an action, with the Shows control and the symbol section](../../../web/public/shots/docs/designer-action-form.png "The action form's Shows control chooses text, icon and text, or icon only. The symbol is picked below it.")
+The form that adds an action has the same control:
+
+![The Add action form with Label, Shows, Does this and Button style, above the settings for an Apple Shortcut](../../../web/public/shots/docs/designer-action-form.png "The Shows control of the form chooses text, icon and text, or icon only. The symbol is picked lower in the form.")
 
 ## Labels and sizing
 

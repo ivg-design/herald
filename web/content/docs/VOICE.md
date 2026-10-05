@@ -24,7 +24,7 @@ no text or audio is sent anywhere.
 1. Open **Settings > Voice**. The **Speech** section is at the top.
 2. Choose an engine in the **Engine** menu.
 
-   ![The Voice tab of Herald's Settings window with the Engine menu, the voice and speed controls, the quiet hours section and the per-app list](../web/public/shots/docs/settings-voice.png "Settings > Voice: the engine, voice and speed at the top, the Speak test below, then quiet hours and the per-app list.")
+   ![The Voice tab of Herald's Settings window with the Speech section (Engine, Voice and Speed), the Test field, the Quiet hours section and the Speak per app list](../web/public/shots/docs/settings-voice.png "Settings > Voice: Engine, Voice and Speed in the Speech section, the Test field, then Quiet hours and Speak per app.")
 
    | Engine | What it is |
    |---|---|
@@ -76,7 +76,7 @@ herald notify --app example.bidbot --title "Bid accepted" \
 The banner appears and at the same moment you hear "Bid accepted. Your bid of $4,200 on the Acme RFP was
 accepted." A small speaker control sits beside the banner's time. Press it to hear the message again.
 
-![A Herald banner with a small speaker control beside its time](../web/public/shots/docs/banner-speech.png "A spoken banner. The speaker control beside the time plays the message again.")
+![A banner titled Tests pass with a small speaker icon beside its time](../web/public/shots/docs/banner-speech.png "A different spoken banner from the one in the example. The speaker icon beside the time, at the bottom right, plays the message again.")
 
 To say something different from what the banner shows, give the text, voice, speed and language yourself:
 

@@ -36,7 +36,7 @@ add a Shortcut of its own. The row shows at most four buttons.
   {"add":{"id":"followup","label":"Follow up","kind":"shortcut","shortcut":"Create follow-up","input":"{title}\n{url}"}}]}
 ```
 
-![A banner with a row of action buttons under its text](../../../web/public/shots/docs/banner-actions.png "The row of capsule buttons under the text is an actions component.")
+![A banner with a row of four buttons under its text: Open log, an icon-only button, Dismiss and Post to Slack](../../../web/public/shots/docs/banner-actions.png "The row of capsule buttons under the text is an actions component.")
 
 **Properties**
 
@@ -119,8 +119,6 @@ In the Designer these are the **Align** control (**Left**, **Centre**, **Right**
 **Max** sets `maxVisible`. The **Shows** control of an Actions cell, with **Both**, **Issuer** and **Mine**, sets
 `source`. It is not the per-action **Shows** control described below.
 
-![A cell with the Actions component selected in the Designer inspector](../../../web/public/shots/docs/designer-cell-selected.png "The inspector of an Actions cell has the source, layout, maximum, alignment, wrapping and spacing, and the choice of which actions it shows.")
-
 ## One action, one cell
 
 An action is drawn in at most one cell of a template. Cells are visited from top to bottom and from left to right:
@@ -188,6 +186,12 @@ In the Designer, open the **Actions** tab of the inspector. Every action in the 
 A change to an issuer action is saved as a rule, so the issuer's action itself is never edited. A **Shows** choice for an action you added changes that action.
 
 ![The Actions tab of the Designer inspector, with a Shows menu under each action](../../../web/public/shots/docs/designer-inspector-actions.png "Each action in the Buttons list has its own Shows menu: Text, Icon and text, or Icon only.")
+
+The **Icon** button opens a panel for that action's symbol:
+
+![The Symbol panel for one action with Name, Weight, Scale, Place, Mode, Set a color, Variable and Effect](../../../web/public/shots/docs/designer-action-icon-popover.png "The panel that Change icon opens: the symbol name, weight, scale, where it sits, its mode, colour and effect.")
+
+The picker beside **Name** in that panel opens the symbol browser:
 
 ![The Designer's symbol browser listing SF Symbols](../../../web/public/shots/docs/designer-symbol-browser.png "The symbol browser opens from the Icon button and lists SF Symbols by name and category.")
 

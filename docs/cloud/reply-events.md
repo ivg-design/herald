@@ -55,7 +55,7 @@ agent unsubscribes, when you end it in Settings, or when you revoke the connecto
 whether anything is waiting to be delivered. Press **End** to stop one. The connector stays approved and may
 subscribe again.
 
-![The Cloud tab of Settings showing the Reply subscriptions section](../../web/public/shots/docs/settings-cloud-paired.png "Reply subscriptions sits below Connector approvals. Each row names the connector and the host that is called.")
+![The Cloud tab of Settings with the Reply subscriptions section showing one subscription and an End button](../../web/public/shots/docs/settings-cloud-paired.png#focus=52 "Reply subscriptions sits below Connector approvals. Each row names the connector and the host that is called, with an End button.")
 
 The path of the callback address and its secret are never shown, in Settings or through any API. From a
 script, use [`GET /v1/relay/events`](../reference/api/relay.md#get-v1relayevents).
@@ -119,7 +119,7 @@ that does this, named `herald-connection`. Nothing in it is a secret.
    notifications. Press **Approve**. If you missed the banner, the 6-digit code is in
    **Settings > Cloud > Connector approvals**.
 
-   ![A banner asking whether to let a connector send notifications](../../web/public/shots/docs/banner-connector-consent.png "Approve the app once. The approval is durable and also covers its reply subscriptions.")
+   ![A banner titled Connector request asking whether to let Claude Desktop send notifications, with Approve and Deny buttons](../../web/public/shots/docs/banner-connector-consent.png "Approve the app once. Here the connector is Claude Desktop; yours names the app you registered. The approval is durable and also covers its reply subscriptions.")
 
 3. Copy the id of the registered app. It starts with `asdk_app_`.
 

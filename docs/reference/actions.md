@@ -72,7 +72,7 @@ An action that runs code on your Mac, or sends data to another computer, asks fi
 the banner, replacing the buttons, and never opens a window or takes the keyboard from the app you are working in.
 The question shows the exact command, script or address in a monospaced box.
 
-![A banner asking whether to run a command, with Run once, Always allow and Cancel](../../web/public/shots/docs/banner-confirm.png "The question replaces the buttons and shows exactly what will run.")
+![A banner asking Run Deploy, with a warning icon, a line saying the button is marked destructive, a red Deploy button and Cancel](../../web/public/shots/docs/banner-confirm.png "The question replaces the buttons. This one is for a destructive button. A command question shows Run once, Always allow and Cancel in the same place, with the exact command.")
 
 | What | Who asks | What you see | How it is remembered |
 |---|---|---|---|
@@ -99,7 +99,7 @@ The rules behind the table:
 
 The approvals you gave are listed on the **Actions** tab of Settings.
 
-![The Actions tab of Settings, listing the scripts folder and the templates whose commands are confirmed](../../web/public/shots/docs/settings-actions.png "Each template with code of its own shows Confirmed, Changed since confirmed or Not confirmed yet, with a Revoke button.")
+![The Actions tab of Settings with the scripts folder and one template row marked Not confirmed yet](../../web/public/shots/docs/settings-actions.png "Each template with code of its own shows Confirmed, Changed since confirmed or Not confirmed yet. A Revoke button appears on rows that have a confirmation.")
 
 ## Action object
 
@@ -399,13 +399,13 @@ The field has a **Send** button, which stays off while the field is empty, and a
 button brings the buttons back and stores nothing. A reply is trimmed and cut at 4000 bytes. After a send, the banner closes, once the callback
 has been delivered when there is one.
 
-![A banner with a text field in place of its buttons](../../web/public/shots/docs/banner-reply.png "After Reply is pressed, the field and the Send button take the place of the buttons.")
+![A banner titled Migration finished with a text field, a Send button and a close button in place of its buttons](../../web/public/shots/docs/banner-reply.png "After Reply is pressed, the field and the Send button take the place of the buttons.")
 
 With `voice: true` the banner shows a recording strip. **Stop** ends the recording and **Send** uploads it. Herald transcribes the recording on
 this Mac and sends the audio and the text back to the sender through the relay. See
 [Cloud](../CLOUD.md) and [Reply events](../cloud/reply-events.md).
 
-![A banner recording a voice reply](../../web/public/shots/docs/banner-record.png "The recording strip shows the elapsed time, with Stop and then Send.")
+![A banner titled Migration finished with a recording strip: a red dot, the elapsed time, a Stop button and a cancel cross](../../web/public/shots/docs/banner-record.png "The recording strip shows the elapsed time, with Stop and a cancel cross. Send appears after Stop.")
 
 **Minimal example**
 
@@ -609,7 +609,7 @@ In the Designer, each row of the **Actions** tab has **Shows** and an icon picke
 - A symbol is a name, or an object with the keys described in [Symbols](symbols.md).
 - An unknown symbol name is a warning, and the button simply has no icon.
 
-![The action form with its Shows control, kind, style and symbol](../../web/public/shots/docs/designer-action-form.png "The form for one action: label, Shows, kind, style, the kind's own fields and the symbol.")
+![The Add action form with Label, Shows, Does this and Button style, above the settings for an Apple Shortcut](../../web/public/shots/docs/designer-action-form.png "The form for one action: label, Shows, Does this, Button style and the kind's own fields. The symbol section is lower in the form.")
 
 ## Callbacks
 

@@ -369,7 +369,7 @@ The [Designer](../AUTHORING.md) shows a **Symbol** section in the inspector when
 symbol. It has a **Name** field with a picker, and rows for each property of the symbol object. Every change appears on
 the canvas and in the live preview at once.
 
-![The symbol browser, with categories on the left, a grid of symbols and a preview with a Use symbol button](../../web/public/shots/docs/designer-symbol-browser.png "The symbol browser opened from the picker next to Name. Select a symbol to preview it, then press Use symbol or double-click it.")
+![The symbol browser with categories on the left, a grid of symbols and an empty preview pane that asks you to select a symbol](../../web/public/shots/docs/designer-symbol-browser.png "The symbol browser opened from the picker next to Name. No symbol is selected here. Select one to preview it, then press Use symbol or double-click it.")
 
 The picker next to **Name** opens the symbol browser, either in a sheet or in a floating panel that stays beside the
 Designer. The browser has these parts:

@@ -51,12 +51,18 @@ export function publicFileExists(publicPath: string): boolean {
   return existsSync(join(process.cwd(), "public", publicPath));
 }
 
-const DOC_SHOT = /(?:^|\/)shots\/docs\/([^/?#]+)$/;
+const DOC_SHOT = /(?:^|\/)shots\/docs\/([^/?#]+)(?:#.*)?$/;
 
 /** The file name of a docs screenshot path, or null for any other image. */
 export function shotName(src: string): string | null {
   const m = src.match(DOC_SHOT);
   return m ? m[1] : null;
+}
+
+/** `#focus=70` on an image path: which part of a tall capture the page shows (percent from the top). GitHub ignores it. */
+export function focusOf(src: string): number | undefined {
+  const m = src.match(/#focus=(\d{1,3})$/);
+  return m ? Math.min(100, Number(m[1])) : undefined;
 }
 
 /** Numbered callouts over a capture, as percentages of its width and height. The legend is the ordered list that
@@ -69,7 +75,7 @@ export const HOTSPOTS: Record<string, { x: number; y: number }[]> = {
     { x: 20.5, y: 43.7 },
     { x: 46, y: 27 },
     { x: 37, y: 55.4 },
-    { x: 33, y: 74 },
+    { x: 36, y: 61 },
     { x: 91.5, y: 17.2 },
   ],
 };

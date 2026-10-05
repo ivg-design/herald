@@ -19,7 +19,7 @@ a **schema** that describes every key, and **options** that list the allowed cho
 installed sounds, the connected displays and the available voices. A program can build a settings screen from
 those two parts without knowing the keys in advance.
 
-![The General tab of Herald's Settings](../../../web/public/shots/docs/settings-general.png "Settings > General. Every control here is one key of the settings table.")
+![The General tab of Herald's Settings with the Local API port, Launch at login, Mute all sounds, Tooltips and Keep per app](../../../web/public/shots/docs/settings-general.png "Settings > General. Each control here maps to a key of the settings table.")
 
 ## Endpoints
 

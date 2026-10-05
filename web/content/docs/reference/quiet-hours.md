@@ -35,12 +35,12 @@ The schedule lives in **Settings > Voice > Quiet hours**. A status line reads **
 **Quiet until 07:30** with a **Resume Now** button. Below it is one editor per window, then **Add Window** and
 **Quiet for 1 Hour**.
 
-![The Quiet hours section of the Voice tab in Herald's Settings, showing one window from 22:30 until 07:30 with day buttons and the Speech, Sounds and Banners switches](../../web/public/shots/docs/settings-quiet-hours.png "A window editor: the day buttons, the From and until times, what the window silences, and the summary switch.")
+![The Quiet hours section of the Voice tab in Herald's Settings, showing one window from 22:30 until 07:30 with day buttons and the Speech, Sounds and Banners checkboxes](../../web/public/shots/docs/settings-quiet-hours.png "A window editor: the day buttons, the From and until times, what the window silences, and the checkbox that speaks what was held back.")
 
 The menu has the quick controls. When Herald is not quiet it shows **Quiet for 1 Hour**. While it is quiet it
 shows **Quiet until 07:30** with **Resume Now** under it.
 
-![The Herald menu with the Quiet for 1 Hour item](../../web/public/shots/docs/menu.png "The menu: Quiet for 1 Hour, or Quiet until a time with Resume Now while Herald is quiet.")
+![The Herald menu with the Quiet for 1 Hour item below Mute Sounds](../../web/public/shots/docs/menu.png "The menu with Quiet for 1 Hour. While Herald is quiet the item reads Quiet until a time, with Resume Now under it.")
 
 Agents and scripts use the API, the CLI or MCP:
 

@@ -17,7 +17,7 @@ list of fields, kinds and rules is in the [actions reference](reference/actions.
 A button is part of the notification. You send it in `buttons`, and each button does one thing. Herald draws it on the
 banner, waits for the user to press it, then does what the button says and closes the banner.
 
-![A banner with three buttons under its text](../web/public/shots/docs/banner-actions.png "A banner with Accept, Decline and Reply. Each button is one entry of the buttons list.")
+![A banner titled Build failed with four buttons under its text: Open log, an icon-only button, Dismiss and Post to Slack](../web/public/shots/docs/banner-actions.png "A banner with buttons. Each button is one entry of the buttons list, or one the template adds, like the last one here.")
 
 The buttons you send are the **issuer's** buttons. You can also declare them once in the app's
 [manifest](reference/manifests.md#actions), and the user can hide, rename or add to them in the Designer without
@@ -149,7 +149,7 @@ Use it when you need a sentence, not a choice.
 
    The buttons give way to a text field with the placeholder **Message to Acme**, a **Send** button and a close button.
 
-   ![A banner with a text field and a Send button in place of its buttons](../web/public/shots/docs/banner-reply.png "The reply field replaces the buttons inside the banner. The close button brings them back.")
+   ![A banner titled Migration finished with a text field, a Send button and a close button in place of its buttons](../web/public/shots/docs/banner-reply.png "The reply field replaces the buttons inside the banner. This banner's field says Reply to Claude (build-bot)...; yours shows Message to Acme. The close button brings the buttons back.")
 
 3. Type an answer and press **Send**.
 
@@ -189,7 +189,7 @@ There are other ways to receive a reply:
 - Notifications that come through the cloud relay can carry a voice reply, where the banner records and transcribes the
   answer on the Mac.
 
-![A banner recording a voice reply, with Stop and a close button](../web/public/shots/docs/banner-record.png "A voice reply shows the elapsed time. Stop ends the recording and Send uploads it.")
+![A banner titled Migration finished with a recording strip: a red dot, 0:07 of 60 s, a Stop button and a cancel cross](../web/public/shots/docs/banner-record.png "A voice reply shows the elapsed time out of the longest recording. Stop ends the recording and Send then uploads it.")
 
 See [Cloud](CLOUD.md) for the relay.
 
@@ -227,7 +227,7 @@ from an app the user has trusted.
    The buttons give way to a question in the banner: **Run this command for BidBot?** The command is shown in a box,
    with **Run once**, **Always allow BidBot** and **Cancel**.
 
-   ![A banner asking whether to run a command, showing the command in a box](../web/public/shots/docs/banner-confirm.png "The question names the app and shows the exact command before anything runs.")
+   ![A banner titled Preview looks good asking Run Deploy, with a warning icon, a line saying the button is marked destructive, a red Deploy button and a Cancel button](../web/public/shots/docs/banner-confirm.png "The same kind of question, here for a destructive Deploy button: the question, a line about why Herald asks, and the answers. A command question shows Run once, Always allow and Cancel in this place.")
 
 4. Press **Run once**.
 
@@ -259,7 +259,7 @@ Code you add this way, such as a command, a script or a Shortcut, is confirmed o
 runs. Herald asks again if the code changes. **Settings > Actions** lists the confirmations, with a **Revoke** button
 for each.
 
-![The Actions tab of Settings, listing the scripts folder and the templates whose code is confirmed](../web/public/shots/docs/settings-actions.png "A template shows Confirmed, Changed since confirmed or Not confirmed yet.")
+![The Actions tab of Settings with the scripts folder and one template row marked Not confirmed yet](../web/public/shots/docs/settings-actions.png "A template row shows its status at the right: Confirmed, Changed since confirmed or Not confirmed yet. This one is Not confirmed yet.")
 
 [Designing a banner](AUTHORING.md) walks through the Designer. The rules and fields are in
 [Action rules](reference/actions.md#action-rules).

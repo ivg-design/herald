@@ -30,7 +30,7 @@ Markdown links.
 
 In the picture below, look at the three lines of text: the bold title, the grey subtitle line and the body. Each is a text component, and the styles `title`, `subtitle` and `body` give them their size and colour.
 
-![A banner showing a title, a subtitle line and a body of text](../../../web/public/shots/docs/banner-plain.png "Each line of text on the banner is a text component. The bold title uses the title style, the grey line the subtitle style and the last lines the body style.")
+![A banner with a bold title, a grey subtitle line and two lines of body text](../../../web/public/shots/docs/banner-plain.png "Each line of text on the banner is a text component. The bold title uses the title style, the grey line the subtitle style and the last lines the body style.")
 
 **Properties**
 
@@ -148,7 +148,9 @@ How empty lines are handled:
 Clicking a banner whose text was cut shows all of it and the banner grows. A second click folds it back. The behaviour is
 described in [How banners behave](../banners.md).
 
-![A banner whose long body is cut off at its line limit](../../../web/public/shots/docs/banner-long-collapsed.png "A long body is cut at its line limit.")
+![A banner whose long body ends in an ellipsis at its line limit](../../../web/public/shots/docs/banner-long-collapsed.png "A long body is cut at its line limit.")
+
+After one click the same banner shows the whole text.
 
 ![The same banner after a click, with the whole body shown](../../../web/public/shots/docs/banner-long-expanded.png "A click on the banner lifts the line limits so the whole text is readable.")
 

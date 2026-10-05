@@ -122,6 +122,8 @@ Settings tab, History, the menu, each banner state, and each step of a how-to th
 - Names of buttons, tabs and fields in the text match the labels visible in the screenshot exactly.
 - Never use a screenshot of text that should be a code block. No decorative images.
 - In a how-to, show a screenshot at each step where the screen changes.
+- A capture of a whole Settings tab is much taller than wide, so the site shows a window of it and opens the
+  rest on a click. Add `#focus=70` to the image path to show the part 70 percent of the way down. GitHub ignores it.
 - An annotated figure is an image followed directly by an ordered list. The site overlays the list numbers on
   the image, and on GitHub the list reads as a plain legend.
 

@@ -260,6 +260,25 @@ for (const f of files) {
   lintFile(f);
 }
 
+// The name of an individual dot must not appear in site copy or client code either (docs/STYLE.md, Language).
+if (!args.length) {
+  const walkAll = (dir, out = []) => {
+    if (!existsSync(dir)) return out;
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) { if (!["node_modules", "__pycache__"].includes(name)) walkAll(p, out); }
+      else if (/\.(tsx?|css|mjs|js|py|md|json)$/.test(name)) out.push(p);
+    }
+    return out;
+  };
+  for (const f of [...walkAll(join(repo, "web", "src")), ...walkAll(join(repo, "clients")), ...walkAll(join(repo, "web", "content"))]) {
+    readFileSync(f, "utf8").split("\n").forEach((l, i) => {
+      if (/dotcliff/i.test(l)) report(f, i + 1, "names an individual dot");
+      if (/bidbot[ -]relay/i.test(l)) report(f, i + 1, "names a private project");
+    });
+  }
+}
+
 if (problems.length) {
   for (const p of problems) console.log(p);
   console.log(`\n${problems.length} problem${problems.length === 1 ? "" : "s"} in ${new Set(problems.map((p) => p.split(":")[0])).size} file(s); ${files.length} checked`);

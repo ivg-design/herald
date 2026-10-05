@@ -21,7 +21,7 @@ who uses Herald day to day and wants to know what a control does.
 Click the bell in the menu bar to open the menu. The bell shows the number of notifications you have not dismissed next
 to it, and is drawn dimmer while sounds are muted.
 
-![The Herald menu from the menu bar, listing the unread count, Compose, Design Template, History, Mute Sounds, quiet hours, Stack Notifications, Dismiss All, Settings and Quit Herald](../web/public/shots/docs/menu.png "The menu from the bell. The keys on the right work while the menu is open.")
+![The Herald menu from the menu bar, listing the unread count, Compose, Design Template, History, Mute Sounds, Quiet for 1 Hour, Stack Notifications, Dismiss All, Settings and Quit Herald](../web/public/shots/docs/menu.png "The menu from the bell, here with 12 unread. The keys on the right work while the menu is open.")
 
 | Item | What it does | Key |
 |---|---|---|
@@ -47,7 +47,7 @@ explains windows and the one-hour quiet period.
 to try an app's template with real text, to test a button, or to build a request that you then copy into a script.
 Nothing is stored until you press **Save as Template...**.
 
-![The Quick send form with the app, template, content, buttons and behavior sections beside a live preview](../web/public/shots/docs/designer-quick-send.png "Quick send: the form on the left, the preview in light and dark on the right, and the action bar below.")
+![The Quick send form with the Notification, Content, Buttons and Behavior sections on the left and a Light and Dark preview on the right](../web/public/shots/docs/designer-quick-send.png "Quick send: the sections on the left, the Light and Dark preview on the right, and Clear, Copy as..., Save as Template... and Send Now along the bottom. Send Now stays off until the Title is filled.")
 
 The form has these sections, from the top. A live preview of the banner, in light and dark, sits beside it.
 
@@ -92,7 +92,7 @@ documents the request that **Send Now** makes.
 History is the list of every notification Herald has shown, newest first. A closed banner is never lost: it is here.
 Open it with **History...** in the menu. The window is called **Herald History**.
 
-![The History window with a list of apps on the left and notifications drawn as banners on the right](../web/public/shots/docs/history.png "History. The list on the left chooses an app, and each notification on the right is drawn the way its banner looked.")
+![The History window with the app list on the left and notifications drawn as banners on the right](../web/public/shots/docs/history.png "History with All Apps selected. The list on the left chooses an app, and each notification on the right is drawn the way its banner looked.")
 
 ### The app list
 
@@ -122,7 +122,7 @@ view. Type several words and each of them must match. The search ignores case an
 The cross inside the field clears the search too. When nothing matches, the window says **No matches** and offers
 **Clear Search**.
 
-![The History window filtered to one app and a search word, with the matching notifications listed](../web/public/shots/docs/history-filtered.png "One app selected and a word typed in the search field. Only matching notifications remain.")
+![The History window with GitHub Actions selected and the word build in the search field, with two matching notifications listed](../web/public/shots/docs/history-filtered.png "GitHub Actions selected and build typed in the search field. The field shows 2 items, and only the matching notifications remain.")
 
 ### Reading a row
 
@@ -195,7 +195,7 @@ Each control has a setting key, documented in [Settings API](reference/api/setti
 The **Apps** tab lists every app that has sent a notification, and lets you set how each one behaves. A new app appears
 after its first notification. Until then the tab says **Apps appear here after their first notification.**
 
-![The Apps tab with a list of apps on the left and the settings of the selected app on the right](../web/public/shots/docs/settings-apps.png "The Apps tab. Choose an app on the left to see its settings on the right.")
+![The Apps tab with the app list on the left and the page for GitHub Actions on the right: icon, Identifier, Defaults, Banners, Templates, Commands and the Remove button](../web/public/shots/docs/settings-apps.png "The Apps tab. Choose an app on the left to see its page on the right. GitHub Actions is chosen here.")
 
 Select an app to see its page. It has these parts, from the top.
 
@@ -288,7 +288,7 @@ and the `delete_app` tool do the same removal for a program.
 The **Actions** tab is where you see and control the two places where a banner button runs code on your Mac: script
 files, and commands that a template carries.
 
-![The Actions tab listing the scripts folder and the templates that carry commands, each with a status and a Revoke button](../web/public/shots/docs/settings-actions.png "The Actions tab. The top lists script files, the bottom lists templates that carry code of their own.")
+![The Actions tab with the Scripts list (two scripts marked executable, Reveal in Finder, Refresh and Show Log) and the Template commands, scripts and Shortcuts list with one row marked Not confirmed yet](../web/public/shots/docs/settings-actions.png "The Actions tab. The top lists script files, the bottom lists templates that carry code of their own. The status of a row is at its right.")
 
 | Control | What it does |
 |---|---|
@@ -312,7 +312,7 @@ approvals, and the list of approvals is also available as
 The **Voice** tab chooses how Herald speaks notifications aloud, which apps may speak, and when Herald stays quiet.
 Speech is made on your Mac. No text or audio leaves it.
 
-![The Voice tab with the engine, voice and speed controls, the test field and the per-app list](../web/public/shots/docs/settings-voice.png "The Voice tab. With the Kokoro engine chosen, the section also shows whether the voice models are installed.")
+![The Voice tab with the Speech section (Engine, Voice and Speed), the Test field, the Quiet hours section and the Speak per app list](../web/public/shots/docs/settings-voice.png "The Voice tab with the Kokoro engine chosen: a line under Engine says Kokoro is installed.")
 
 | Control | What it does |
 |---|---|
@@ -343,7 +343,7 @@ describes the notification fields.
 **Quiet hours** sits in the middle of the Voice tab. A window is a time of day, on chosen days, when Herald holds back
 speech, sounds, banners or any mix of them.
 
-![The Quiet hours section with the day buttons, the From and until times, and the Speech, Sounds and Banners switches](../web/public/shots/docs/settings-quiet-hours.png "A quiet hours window that runs overnight on weekdays.")
+![The Quiet hours section with the weekday buttons, the From and until times, and the Speech, Sounds and Banners checkboxes](../web/public/shots/docs/settings-quiet-hours.png "A quiet hours window that runs overnight on weekdays, from 22:30 until 07:30.")
 
 | Control | What it does |
 |---|---|
@@ -366,7 +366,7 @@ ChatGPT, can notify this Mac. Herald connects out to the relay, and nothing list
 send notifications and read receipts, and nothing else. [Cloud agents](CLOUD.md) explains the relay and the setup in
 full, step by step, and [How the relay works](cloud/how-it-works.md) covers security and limits.
 
-![The Cloud tab before the relay is set up, with the Enable relay switch off](../web/public/shots/docs/settings-cloud-off.png "The Cloud tab before setup. Turning on Enable relay starts the setup.")
+![The Cloud tab before the relay is set up, with the Enable relay switch off and the Advanced section closed](../web/public/shots/docs/settings-cloud-off.png "The Cloud tab before setup. Turning on Enable relay starts the setup.")
 
 While the relay is off, the tab shows an explanation, the **Relay** section and **Advanced**. The **Relay** section
 holds these controls.
@@ -384,7 +384,7 @@ The first time, the sheet sends you to Cloudflare to create a token, takes the t
 relay; [Cloud agents](CLOUD.md#steps) walks through it. Turning the switch off asks **Turn the relay off?**. **Turn off**
 then unpairs this Mac and revokes every key and connector. The relay stays in your Cloudflare account.
 
-![The Cloud tab with the relay paired, showing the connector address, agent keys and recent items](../web/public/shots/docs/settings-cloud-paired.png "The Cloud tab when paired. The sections below the status line appear once this Mac is paired.")
+![The whole Cloud tab with the relay online: Connector URL, Connect an agent, Connector approvals, Reply subscriptions, Agent keys, Usage today and Last relay items](../web/public/shots/docs/settings-cloud-paired.png "The Cloud tab once this Mac is paired, with sample data. The sections below the status line appear only after pairing.")
 
 Once paired, the tab adds more sections. Each is explained in a guide.
 
@@ -410,7 +410,7 @@ in [MCP relay tools](reference/mcp/relay.md).
 The **MCP** tab installs Herald's MCP server into the AI tools on this Mac, so an agent can design banners and send
 notifications. [Herald MCP server](MCP.md) is the task guide and [MCP tools](reference/mcp/README.md) lists every tool.
 
-![The MCP tab listing the server path, the Claude Code, Codex and Claude Desktop clients and the command line tool](../web/public/shots/docs/settings-mcp.png "The MCP tab. Each client row says whether the server is installed there.")
+![The MCP tab with the Server section, the Claude Code, Codex and Claude Desktop rows, the Generic client and the Command line tool button](../web/public/shots/docs/settings-mcp.png "The MCP tab. Each client row says Installed or Not installed and has a Reinstall or Install button.")
 
 | Control | What it does |
 |---|---|

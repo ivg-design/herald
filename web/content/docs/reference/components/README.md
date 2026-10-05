@@ -21,9 +21,11 @@ The cell's own fields and the grid around them are described in [The grid, cells
 In the Designer you add a component by dragging it from the palette onto a cell, then edit its properties in the
 inspector. The palette uses short names that differ a little from the `type` values.
 
-![The Designer's component palette beside the banner canvas](../../../web/public/shots/docs/designer-palette.png "The palette lists the twelve components. Drag one onto a cell of the canvas.")
+![The left pane of the Designer with the Issuer menu, the Templates list and the Components palette of twelve chips](../../../web/public/shots/docs/designer-palette.png "The palette lists the twelve components. Drag one onto a cell of the canvas.")
 
-![A cell selected on the Designer canvas with its properties in the inspector](../../../web/public/shots/docs/designer-cell-selected.png "Selecting a cell shows the properties of its component in the inspector on the right.")
+Select a cell and the inspector on the right shows its properties:
+
+![The Designer with a title text cell selected and its properties in the Cell tab of the inspector](../../../web/public/shots/docs/designer-cell-selected.png "Selecting a cell shows the properties of its component in the inspector on the right.")
 
 ## The components
 

@@ -228,7 +228,7 @@ Notifications do not always carry every field. A template decides what a missing
 the space it would have used can close up, or it can stay as a blank. This section explains the rules
 completely.
 
-![The Designer preview with two fields marked absent and their rows closed up, beside the Template tab](../web/public/shots/docs/designer-empty-field-collapse.png "The Fields button marks the subtitle and body absent, so their rows collapse in the preview. The Template tab on the right holds the setting.")
+![The Designer with the Fields button reading 2 absent, the subtitle and body rows closed up in the preview and marked as collapsing in the grid, and the Template tab with Collapse chosen](../web/public/shots/docs/designer-empty-field-collapse.png "The Fields button reads 2 absent, so the subtitle and body rows close up in the preview. The Template tab on the right holds the Empty fields setting, here set to Collapse.")
 
 ### Empty components
 

@@ -44,13 +44,13 @@ The details of the design, the security model and the limits are in
 
    You see the **Relay** section with the **Enable relay** switch off.
 
-   ![The Cloud tab of Settings before a relay exists, with the Enable relay switch off](../web/public/shots/docs/settings-cloud-off.png "Settings > Cloud with no relay. The Enable relay switch starts the setup.")
+   ![The Cloud tab of Settings before a relay exists, with the Enable relay switch off and the Advanced section closed](../web/public/shots/docs/settings-cloud-off.png "Settings > Cloud with no relay. The Enable relay switch starts the setup.")
 
 2. Turn on **Enable relay**.
 
    A sheet opens, titled **Create your relay on Cloudflare (free)**.
 
-   ![The sheet that creates the relay, with a button to open Cloudflare and a field for the token](../web/public/shots/docs/settings-cloud-deploy.png "The setup sheet. Step 1 opens Cloudflare's token page; step 2 is the field you paste the token into.")
+   ![The sheet titled Create your relay on Cloudflare, with the Open Cloudflare button, the token field and the Deploy button](../web/public/shots/docs/settings-cloud-deploy.png "The setup sheet. Step 1 opens Cloudflare's token page; step 2 is the field you paste the token into.")
 
 3. Under **1. Create a token**, press **Open Cloudflare…**.
 
@@ -73,7 +73,7 @@ The details of the design, the security model and the limits are in
    The switch is on, and the status reads **Online**. The **Connector URL** is your relay's address followed
    by `/mcp`, with a **Copy** button.
 
-   ![The Cloud tab with a relay that is paired and online](../web/public/shots/docs/settings-cloud-paired.png "Settings > Cloud after setup. From the top: the status, the Connector URL, Connect an agent, Connector approvals, Reply subscriptions, Agent keys and Usage today.")
+   ![The Cloud tab with a relay that is online, from Relay down to Last relay items](../web/public/shots/docs/settings-cloud-paired.png "Settings > Cloud after setup, with sample data. From the top: the status, the Connector URL, Connect an agent, Connector approvals, Reply subscriptions, Agent keys, Usage today and Last relay items.")
 
 ## Check that it works
 

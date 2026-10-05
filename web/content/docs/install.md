@@ -32,7 +32,7 @@ Herald has no Dock icon and no window of its own. It lives in the menu bar.
 1. Look at the right side of the menu bar. A bell has appeared.
 2. Click the bell. The menu opens.
 
-   ![The Herald menu: the unread count, Compose, Design Template, History, Mute Sounds, quiet hours, Stack Notifications, Dismiss All, Settings and Quit](../web/public/shots/docs/menu.png "The menu from the menu bar bell. [The Herald app](APP.md#the-menu-bar-menu) explains each item.")
+   ![The Herald menu: the unread count, Compose, Design Template, History, Mute Sounds, Quiet for 1 Hour, Stack Notifications, Dismiss All, Settings and Quit](../web/public/shots/docs/menu.png "The menu from the menu bar bell. [The Herald app](APP.md#the-menu-bar-menu) explains each item.")
 
 3. If Herald runs from `/Applications` and has not asked before, it asks **Launch Herald at login?** Choose
    **Launch at Login** so notifications from your other apps always have somewhere to go, or **Not Now**. You can change

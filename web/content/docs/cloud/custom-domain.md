@@ -56,7 +56,7 @@ To see whether the check is active on your relay's address, run **Test connectio
 
 1. Open **Settings > Cloud > Advanced** and find **Custom domain**.
 
-   ![The Advanced section of the Cloud tab, with the Custom domain controls](../../web/public/shots/docs/settings-cloud-advanced.png "Advanced holds the relay's settings. Custom domain has a Zone menu, a Load zones button and a Hostname field.")
+   ![The Advanced section of the Cloud tab, with the Custom domain controls](../../web/public/shots/docs/settings-cloud-advanced.png#focus=76 "Advanced holds the relay's settings. Custom domain has a Zone menu, a Load zones button and a Hostname field.")
 
 2. Press **Load zones**.
 

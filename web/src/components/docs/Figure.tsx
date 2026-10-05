@@ -18,18 +18,19 @@ interface Data {
   width?: number;
   height?: number;
   hotspots?: Hotspot[];
+  focus?: number; // percent from the top that a tall capture shows
 }
 
 /** A docs screenshot: framed, sized from the manifest (no layout shift), lazy, with a larger view in a dialog. */
 export default function Figure({ "data-figure": raw }: { "data-figure"?: string }) {
-  const { src, src2x, darkSrc, darkSrc2x, alt, caption, width, height, hotspots } = JSON.parse(raw || "{}") as Data;
+  const { src, src2x, darkSrc, darkSrc2x, alt, caption, width, height, hotspots, focus } = JSON.parse(raw || "{}") as Data;
   const [dark, setDark] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const shown = dark && darkSrc ? darkSrc : src;
   const shown2x = dark && darkSrc ? darkSrc2x : src2x;
   const srcSet = shown2x ? `${shown} 1x, ${shown2x} 2x` : undefined;
   // A capture much taller than it is wide (a whole Settings tab) shows its top part; the larger view has all of it.
-  const tall = !!width && !!height && height / width > 1.45;
+  const tall = !!width && !!height && height / width > 1.45 && height > 1000;
   const open = () => dialog.current?.showModal();
   const close = () => dialog.current?.close();
 
@@ -38,8 +39,8 @@ export default function Figure({ "data-figure": raw }: { "data-figure"?: string 
       <div className="docs-figure-frame">
         <button type="button" className="docs-figure-open" onClick={open} aria-label={`Open a larger view: ${alt}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={shown} srcSet={srcSet} alt={alt} width={width} height={height} loading="lazy" decoding="async" />
-          {hotspots?.map((h, i) => (
+          <img src={shown} srcSet={srcSet} alt={alt} width={width} height={height} loading="lazy" decoding="async" style={tall ? { objectPosition: `50% ${focus ?? 0}%` } : undefined} />
+          {!tall && hotspots?.map((h, i) => (
             <span key={i} className="docs-figure-spot" style={{ left: `${h.x}%`, top: `${h.y}%` }} aria-hidden>
               {i + 1}
             </span>

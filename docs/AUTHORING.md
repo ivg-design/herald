@@ -28,7 +28,7 @@ has **Open in Designer**.
 The window has three columns and a bar across the top. The figure shows them, and the list below it names
 them in the order of the numbers.
 
-![The Designer window with the issuer and palette on the left, the live preview and grid editor in the centre and the inspector on the right](../web/public/shots/docs/designer-overview.png "The whole Designer window, from the mode bar at the top to the inspector on the right.")
+![The Designer window with the issuer and palette on the left, the live preview above the grid editor in the centre and the Cell, Template and Actions inspector on the right](../web/public/shots/docs/designer-overview.png "The whole Designer window, from the mode bar at the top to the inspector on the right. The body text cell is selected.")
 
 1. **Mode bar.** The **Design** and **Quick send** switch, and the **Import…** and **Export…** buttons for
    template bundles.
@@ -63,7 +63,7 @@ The editor bar shows **Not saved yet** until you save.
 
 Components are the pieces a banner is made of. The **Components** section of the palette lists them.
 
-![The palette with the Components, Assets, Fields and Actions sections](../web/public/shots/docs/designer-palette.png "The palette. Drag a chip onto a slot, or click it to add to the selected slot.")
+![The left pane of the Designer: the Issuer menu, the Templates list, then the Components, Assets and Fields sections](../web/public/shots/docs/designer-palette.png "The palette. Drag a chip from Components onto a slot, or click it to add to the selected slot.")
 
 1. Drag a component chip onto an empty slot of the grid. Or select a slot and click the chip.
 2. The component appears in its cell and the live preview redraws.
@@ -81,7 +81,7 @@ group comes from.
 
 Click a cell on the grid. The inspector switches to the **Cell** tab.
 
-![A selected cell on the grid, with the Cell tab of the inspector showing its position, span and component settings](../web/public/shots/docs/designer-cell-selected.png "A selected text cell. The Cell tab shows where it sits, what it shows and what it does when empty.")
+![The Designer with the title text cell selected and the Cell tab of the inspector showing Position and span, Align, Padding and the Text component bound to title](../web/public/shots/docs/designer-cell-selected.png "A selected text cell. The Cell tab shows where it sits, what it shows and its style. The tab continues below the figure.")
 
 The **Cell** tab has these parts:
 
@@ -102,7 +102,7 @@ Shift-click several slots to select them together. At the bottom of **Position a
 
 The **Template** tab edits the whole template.
 
-![The Template tab of the inspector showing the name, accent colour, empty-field choice, grid sizes and checks](../web/public/shots/docs/designer-inspector-template.png "The Template tab: name, empty fields, grid and checks.")
+![The Template tab of the inspector with Name, Accent, the Empty fields choice of Collapse or Leave in place, and the Grid width, gap, padding and column and row sizes](../web/public/shots/docs/designer-inspector-template.png "The Template tab: name, empty fields and grid. The tab continues below the figure.")
 
 | Section | What it holds |
 |---|---|
@@ -114,7 +114,7 @@ The **Template** tab edits the whole template.
 
 The **Actions** tab edits the banner's buttons.
 
-![The Actions tab of the inspector listing the issuer's buttons and the ways to add your own](../web/public/shots/docs/designer-inspector-actions.png "The Actions tab: the issuer's buttons, your own, and extra data.")
+![The Actions tab of the inspector with the issuer's Open log, Deploy and Dismiss buttons, your Post to Slack button, the Add your own buttons and Extra data](../web/public/shots/docs/designer-inspector-actions.png "The Actions tab: the issuer's buttons, your own, the ways to add more, and extra data.")
 
 | Section | What it holds |
 |---|---|
@@ -124,7 +124,9 @@ The **Actions** tab edits the banner's buttons.
 
 ### 7. Edit the grid
 
-![The grid canvas with a merged cell, a resize handle and the row and column size labels](../web/public/shots/docs/designer-grid-editing.png "Editing the grid: merge slots, drag a handle to change a span, click a size label to change a track.")
+The grid canvas shows every slot of the template. A selected cell has handles on its edges, and each row and column has a size label.
+
+![The grid canvas with the body cell selected, its resize handles, and the size labels of the columns and rows](../web/public/shots/docs/designer-grid-editing.png "Editing the grid: the selected cell shows handles to change its span, and a size label such as auto 16 changes a track.")
 
 - **Merge cells.** Shift-click the empty slots to join, then press **Merge** in the editor bar, **Merge
   slots** in the inspector, or **Merge Selected Slots** in the context menu. **Split** reverses it.
@@ -150,7 +152,7 @@ A symbol is an SF Symbol, an icon from the system. Components that can carry one
 2. Choose **Browse in a sheet** to open the browser over the Designer, or **Browse in a floating panel** to
    keep it beside the window.
 
-![The symbol browser with categories on the left, a grid of symbols and a preview with the Use symbol button](../web/public/shots/docs/designer-symbol-browser.png "The symbol browser: search, categories, favourites and a preview drawn with your current settings.")
+![The SF Symbols browser with the category list on the left, a search field with a size slider, a grid of symbols and an empty preview pane](../web/public/shots/docs/designer-symbol-browser.png "The symbol browser: search, categories, Recents and Favourites. No symbol is selected yet, so the right pane waits.")
 
 3. Search by name or keyword, for example `bin`, `mail` or `alert`. The sidebar offers **All symbols**,
    **Recents**, **Favourites** and categories. The slider changes the grid size.
@@ -166,7 +168,7 @@ on this Mac" and the component keeps its normal look. The keys are in [Symbols](
 
 The preview above the grid redraws with every edit.
 
-![The live preview showing the banner with its header controls for data, appearance, fields, problems, send test and save](../web/public/shots/docs/designer-live-preview.png "The live preview and its header. The banner is drawn the way a delivery draws it.")
+![The live preview with its header: Live preview, Sample and Last real, the light and dark switch, zoom, Fields, Send test and Save](../web/public/shots/docs/designer-live-preview.png "The live preview and its header. The banner is drawn the way a delivery draws it.")
 
 - **Sample** fills the banner from the manifest's example values. **Last real** uses the newest actual
   notification of the app.
@@ -188,7 +190,7 @@ template has an error, the button reports **Fix first** and the first problem in
 To send a one-off notification of your own with your own title, body and buttons, switch the mode bar to
 **Quick send**.
 
-![The Quick send form with the app, template, content, buttons and behaviour sections beside a live preview](../web/public/shots/docs/designer-quick-send.png "Quick send: fill in a notification, check the preview and press Send Now.")
+![The Quick send form with the Notification, Content, Buttons and Behavior sections beside a Light and Dark preview](../web/public/shots/docs/designer-quick-send.png "Quick send: fill in a notification, check the preview and press Send Now. Send Now stays off until a Title is entered.")
 
 Every control of the form, **Copy as…** and **Save as Template…** are described in
 [Quick send](APP.md#quick-send). The **Look** section holds **Design Template…**, which returns to design mode for the
@@ -204,7 +206,7 @@ how to add one in the Designer.
    The palette's **Add action…** menu offers the same kinds, plus **Dismiss**.
 2. The **Add action** form opens.
 
-![The Add action form with the label, the Shows control, the kind, the button style and the symbol section](../web/public/shots/docs/designer-action-form.png "The Add action form. Shows chooses text, icon and text, or icon only.")
+![The Add action form with Label, Shows, Does this and Button style, above the settings for an Apple Shortcut](../web/public/shots/docs/designer-action-form.png "The Add action form. Shows, here set to Icon and text, chooses text, icon and text, or icon only. The symbol section is lower in the form.")
 
 3. Type the **Label**. The button beside it inserts a field, so a label can be `Open {bid}`.
 4. Choose what the button **Shows**: **Text**, **Icon and text** or **Icon only**. An icon button gets a
@@ -225,7 +227,7 @@ A command, a script or a Shortcut that you add runs only after the user confirms
 Every row on the **Actions** tab has its own **Shows** menu and an **Icon** button. They apply to that
 button alone, not to the rest of the row:
 
-![The Symbol panel for one action, with the symbol name, weight, scale, placement, rendering mode, colour and effect](../web/public/shots/docs/designer-action-icon-popover.png "The panel the Icon button opens for one action. Placement sets the icon before the label, after it, or alone.")
+![The Symbol panel for one action with Name, Weight, Scale, Place, Mode, Set a color, Variable and Effect](../web/public/shots/docs/designer-action-icon-popover.png "The panel that Change icon opens for one action. Place sets the icon before the label, after it, or alone.")
 
 - **Text** shows the label.
 - **Icon and text** shows an icon beside the label. **Change icon** opens the **Symbol** panel for it.

@@ -37,7 +37,7 @@ Claude. A client that can send a header can use a [key](connect-agent.md) instea
 
 4. On your Mac, a banner asks **Let ChatGPT send you notifications?** Press **Approve**.
 
-   ![A banner asking whether to let a connector send notifications, with Approve and Deny buttons](../../web/public/shots/docs/banner-connector-consent.png "The approval banner names the connector and the site it returns to, and says what the connector may do.")
+   ![A banner asking whether to let a connector send notifications, with Approve and Deny buttons](../../web/public/shots/docs/banner-connector-consent.png "The approval banner. Here it names Claude Desktop; yours names ChatGPT. It shows the site the connector returns to and says what the connector may do.")
 
    The browser page continues by itself and returns to ChatGPT.
 

@@ -4,7 +4,7 @@ Herald is a notification service for macOS. Apps, scripts and AI agents send it 
 banner on your screen, keeps it in a searchable History, and lets you answer it with buttons, a reply or a voice
 message. It listens on your Mac only, and you design how each app's banners look.
 
-![A Herald banner with an app icon, a title, a body line and a timestamp in the top right corner of the screen](web/public/shots/docs/banner-plain.png "A banner sent with one curl command. The icon and name belong to the app that sent it.")
+![A Herald banner titled Deploy finished, with a subtitle, two lines of body text, the time, a close button and an app icon](web/public/shots/docs/banner-plain.png "A plain banner. The bell icon at the right is drawn for the app that sent it.")
 
 ## Requirements
 

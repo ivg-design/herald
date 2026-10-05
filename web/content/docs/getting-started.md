@@ -55,7 +55,7 @@ registers an id the first time it sees it, so there is nothing to set up first.
 
    A banner slides in at the top right of your screen and stays until you close it.
 
-   ![A banner titled Bid accepted with the body line Your bid of 4,200 dollars was accepted](../web/public/shots/docs/banner-plain.png "The banner from step 3. An app that has not registered a name shows its id, and Herald draws an automatic icon for it.")
+   ![A plain banner titled Deploy finished, with a subtitle, two lines of body text, the time and a close button](../web/public/shots/docs/banner-plain.png "A plain banner from a different example. Yours shows the title Bid accepted and your own body text in the same places.")
 
 4. Add a button. A button is an entry in `buttons`. This one opens a web page when you press it. Sending the same `id`
    again replaces the banner that is on screen.
@@ -70,7 +70,7 @@ registers an id the first time it sees it, so there is nothing to set up first.
    The banner changes in place and now shows an **Open proposal** button. Pressing it opens the page in your browser and
    closes the banner.
 
-   ![The same banner with an Open proposal button under the text](../web/public/shots/docs/banner-actions.png "The banner from step 4. A button can open a link, run a command, call your app back, or start a reply.")
+   ![A banner titled Build failed with a row of buttons under its text: Open log, an icon-only button, Dismiss and Post to Slack](../web/public/shots/docs/banner-actions.png "A banner with buttons, from a different example. Yours has one Open proposal button in the same place under the text. A button can open a link, run a command, call your app back, or start a reply.")
 
 5. Update the banner with new content, using the same `id`. Updating in place is how you show progress or a changing count
    without piling up banners.

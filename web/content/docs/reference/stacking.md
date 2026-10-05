@@ -85,7 +85,7 @@ From a shell, `herald notify --group "billing@acme.com"` sets the same field. Se
 A closed stack is the top card, with a count badge on its top edge at the right and two card edges peeking out
 below it.
 
-![A stacked Herald banner showing the newest notification on top, a count badge and the edges of two cards behind it](../../web/public/shots/docs/banner-stack-closed.png "A closed stack: the newest notification on top, a count badge, and the edges of the cards behind it.")
+![A stacked Herald banner showing the newest notification on top, a count badge reading 3 and the edges of two cards behind it](../../web/public/shots/docs/banner-stack-closed.png "A closed stack: the newest notification on top, a count badge, and the edges of the cards behind it.")
 
 Rules for a closed stack:
 

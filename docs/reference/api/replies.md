@@ -19,7 +19,7 @@ A **reply** comes from a button of kind `reply`, which swaps the banner's button
 is kept on the notification's History record and added to a queue for the app. The queue holds the 200 most
 recent replies of each app.
 
-![A banner showing an inline reply field with a Send button](../../../web/public/shots/docs/banner-reply.png "Pressing a reply button turns the row of buttons into a text field. What the user sends is what these endpoints return.")
+![A banner with an inline reply field and a Send button](../../../web/public/shots/docs/banner-reply.png "Pressing a reply button turns the row of buttons into a text field. What the user sends is what these endpoints return.")
 
 ## Endpoints
 

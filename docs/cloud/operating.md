@@ -6,7 +6,7 @@ It is for the person who owns the relay. To set one up, see [Cloud relay](../CLO
 
 Everything here is under **Settings > Cloud**, mostly in the **Advanced** section at the bottom of the tab.
 
-![The Advanced section of the Cloud tab with its fields and buttons](../../web/public/shots/docs/settings-cloud-advanced.png "Advanced shows every setting of the relay, with the action buttons below the fields.")
+![The Cloud tab of Settings with Advanced open: Custom domain, Devices on this relay, the relay fields and the action buttons at the bottom](../../web/public/shots/docs/settings-cloud-advanced.png#focus=88 "Advanced shows every setting of the relay, with the action buttons below the fields.")
 
 ## Update the relay
 
