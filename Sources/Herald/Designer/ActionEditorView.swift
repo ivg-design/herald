@@ -23,19 +23,7 @@ extension HeraldActionKind {
         }
     }
 
-    var designerSymbol: String {
-        switch self {
-        case .url: return "link"
-        case .callback: return "arrow.uturn.backward.circle"
-        case .command: return "terminal"
-        case .script: return "doc.text"
-        case .shortcut: return "wand.and.stars"
-        case .dismiss: return "xmark.circle"
-        case .snooze: return "moon.zzz"
-        case .openApp: return "arrow.up.forward.app"
-        case .reply: return "arrowshape.turn.up.left"
-        }
-    }
+    var designerSymbol: String { DesignerModel.defaultSymbol(self) }
 }
 
 extension HeraldAction {
@@ -144,7 +132,7 @@ private struct ActionRowView: View {
                         }
                     } label: { Text(ActionStyleCopy.options.first { $0.value == HeraldActionStyle.parse(row.action.style).rawValue }?.title ?? "Normal").font(.caption2) }
                         .menuStyle(.borderlessButton).fixedSize().disabled(row.hidden).heraldHelp(.designerActionStyle)
-                    if row.isRelabeled || row.isRestyled || row.hidden {
+                    if row.isRelabeled || row.isRestyled || row.isResymboled || row.hidden {
                         Button { model.resetAction(row.id) } label: { Image(systemName: "arrow.counterclockwise") }
                             .buttonStyle(.borderless).heraldHelp(.designerResetIssuerAction)
                     }
@@ -156,10 +144,50 @@ private struct ActionRowView: View {
                 }
             }
             .padding(.leading, isIssuer ? 22 : 0)
+            if !row.hidden { ActionLookRow(model: model, row: row).padding(.leading, isIssuer ? 22 : 0) }
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.secondary.opacity(row.hidden ? 0.05 : 0.10)))
         .opacity(row.hidden ? 0.7 : 1)
+    }
+}
+
+/// One action's own look: text, icon and text, or icon only, and which icon. Every action has its own; nothing here is shared
+/// with the other buttons of the cell.
+private struct ActionLookRow: View {
+    @ObservedObject var model: DesignerModel
+    let row: DesignerActionRow
+    @State private var picking = false
+
+    private var symbol: Binding<HeraldSymbol?> {
+        Binding(get: { model.actionRows.first { $0.id == row.id }?.action.symbol.flatMap { $0.name.isEmpty ? nil : $0 } },
+                set: { model.setActionSymbol(row.id, symbol: $0) })
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Shows").font(.caption2).foregroundStyle(.secondary)
+            Picker("", selection: Binding(get: { row.shows }, set: { model.setActionShows(row.id, $0) })) {
+                ForEach(ActionButtonShows.allCases) { Text($0.title).tag($0) }
+            }
+            .labelsHidden().pickerStyle(.menu).controlSize(.small).fixedSize()
+            .heraldHelp(name: "Button shows", detail: "text, an icon with text, or an icon only, for this button alone")
+            Spacer(minLength: 0)
+            Button { picking = true } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: row.shows == .text ? "plus.circle" : (HeraldSymbol.isKnown(row.action.symbol?.name ?? "") ? row.action.symbol!.name : "questionmark.square.dashed"))
+                    Text(row.shows == .text ? "Icon" : "Change icon").font(.caption2)
+                }
+            }
+            .buttonStyle(.borderless).controlSize(.small)
+            .heraldHelp(name: "Button icon", detail: "choose this button's own SF Symbol, its weight, colours and whether it replaces the text")
+            .popover(isPresented: $picking, arrowEdge: .trailing) {
+                ScrollView {
+                    SymbolPanel(model: model, symbol: symbol).padding(12)
+                }
+                .frame(width: 320, height: 420)
+            }
+        }
     }
 }
 
@@ -267,9 +295,14 @@ struct ActionFormView: View {
             Form {
                 Section(title) {
                     HStack {
-                        TextField("Label", text: action.label).heraldHelp(.designerEditorLabel)
+                        TextField(formShows == .iconOnly ? "Label (optional: only used as the tooltip)" : "Label", text: action.label).heraldHelp(.designerEditorLabel)
                         TokenMenu(model: model) { action.wrappedValue.label += $0 }
                     }
+                    Picker("Shows", selection: Binding(get: { formShows }, set: { request.action.symbol = $0.applied(to: request.action.symbol, fallback: request.action.kind.designerSymbol) })) {
+                        ForEach(ActionButtonShows.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .heraldHelp(name: "Button shows", detail: "text, an icon with text, or an icon only; pick the icon under Symbol below")
                     Picker("Does this", selection: kindBinding) {
                         ForEach(HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
                     }.heraldHelp(.designerEditorKind)
@@ -309,10 +342,13 @@ struct ActionFormView: View {
         .task(id: request.action.kind) { if request.action.kind == .shortcut, shortcuts == .idle { await loadShortcuts() } }
     }
 
+    private var formShows: ActionButtonShows { ActionButtonShows.of(request.action.symbol) }
+
     private var kindBinding: Binding<HeraldActionKind> {
         Binding(get: { request.action.kind }, set: { k in
             let old = request.action
             var a = HeraldAction(id: old.id, label: old.label, kind: k, style: old.style)
+            a.symbol = old.symbol
             if k == .url { a.url = "{url}" }
             if k == .snooze { a.snoozeMinutes = HeraldAction.defaultSnoozeMinutes }
             if k == .callback { a.callback = HeraldCallback() }
@@ -332,8 +368,9 @@ struct ActionFormView: View {
     private var formError: String? {
         let a = request.action
         func blank(_ s: String?) -> Bool { (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if blank(a.label) { return "Give the action a label." }
-        if blank(a.id) { return "The id cannot be empty." }
+        let iconOnly = formShows == .iconOnly
+        if blank(a.label) && !iconOnly { return "Give the action a label, or choose Icon only." }
+        if blank(a.id) && !blank(a.label) { return "The id cannot be empty." }
         switch a.kind {
         case .url:
             if blank(a.url) { return "Enter the link to open." }

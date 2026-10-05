@@ -31,6 +31,10 @@ final class BannerModel: ObservableObject {
     /// The inline record strip (a voice `reply` action, "Record"). Takes the actions row's place like `reply`.
     @Published var record: BannerRecordPrompt?
     @Published var hovering = false
+    /// The user clicked a banner whose text was cut short: every text shows in full and the panel grows to fit.
+    @Published var expanded = false
+    /// Some text of the banner is cut short right now (reported by the text views; not published, it only steers the next click).
+    var textTruncated = false
     /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
     /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
     @Published var liveAnimations = true

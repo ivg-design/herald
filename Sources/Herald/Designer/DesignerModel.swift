@@ -662,17 +662,53 @@ struct DesignerActionRow: Identifiable, Equatable {
     var id: String { action.id }
     var isRelabeled: Bool { base.map { $0.label != action.label } ?? false }
     var isRestyled: Bool { base.map { HeraldActionStyle.parse($0.style) != HeraldActionStyle.parse(action.style) } ?? false }
+    /// The issuer action carries a symbol (or a text/icon choice) of the template's own.
+    var isResymboled: Bool { base.map { $0.symbol != action.symbol } ?? false }
+    var shows: ActionButtonShows { ActionButtonShows.of(action.symbol) }
+}
+
+/// What one action's button shows. It is the action's own symbol and its placement, read and written as one choice.
+enum ActionButtonShows: String, CaseIterable, Identifiable {
+    case text, iconAndText, iconOnly
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .text: return "Text"
+        case .iconAndText: return "Icon and text"
+        case .iconOnly: return "Icon only"
+        }
+    }
+
+    static func of(_ symbol: HeraldSymbol?) -> ActionButtonShows {
+        guard let s = symbol, !s.name.isEmpty else { return .text }
+        return s.placement == .only ? .iconOnly : .iconAndText
+    }
+
+    /// `symbol` changed to show this. `fallback` is the glyph used when the action has none yet. Text only keeps no symbol.
+    func applied(to symbol: HeraldSymbol?, fallback: String) -> HeraldSymbol? {
+        switch self {
+        case .text: return nil
+        case .iconAndText:
+            var s = (symbol.flatMap { $0.name.isEmpty ? nil : $0 }) ?? HeraldSymbol(name: fallback)
+            if s.placement == .only { s.placement = nil }
+            return s
+        case .iconOnly:
+            var s = (symbol.flatMap { $0.name.isEmpty ? nil : $0 }) ?? HeraldSymbol(name: fallback)
+            s.placement = .only
+            return s
+        }
+    }
 }
 
 /// Editing of `HeraldTemplate.actionRules`. The designer owns two kinds of rule and leaves every other rule
 /// (written by hand or by an agent) alone:
-/// - one "override" rule per issuer action: `{match:<id>, hide|relabel|style}`;
+/// - one "override" rule per issuer action: `{match:<id>, hide|relabel|style|symbol}`;
 /// - the "order" rules `{match:<id>, position:<i>}` at the end of the list, which together fix the order.
 enum ActionRules {
     static func same(_ a: String?, _ b: String) -> Bool { a?.caseInsensitiveCompare(b) == .orderedSame }
 
     static func isOrderRule(_ r: HeraldActionRule) -> Bool {
-        r.match != nil && r.position != nil && r.hide == nil && r.relabel == nil && r.style == nil && r.add == nil
+        r.match != nil && r.position != nil && r.hide == nil && r.relabel == nil && r.style == nil && r.add == nil && r.symbol == nil
     }
 
     static func isOverride(_ r: HeraldActionRule, for id: String) -> Bool {
@@ -680,7 +716,7 @@ enum ActionRules {
     }
 
     private static func isEmptyOverride(_ r: HeraldActionRule) -> Bool {
-        r.hide != true && (r.relabel ?? "").isEmpty && (r.style ?? "").isEmpty
+        r.hide != true && (r.relabel ?? "").isEmpty && (r.style ?? "").isEmpty && r.symbol == nil
     }
 
     /// Index to insert a new rule at: before the trailing order rules.
@@ -1861,6 +1897,45 @@ final class DesignerModel: ObservableObject {
         perform { ActionRules.override(id, in: &$0.actionRules) { $0.style = HeraldActionStyle.parse(style) == HeraldActionStyle.parse(original) ? nil : style } }
     }
 
+    /// Gives one action its own symbol (and with it the text / icon choice). nil goes back to no symbol: for an issuer action
+    /// that came with one, that is recorded as an empty symbol, which the resolver reads as "none".
+    func setActionSymbol(_ id: String, symbol: HeraldSymbol?) {
+        guard let row = actionRows.first(where: { $0.id == id }) else { return }
+        if row.origin != .issuer {
+            perform { t in
+                if let i = t.actionRules.firstIndex(where: { $0.add?.id == id }) { t.actionRules[i].add?.symbol = symbol }
+            }
+            return
+        }
+        let base = row.base?.symbol
+        perform {
+            ActionRules.override(id, in: &$0.actionRules) { r in
+                if symbol == base { r.symbol = nil }
+                else { r.symbol = symbol ?? HeraldSymbol(name: "") }
+            }
+        }
+    }
+
+    func setActionShows(_ id: String, _ shows: ActionButtonShows) {
+        guard let row = actionRows.first(where: { $0.id == id }) else { return }
+        setActionSymbol(id, symbol: shows.applied(to: row.action.symbol, fallback: Self.defaultSymbol(row.action.kind)))
+    }
+
+    /// The glyph an action gets when the user asks for an icon before choosing one: what the action does.
+    nonisolated static func defaultSymbol(_ k: HeraldActionKind) -> String {
+        switch k {
+        case .url: return "link"
+        case .callback: return "arrow.uturn.backward.circle"
+        case .command: return "terminal"
+        case .script: return "doc.text"
+        case .shortcut: return "wand.and.stars"
+        case .dismiss: return "xmark.circle"
+        case .snooze: return "moon.zzz"
+        case .openApp: return "arrow.up.forward.app"
+        case .reply: return "arrowshape.turn.up.left"
+        }
+    }
+
     func resetAction(_ id: String) { changeActionRules { ActionRules.reset(id, in: &$0) } }
 
     /// Moves a visible action up (-1) or down (+1) the list.
@@ -1922,6 +1997,9 @@ final class DesignerModel: ObservableObject {
     func commitActionEditor(_ request: ActionEditorRequest) {
         var a = request.action
         a.label = a.label.trimmingCharacters(in: .whitespaces)
+        // An icon-only button needs no name from the user: it takes the plain name of what it does, for the tooltip and VoiceOver.
+        if a.label.isEmpty { a.label = Self.defaultLabel(a.kind) }
+        if a.id.isEmpty, case .inline = request.mode { a.id = HeraldAction.slug(a.label) }
         switch request.mode {
         case .addToTemplate:
             let taken = Set(actionRows.map(\.id))

@@ -21,6 +21,8 @@ struct GridContext {
     var scheme: ColorScheme
     /// Line limit of `body` text with no `maxLines` of its own.
     var maxBodyLines: Int
+    /// True once the user clicked to read the whole text: line limits are lifted.
+    var expanded = false
     var reminderState: ReminderState
     var hovering: Bool
     /// The issuer's manifest, for components that need its assets (Rive).

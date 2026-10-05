@@ -1231,4 +1231,58 @@ final class GridGrowRoomTests: XCTestCase {
         XCTAssertEqual(room.rows, 1)
         XCTAssertTrue(GridEditing.growRoom(cell: "nope", in: wide) == (1, 1))
     }
+
+    // MARK: Per-action icons
+
+    func testAnOverrideRuleCanCarryOnlyASymbolAndIsNotMistakenForAnOrderRule() {
+        var rules: [HeraldActionRule] = []
+        ActionRules.override("archive", in: &rules) { $0.symbol = HeraldSymbol(name: "archivebox", placement: .only) }
+        XCTAssertEqual(rules.count, 1)
+        XCTAssertEqual(rules[0].symbol?.name, "archivebox")
+        XCTAssertFalse(ActionRules.isOrderRule(rules[0]))
+        ActionRules.override("archive", in: &rules) { $0.symbol = nil }
+        XCTAssertTrue(rules.isEmpty, "an override with nothing left is removed")
+        XCTAssertFalse(ActionRules.isOrderRule(HeraldActionRule(match: "archive", position: 0, symbol: HeraldSymbol(name: "tray"))))
+    }
+
+    func testEachActionGetsItsOwnSymbolThroughItsRule() {
+        let buttons = [HeraldButton(label: "Archive"), HeraldButton(label: "Delete"), HeraldButton(label: "Open")]
+        var rules: [HeraldActionRule] = []
+        ActionRules.override("archive", in: &rules) { $0.symbol = HeraldSymbol(name: "archivebox", placement: .only) }
+        ActionRules.override("delete", in: &rules) { $0.symbol = HeraldSymbol(name: "trash") }
+        let out = ActionResolver.resolve(issuer: buttons, rules: rules)
+        XCTAssertEqual(out.map { $0.symbol?.name }, ["archivebox", "trash", nil])
+        XCTAssertEqual(out[0].symbol?.placement, .only)
+        XCTAssertEqual(out.map(\.label), ["Archive", "Delete", "Open"], "an icon-only button keeps its label for the tooltip")
+    }
+
+    func testTheShowsChoiceReadsAndWritesTheSymbolPlacement() {
+        XCTAssertEqual(ActionButtonShows.of(nil), .text)
+        XCTAssertEqual(ActionButtonShows.of(HeraldSymbol(name: "")), .text)
+        XCTAssertEqual(ActionButtonShows.of(HeraldSymbol(name: "trash")), .iconAndText)
+        XCTAssertEqual(ActionButtonShows.of(HeraldSymbol(name: "trash", placement: .only)), .iconOnly)
+        XCTAssertNil(ActionButtonShows.text.applied(to: HeraldSymbol(name: "trash"), fallback: "link"))
+        XCTAssertEqual(ActionButtonShows.iconOnly.applied(to: nil, fallback: "link"), HeraldSymbol(name: "link", placement: .only))
+        let kept = ActionButtonShows.iconAndText.applied(to: HeraldSymbol(name: "trash", weight: .bold, placement: .only), fallback: "link")
+        XCTAssertEqual(kept, HeraldSymbol(name: "trash", weight: .bold), "the chosen icon and its styling survive a change of what is shown")
+        XCTAssertEqual(ActionButtonShows.iconAndText.applied(to: HeraldSymbol(name: "trash", placement: .trailing), fallback: "link")?.placement, .trailing)
+    }
+}
+
+final class BannerTapTests: XCTestCase {
+    func testAClickShowsCutTextInFullBeforeAnythingElse() {
+        XCTAssertEqual(BannerTap.decide(truncated: true, expanded: false, hasLink: false, stacked: false), .expand)
+        XCTAssertEqual(BannerTap.decide(truncated: true, expanded: false, hasLink: true, stacked: false), .expand, "even a banner with a link expands first")
+    }
+
+    func testAClickNeverDismissesABannerThatHasNothingToOpen() {
+        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: false, stacked: false), .nothing)
+        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: true, hasLink: false, stacked: false), .collapse)
+    }
+
+    func testALinkOrAClosedStackStillOpens() {
+        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: true, stacked: false), .open)
+        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: true, hasLink: true, stacked: false), .open)
+        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: false, stacked: true), .open)
+    }
 }

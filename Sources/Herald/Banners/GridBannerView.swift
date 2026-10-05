@@ -83,6 +83,7 @@ struct GridRenderState {
             expandStack: { [weak model] in model?.onExpandStack() })
         var ctx2 = ctx
         ctx2.assignment = t.actionAssignment(actions: ctx.actions)
+        ctx2.expanded = model.expanded
         self.ctx = ctx2
 
         var empty = t.emptyCellIDs(fields: ctx.fields, actions: ctx.actions)
@@ -161,6 +162,7 @@ struct GridBannerView: View {
             }
         }
         .contentShape(Rectangle())
+        .onPreferenceChange(TextTruncatedKey.self) { model.textTruncated = $0 }
         .onTapGesture { bannerTapped() }
         .environment(\.openURL, linkAction)
     }
@@ -221,7 +223,14 @@ struct GridBannerView: View {
             if linkClicks.swallowsBannerTap() { return }
             // A stray click on the card must not open it (and dismiss it, cancelling the question) while it is asking.
             if model.replacesActions { return }
-            model.onOpen()
+            let n = model.item.notification
+            switch BannerTap.decide(truncated: model.textTruncated, expanded: model.expanded,
+                                    hasLink: !(n.url ?? "").isEmpty, stacked: model.stackCount > 1) {
+            case .expand: model.expanded = true
+            case .collapse: model.expanded = false
+            case .open: model.onOpen()
+            case .nothing: break
+            }
         }
     }
 }

@@ -13,7 +13,34 @@ struct TextComponentView: View {
     var body: some View {
         RichTextLines(component: component, resolved: component.resolvedLines(fields: ctx.fields, keepEmptyLines: keepEmptyLines ?? (component.emptyBehavior == .keep)),
                       align: align, maxBodyLines: ctx.maxBodyLines,
-                      color: { ctx.color($0) }, links: component.rendersMarkdown)
+                      color: { ctx.color($0) }, links: component.rendersMarkdown, expanded: ctx.expanded)
+    }
+}
+
+/// True when any text under a view is cut short by its line limit.
+struct TextTruncatedKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
+/// Sits behind a line-limited text and reports whether the same text, at the same width, would be taller without the limit.
+private struct TruncationProbe: View {
+    let text: AttributedString
+    let alignment: TextAlignment
+
+    var body: some View {
+        GeometryReader { shown in
+            Text(text)
+                .multilineTextAlignment(alignment)
+                .fixedSize(horizontal: false, vertical: true)
+                .hidden()
+                .background(GeometryReader { full in
+                    Color.clear.preference(key: TextTruncatedKey.self, value: full.size.height > shown.size.height + 1)
+                })
+                .frame(width: shown.size.width, alignment: .topLeading)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -25,9 +52,14 @@ struct RichTextLines: View {
     let maxBodyLines: Int
     let color: (String?) -> Color?
     var links = false
+    /// Lifts the line limits (a live banner the user clicked to read in full).
+    var expanded = false
+
+    /// Far more lines than a banner holds; "no limit" without changing the layout maths below.
+    private static let unlimited = 400
 
     var body: some View {
-        let limit = max(component.maxLines ?? GridStyle.defaultLines(component.style, body: maxBodyLines), 1)
+        let limit = expanded ? Self.unlimited : max(component.maxLines ?? GridStyle.defaultLines(component.style, body: maxBodyLines), 1)
         let base = color(component.color) ?? GridStyle.defaultColor(component.style)
         // A text that names its own alignment (or has a line that does) fills the cell's width and aligns inside
         // it; otherwise it hugs its content and the cell's alignment places it.
@@ -42,15 +74,19 @@ struct RichTextLines: View {
             } else {
                 ForEach(Array(shown.enumerated()), id: \.offset) { _, line in
                     let a = line.align?.textAlignment ?? cellAlign
-                    Text(attributed(line, base: base))
+                    let text = attributed(line, base: base)
+                    Text(text)
                         .lineLimit(perLine)
                         .multilineTextAlignment(a)
+                        .background(TruncationProbe(text: text, alignment: a))
                         .frame(maxWidth: fills ? .infinity : nil, alignment: frameAlignment(a))
                 }
             }
         }
         .opacity(resolved == nil ? 0 : 1)
         .frame(maxWidth: fills ? .infinity : nil, alignment: .leading)
+        // Whole lines dropped by the limit count as cut short too.
+        .preference(key: TextTruncatedKey.self, value: (resolved ?? []).count > limit)
     }
 
     private func stackAlignment(_ a: TextAlignment) -> HorizontalAlignment {

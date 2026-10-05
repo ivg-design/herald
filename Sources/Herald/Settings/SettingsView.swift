@@ -89,6 +89,11 @@ struct AppsSettingsView: View {
                     Image(nsImage: AppIcons.icon(in: controller.registry, app: r.registration.app)).resizable().frame(width: 20, height: 20)
                     Text(r.displayName)
                 }.tag(r.registration.app)
+                .contextMenu {
+                    if r.registration.app != HeraldIdentity.app {
+                        Button("Remove \(r.displayName)\u{2026}", role: .destructive) { AppRemovalPrompt.ask(controller: controller, record: r) }
+                    }
+                }
             }
             .frame(width: 190)
             Divider()
@@ -221,6 +226,14 @@ struct AppDetail: View {
                     Text("Callback buttons POST their action and payload to a URL. Local addresses always work; any other host needs this approval.")
                 }
             }
+            if app != HeraldIdentity.app {
+                Section {
+                    Button("Remove \(record.displayName)\u{2026}", role: .destructive) { AppRemovalPrompt.ask(controller: controller, record: record) }
+                        .heraldHelp(name: "Remove app", detail: "deletes this app from Herald with its history, templates and icon; asks first")
+                } footer: {
+                    Text(AppRemovalPrompt.footer(controller: controller, app: app))
+                }
+            }
         }
         .formStyle(.grouped)
     }
@@ -249,6 +262,53 @@ struct AppDetail: View {
         a.addButton(withTitle: "Allow")
         a.addButton(withTitle: "Cancel")
         if a.runModal() == .alertFirstButtonReturn { edit { $0.commandsConfirmed = true } }
+    }
+}
+
+/// Removing an app from Settings > Apps: one question, then the app goes with its history, templates, manifest and icon. An app that
+/// is a cloud connector with a live approval can be revoked in the same step, so it does not come back with its next notification.
+@MainActor
+enum AppRemovalPrompt {
+    /// The relay key behind a `cloud.*` app, when it is still approved.
+    static func liveKey(controller: AppController, app: String) -> RelayKeyInfo? {
+        guard RelayController.isCloud(app) else { return nil }
+        return controller.relay.keys.first { $0.isActive && CloudApps.appID(for: $0) == app }
+    }
+
+    static func footer(controller: AppController, app: String) -> String {
+        if liveKey(controller: controller, app: app) != nil {
+            return "This app is a cloud connector that is still approved. Removing it can also revoke the connector; otherwise it appears again with its next notification."
+        }
+        return "Removes the app with its history, templates and icon. An app that sends again later is added again."
+    }
+
+    static func ask(controller: AppController, record: AppRecord) {
+        let app = record.registration.app
+        guard app != HeraldIdentity.app else { return }
+        let key = liveKey(controller: controller, app: app)
+        let a = NSAlert()
+        a.alertStyle = .warning
+        a.messageText = "Remove \(record.displayName) from Herald?"
+        a.informativeText = "Its history, templates, manifest and icon are deleted. This cannot be undone."
+            + (key != nil ? " It is a cloud connector that is still approved: revoke it too, or it will appear again when it next sends." : "")
+        if key != nil {
+            a.addButton(withTitle: "Remove and Revoke")
+            a.addButton(withTitle: "Remove Only")
+        } else {
+            a.addButton(withTitle: "Remove")
+        }
+        a.addButton(withTitle: "Cancel")
+        let r = a.runModal()
+        let cancel: NSApplication.ModalResponse = key != nil ? .alertThirdButtonReturn : .alertSecondButtonReturn
+        guard r != cancel else { return }
+        if let key, r == .alertFirstButtonReturn {
+            Task {
+                try? await controller.relay.relayRevokeKey(id: key.id)
+                try? controller.deleteApp(app)
+            }
+        } else {
+            try? controller.deleteApp(app)
+        }
     }
 }
 

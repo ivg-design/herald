@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.8.0 (Build 19) - 2026-10-04
+
+### Added
+
+- Settings > Apps: **Remove** an app you no longer need (the button at the bottom of its page, or right-click it in the
+  list). Herald asks once, then deletes the app with its history, templates, manifest and icon. For a cloud connector that
+  is still approved the question offers **Remove and Revoke**, so it does not come back with its next notification.
+- Designer > Actions: every button has its own look. Each action row has **Shows** (Text, Icon and text, Icon only) and
+  its own icon picker with the full symbol styling, for the issuer's buttons (from the manifest) and for your own. Buttons
+  that share a cell no longer have to share one icon. The reset arrow also undoes an icon change.
+- The action form has the same **Shows** choice, and an **Icon only** action no longer needs a label: it takes the plain
+  name of what it does for its tooltip and VoiceOver.
+
+### Changed
+
+- Clicking a banner no longer dismisses it. A banner whose text is cut short expands to show all of it (click again to
+  fold it back); a banner with nothing to open stays put until you press its close button. A banner that carries a link
+  still opens the link on click, after expanding first when its text was cut, and a closed stack still opens.
+
+1200 tests.
+
 ## 1.7.1 (Build 18) - 2026-10-04
 
 ### Fixed
