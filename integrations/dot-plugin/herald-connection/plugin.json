@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "herald-connection",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Send notifications to the owner's Mac through their own Herald relay, and be told when they reply.",
   "author": {
     "name": "IVG"
@@ -11,7 +11,7 @@
       "interface": {
         "displayName": "Herald Connection",
         "shortDescription": "Notify your Mac and hear back",
-        "longDescription": "Connect Dotcliffe to the owner's Herald relay. Send banners and spoken notifications to their Mac, read delivery receipts, and read their typed or recorded replies. A reply can wake this conversation through the relay's notification.reply event once the platform subscription is verified. Text and presentation only: no commands, files or settings on the Mac.",
+        "longDescription": "Connect a dot to the owner's Herald relay. Send banners and spoken notifications to their Mac, read delivery receipts, and read their typed or recorded replies. A reply can wake this conversation through the relay's notification.reply event once the platform subscription is verified. Text and presentation only: no commands, files or settings on the Mac.",
         "developerName": "IVG",
         "category": "Productivity",
         "capabilities": [
