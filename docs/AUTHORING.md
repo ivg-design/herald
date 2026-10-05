@@ -248,6 +248,10 @@ is the way to forward a missed banner to your phone, an email or a channel.
 4. When the issuer already declares a follow-up, the block starts with **From the issuer: LABEL after DURATION**. Use
    its switch to turn it off for this template.
 
+![The Follow-up block of the Actions tab in the Designer with the If not dismissed switch on, After set to 10 minutes and the Run control](../web/public/shots/docs/designer-followup-block.png "The Follow-up block when you add your own follow-up.")
+
+![The Follow-up block of the Actions tab showing a follow-up that the issuer declares, with its own switch above the template's If not dismissed switch](../web/public/shots/docs/designer-followup-issuer.png "When the issuer declares a follow-up, the block shows it first with its own switch. Turn it off to stop it for this template.")
+
 Only a Shortcut, a script, a command or a callback can follow up, so the menu offers no link or reply actions.
 
 The first time a follow-up that runs code fires, nothing runs yet: the banner shows the question, and the History row

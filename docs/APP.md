@@ -146,6 +146,8 @@ Each row draws the notification as its banner looked, with a line under it.
 | **Follow-up ran: LABEL** and a time. | A [follow-up](reference/actions.md#follow-ups) ran after the banner went unanswered. It can also read **Follow-up failed: REASON** or **Follow-up waiting for approval: LABEL**. |
 | A speaker icon, the spoken text and a length. | The notification was spoken. The speaker plays it again. |
 
+![The History window with GitHub Actions selected; the first notification has a status line that includes Follow-up ran: Post to Slack, the date it ran and how long it was unanswered](../web/public/shots/docs/history-followup-row.png "The status line of a row whose follow-up ran: the follow-up, when it ran and how long the banner went unanswered.")
+
 Two or more notifications of one app that were sent with the same `group` fold into one row with a name, a count and a
 chevron. Click it to open or fold the group. Right-click it for **Dismiss N Not Dismissed**, which closes the banners
 that are still up, or **Delete Group**.
@@ -202,7 +204,7 @@ Each control has a setting key, documented in [Settings API](reference/api/setti
 The **Apps** tab lists every app that has sent a notification, and lets you set how each one behaves. A new app appears
 after its first notification. Until then the tab says **Apps appear here after their first notification.**
 
-![The Apps tab with the app list on the left and the page for GitHub Actions on the right: icon, Identifier, Defaults, Banners, Templates, Commands and the Remove button](../web/public/shots/docs/settings-apps.png "The Apps tab. Choose an app on the left to see its page on the right. GitHub Actions is chosen here.")
+![The Apps tab with the app list on the left and the page for Acme Deploys on the right: icon, Identifier, Defaults, Banners, Templates, Commands and the Remove button](../web/public/shots/docs/settings-apps.png "The Apps tab. Choose an app on the left to see its page on the right. Acme Deploys is chosen here.")
 
 Select an app to see its page. It has these parts, from the top.
 
@@ -225,6 +227,8 @@ Select an app to see its page. It has these parts, from the top.
 | **Declares a follow-up: LABEL after DURATION** | Appears only for an app whose manifest declares a [follow-up](reference/actions.md#follow-ups). It is information: the Designer has the switch that turns it off. |
 | **Allow callbacks to HOST** | Appears only for an app whose callback address is not on this Mac. Callback buttons send their data there only after you allow it. |
 | **Remove NAME...** | Deletes the app. See [Remove an app](#remove-an-app). |
+
+![The Apps tab with Acme Deploys selected, showing the Commands section with the Allow this app to run commands, scripts and Shortcuts switch and a line saying the app declares a follow-up](../web/public/shots/docs/settings-apps-followup.png#focus=80 "The Commands section of an app that declares a follow-up. The line under the switch names it, and the switch allows the app's buttons and follow-up to run code.")
 
 Three rules apply to these controls.
 
@@ -396,14 +400,14 @@ The first time, the sheet sends you to Cloudflare to create a token, takes the t
 relay; [Cloud agents](CLOUD.md#steps) walks through it. Turning the switch off asks **Turn the relay off?**. **Turn off**
 then unpairs this Mac and revokes every key and connector. The relay stays in your Cloudflare account.
 
-![The whole Cloud tab with the relay online: Connector URL, Connect an agent, Connector approvals, Reply subscriptions, Agent keys, Usage today and Last relay items](../web/public/shots/docs/settings-cloud-paired.png "The Cloud tab once this Mac is paired, with sample data. The sections below the status line appear only after pairing.")
+![The whole Cloud tab with the relay online: Connector URL, Connect an agent with its Agent menu and steps, Connector approvals, Reply subscriptions, Agent keys, Usage today and Last relay items](../web/public/shots/docs/settings-cloud-paired.png "The Cloud tab once this Mac is paired, with sample data. The sections below the status line appear only after pairing.")
 
 Once paired, the tab adds more sections. Each is explained in a guide.
 
 | Section | What it shows | Guide |
 |---|---|---|
 | **Relay** | The switch, the status and the connector address. | [Cloud agents](CLOUD.md) |
-| **Connect an agent** | Ready-made instructions for ChatGPT and for Claude Code or Codex, each with **Copy instructions**, and **Create a key and copy the config**. | [Connect an agent](cloud/connect-agent.md) |
+| **Connect an agent** | An **Agent** menu (ChatGPT or an OpenAI dot, Claude Code, Codex or Other). For the agent you pick, a few numbered steps, the MCP server URL with **Copy**, **Copy instructions** and **Read the guide**. Claude Code, Codex and Other also offer **Create a key and copy the config**. | [Connect an agent](cloud/connect-agent.md) |
 | **Connector approvals** | Requests from a connector, each with **Approve** or **Deny**, and the connected connectors, each with **Revoke**. | [Connect ChatGPT](cloud/connect-chatgpt.md) |
 | **Reply subscriptions** | The agents that are told the moment you reply, each with **End**. | [Reply events](cloud/reply-events.md#see-and-end-subscriptions-on-the-mac) |
 | **Agent keys** | Your keys, with a **Key name**, an **Agent** menu and **Create key**. **Design...** and **Revoke** act on a key. | [Connect an agent](cloud/connect-agent.md) |

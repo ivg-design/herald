@@ -49,6 +49,8 @@ minutes arrives somewhere you will see it, and the banner shows that it was forw
 
    The block shows **After** with a number and a unit, set to 10 minutes, and **Run** with a menu.
 
+![The Follow-up block of the Actions tab in the Designer: the If not dismissed switch on, After set to 10 minutes and the Run control naming the action](../web/public/shots/docs/designer-followup-block.png "The Follow-up block sits under the buttons. The switch turns the follow-up on, After sets the wait and Run names the action it runs. Here the action is one of the template's own buttons.")
+
 4. Under **After**, check that it reads `10` and minutes, or change it. It accepts 5 seconds to 7 days.
 5. Open the **Run** menu and choose **New Shortcut action...**.
 
@@ -63,6 +65,8 @@ minutes arrives somewhere you will see it, and the banner shows that it was forw
 7. Press **Save**, then save the template.
 
    The **Run** menu now names the Shortcut, followed by **(this follow-up)**.
+
+![The Run control of the Follow-up block showing the action the follow-up will run, with a note that it runs once while the banner is still up](../web/public/shots/docs/designer-followup-run-menu.png "The Run control shows the action the follow-up runs. Its note says the follow-up runs once, while the banner is still up.")
 
 If the Shortcut is already a button on the banner, choose that button in the **Run** menu instead of making a new
 action. A follow-up that points at a button uses the button's settings.
@@ -85,18 +89,24 @@ For a follow-up the app declares, the question is **Run this Shortcut for APP?**
 **Allow this app to run commands, scripts and Shortcuts** under **Settings > Apps**. If the app never registered to run
 commands, nothing asks: the banner shows **Follow-up failed**.
 
+![A banner asking whether to run a script for BidBot, showing the script name, its hash and its contents, with Run once, Always allow BidBot and Cancel](../web/public/shots/docs/banner-followup-approval.png "The question for an action that runs code. It names what will run, here a script with its hash, and replaces the banner's buttons until you answer.")
+
 **Settings > Actions** lists a template's Shortcut with its status, and
 [`list_approvals`](reference/mcp/apps-and-settings.md#list_approvals) shows the state of every follow-up.
 
 ### 4. See what happens
 
 When the time ends and the action is approved, the Shortcut runs. The banner stays on screen, and a line under its
-buttons reads **Follow-up ran: Forward to phone · 14:05**. If the Shortcut fails, the line reads **Follow-up failed:**
+content reads **Follow-up ran: Forward to phone · 14:05**. If the Shortcut fails, the line reads **Follow-up failed:**
 and the reason.
+
+![A banner titled Deploy needs approval with a line at its foot reading Follow-up ran: Post summary and the time](../web/public/shots/docs/banner-followup-ran.png "After the action ran, a line at the foot of the banner names it and gives the time. The banner stays on screen.")
 
 History keeps the record. Its row shows the same line with the date and how long the banner went unanswered, and the
 item carries a `followUp` object with its `outcome`, `ranAt` and `unattendedSeconds`. See
 [History API](reference/api/history.md#the-history-record).
+
+![The History window with two GitHub Actions notifications; the first has a line under it that includes Follow-up ran: Post to Slack and how long it was unanswered](../web/public/shots/docs/history-followup-row.png "The line under a History row records the follow-up, the date it ran and how long the banner went unanswered.")
 
 These end a follow-up before it runs:
 

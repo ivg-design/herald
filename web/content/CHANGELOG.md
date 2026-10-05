@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.1 (Build 23) - 2026-10-04
+
+### Changed
+
+- The question a follow-up puts on a banner says it is a follow-up and how long the banner was left up.
+- The follow-up line on a banner is a full sentence for each outcome. When the app is not allowed to run code it says
+  so and opens Settings > Apps on that app when clicked.
+- Designer > Actions > Follow-up: when the app declares its own follow-up there is one choice (off, the issuer's, or
+  your own) in place of two switches; the Run menu is a normal picker with "From the issuer" and "Your actions"
+  sections.
+
+1257 tests.
+
 ## 1.9.0 (Build 22) - 2026-10-04
 
 ### Added

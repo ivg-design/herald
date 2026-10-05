@@ -205,7 +205,7 @@ button for each extra line. A kept empty row holds the height of one button.
 The "+N" menu lists the actions that are not shown as buttons. Its entries run their actions as the buttons would, and a
 destructive one is marked as destructive. In a static preview the menu and the snooze clock are drawn as plain labels.
 
-![A banner with the buttons Open log, Retry and Roll back and a +3 label after them](../../../web/public/shots/docs/banner-overflow.png "When the buttons do not fit, the row shows as many as it can and a +N label for the rest.")
+![A banner with the buttons Open log, Retry and Roll back and a grey +3 pill after them](../../../web/public/shots/docs/banner-overflow.png "When the buttons do not fit, the row shows as many as it can and a +N pill for the rest.")
 
 ## Empty rows
 
