@@ -116,7 +116,7 @@ final class ConfirmationFlowTests: XCTestCase {
         let c = BannerConfirmation.appCommand(kind: .script, name: "Acme", text: "script: notify.sh", followUpSeconds: 600)
         XCTAssertEqual(c.title, "Run this follow-up for Acme?")
         XCTAssertEqual(c.kind, .script)
-        XCTAssertTrue(c.detail.hasPrefix("This banner was left up for 10 minutes, so its follow-up wants to run. A notification sent as Acme asks Herald to run a script"), c.detail)
+        XCTAssertEqual(c.detail, "This banner was left up for 10 minutes, so its follow-up wants to run. It runs a script from your Herald scripts folder with your user permissions. Herald cannot verify that Acme sent the notification.")
         XCTAssertEqual(c.buttons, BannerConfirmation.appCommand(kind: .script, name: "Acme", text: "script: notify.sh").buttons)
         XCTAssertTrue(BannerConfirmation.appCommand(kind: .shortcut, name: "Acme", text: "x", followUpSeconds: 90).detail
             .hasPrefix("This banner was left up for 90 seconds, so"))

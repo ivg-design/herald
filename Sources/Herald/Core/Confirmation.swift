@@ -128,8 +128,15 @@ public extension BannerConfirmation {
             detail = "A notification sent as \(name) asks Herald to run the command below with your user permissions (/bin/zsh -lc). Herald cannot verify who sent it."
         }
         if let s = followUpSeconds {
+            // Nobody pressed anything, so the detail says why it asks and then what would run, without repeating the question.
             title = "Run this follow-up for \(name)?"
-            detail = followUpReason(seconds: s) + " " + detail
+            let what: String
+            switch kind {
+            case .script: what = "It runs a script from your Herald scripts folder with your user permissions."
+            case .shortcut: what = "It runs the Shortcut below. Shortcuts can do anything you can."
+            default: what = "It runs the command below with your user permissions (/bin/zsh -lc)."
+            }
+            detail = followUpReason(seconds: s) + " " + what + " Herald cannot verify that \(name) sent the notification."
         }
         return BannerConfirmation(
             kind: confirmKind, title: title, detail: detail, command: text,
