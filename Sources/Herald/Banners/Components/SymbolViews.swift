@@ -137,7 +137,11 @@ private struct SymbolEffectModifier: ViewModifier {
     @State private var shown = false
     @State private var gone = false
 
-    private var repeating: Bool { effect.resolvedTrigger == .repeating }
+    /// appear and disappear play once, so `repeating` acts as `onAppear` for them (validation says so).
+    private var trigger: HeraldSymbolTrigger {
+        (effect.kind == .appear || effect.kind == .disappear) && effect.resolvedTrigger == .repeating ? .onAppear : effect.resolvedTrigger
+    }
+    private var repeating: Bool { trigger == .repeating }
     private var options: SymbolEffectOptions {
         repeating ? SymbolEffectOptions.repeating.speed(effect.resolvedSpeed) : SymbolEffectOptions.speed(effect.resolvedSpeed)
     }
@@ -168,7 +172,7 @@ private struct SymbolEffectModifier: ViewModifier {
             case .appear:
                 content.symbolEffect(.appear, isActive: !shown)
             case .disappear:
-                content.symbolEffect(.disappear, isActive: effect.resolvedTrigger == .onAppear ? shown : gone)
+                content.symbolEffect(.disappear, isActive: trigger == .onAppear ? shown : gone)
             case .replace:
                 content.contentTransition(.symbolEffect(.replace))
             }
@@ -177,10 +181,19 @@ private struct SymbolEffectModifier: ViewModifier {
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                     shown = true
-                    if effect.resolvedTrigger == .onAppear { fire() }
+                    if trigger == .onAppear { fire() }
                 }
             }
-            .onChange(of: changeKey) { _ in if effect.resolvedTrigger == .onChange { fire() } }
-            .onHover { inside in if inside, effect.resolvedTrigger == .onHover { fire() } }
+            // bounce is a one-shot effect: "repeating" replays it on a timer for as long as the view is on screen.
+            .task(id: repeating && effect.kind == .bounce) {
+                guard repeating, effect.kind == .bounce else { return }
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                while !Task.isCancelled {
+                    tick += 1
+                    try? await Task.sleep(nanoseconds: UInt64((1.6 / effect.resolvedSpeed) * 1_000_000_000))
+                }
+            }
+            .onChange(of: changeKey) { _ in if trigger == .onChange { fire() } }
+            .onHover { inside in if inside, trigger == .onHover { fire() } }
     }
 }

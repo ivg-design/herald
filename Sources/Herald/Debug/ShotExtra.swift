@@ -128,9 +128,9 @@ extension Runner {
     // MARK: Designer
 
     /// A designer window as tall as the inspector and palette need, so each is one whole picture; panes are cropped out of it.
-    func tallDesigner(app: String, template: String) async -> (NSWindow, DesignerModel)? {
+    func tallDesigner(app: String, template: String, height: CGFloat = 1900) async -> (NSWindow, DesignerModel)? {
         DesignerWindow.show(controller: c, app: app, template: template)
-        guard let w = DesignerWindow.debugWindow, let m = DesignerWindow.debugModel, ShotKit.place(w, size: NSSize(width: 1280, height: 1900)) else { return nil }
+        guard let w = DesignerWindow.debugWindow, let m = DesignerWindow.debugModel, ShotKit.place(w, size: NSSize(width: 1280, height: height)) else { return nil }
         await pause(1.4)
         return (w, m)
     }
@@ -138,14 +138,9 @@ extension Runner {
     func extraDesigner() async {
         let titleBarOf: (NSWindow) -> CGFloat = { $0.frame.height - $0.contentLayoutRect.height }
         // The ci template: Actions cell, problems.
-        if let (w, m) = await tallDesigner(app: ScreenshotMode.ciApp, template: ScreenshotMode.ciTemplate) {
-            let top = titleBarOf(w) + 34, h = w.frame.height - top
-            let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
+        if let (w, m) = await tallDesigner(app: ScreenshotMode.ciApp, template: ScreenshotMode.ciTemplate, height: 800) {
             await shot("designer-actions-cell-selected", w, Opts(title: "An Actions cell selected", shows: "The Cell tab for the selected Actions cell: its position and span, align, and the Actions component settings (Which actions, layout, how many buttons, alignment), beside the grid with the cell outlined.", section: "designer")) { _ in
                 m.tab = .cell; m.select(cell: "actions")
-            }
-            await shot("designer-inspector-template-checks", w, Opts(title: "Template tab, Text and Checks", shows: "The Template tab of the inspector from Name down to the Text and Checks sections at its end, in one picture.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
-                m.clearSelection(); m.tab = .template
             }
             if wants("designer-problems") {
                 m.tab = .cell; m.select(cell: "body")
@@ -156,6 +151,12 @@ extension Runner {
                 }
                 NotificationCenter.default.post(name: Notification.Name("herald.debug.issuesOpen"), object: false)
                 m.undo()
+            }
+            w.setContentSize(NSSize(width: 1280, height: 1900)); ShotKit.keepOffscreen(w); await pause(1.0)
+            let top = titleBarOf(w) + 34, h = w.frame.height - top
+            let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
+            await shot("designer-inspector-template-checks", w, Opts(title: "Template tab, Text and Checks", shows: "The Template tab of the inspector from Name down to the Text and Checks sections at its end, in one picture.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
+                m.clearSelection(); m.tab = .template
             }
             w.close(); await pause(0.4)
         }

@@ -117,4 +117,16 @@ final class SymbolSchemaTests: XCTestCase {
             XCTAssertNotNil(at("definitions", "symbol", "properties", k), k)
         }
     }
+
+    func testBadgeWithPlacementOnlyDrawsTheSymbolWithoutTheText() {
+        func parts(_ placement: HeraldSymbolPlacement?, drawable: Bool = true) -> HeraldBadgeComponent.Parts {
+            HeraldBadgeComponent(binding: "{count}", symbol: HeraldSymbol(name: "bell.fill", placement: placement)).parts(symbolDrawable: drawable)
+        }
+        XCTAssertEqual(parts(.only), .init(leadingSymbol: true, text: false, trailingSymbol: false))
+        XCTAssertEqual(parts(.leading), .init(leadingSymbol: true, text: true, trailingSymbol: false))
+        XCTAssertEqual(parts(nil), .init(leadingSymbol: true, text: true, trailingSymbol: false))
+        XCTAssertEqual(parts(.trailing), .init(leadingSymbol: false, text: true, trailingSymbol: true))
+        XCTAssertEqual(parts(.only, drawable: false), .init(leadingSymbol: false, text: true, trailingSymbol: false), "an unknown symbol leaves the text, never an empty pill")
+        XCTAssertEqual(HeraldBadgeComponent(binding: "{count}").parts(symbolDrawable: false).text, true)
+    }
 }

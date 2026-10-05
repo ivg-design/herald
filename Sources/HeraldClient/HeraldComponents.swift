@@ -429,6 +429,21 @@ public struct HeraldBadgeComponent: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey { case binding, color, textColor, emptyBehavior, symbol }
 
+    /// What the pill draws, in order: a leading symbol, the text, a trailing symbol. `placement: "only"` is the
+    /// symbol without the text ("label dropped" in the component schema); a symbol that cannot be drawn leaves the
+    /// text, so the pill is never empty.
+    public struct Parts: Equatable, Sendable {
+        public var leadingSymbol: Bool, text: Bool, trailingSymbol: Bool
+    }
+    public func parts(symbolDrawable: Bool) -> Parts {
+        guard let sym = symbol, symbolDrawable else { return Parts(leadingSymbol: false, text: true, trailingSymbol: false) }
+        switch sym.placement {
+        case .only: return Parts(leadingSymbol: true, text: false, trailingSymbol: false)
+        case .trailing: return Parts(leadingSymbol: false, text: true, trailingSymbol: true)
+        default: return Parts(leadingSymbol: true, text: true, trailingSymbol: false)
+        }
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(binding: try c.decode(String.self, forKey: .binding),

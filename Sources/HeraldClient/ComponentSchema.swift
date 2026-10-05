@@ -257,7 +257,7 @@ public enum ComponentSchema {
                 "variableValue": prop("string", "0-1 for symbols that support it (wifi, speaker.wave.3, ...): a number, or a {token} bound to a numeric field such as \"{progress}\".", min: 0, max: 1),
                 "effect": o(["type": s("object"), "description": s("macOS 14+ symbol effect."), "required": strs(["kind"]), "properties": o([
                     "kind": prop("string", "bounce, pulse, variableColor, scale, appear, disappear, or replace (swaps the symbol when its bound value changes).", values: HeraldSymbolEffectKind.allCases.map(\.rawValue)),
-                    "trigger": prop("string", "When it plays: onAppear (default), onChange (when a bound value changes), onHover, or repeating.", values: HeraldSymbolTrigger.allCases.map(\.rawValue), def: s("onAppear")),
+                    "trigger": prop("string", "When it plays: onAppear (default), onChange (when a bound value changes), onHover, or repeating (bounce, pulse, variableColor and scale loop; appear, disappear and replace play once, so repeating acts as onAppear for appear and disappear).", values: HeraldSymbolTrigger.allCases.map(\.rawValue), def: s("onAppear")),
                     "speed": prop("number", "Playback speed multiplier.", min: 0.25, max: 4, def: n(1)),
                     "cumulative": prop("boolean", "variableColor only: layers stay on."),
                     "reversing": prop("boolean", "variableColor only: plays back and forth."),

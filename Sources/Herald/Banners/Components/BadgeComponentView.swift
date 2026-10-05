@@ -10,19 +10,17 @@ struct BadgeComponentView: View {
         let bound = ctx.bind(component.binding)
         let fill = ctx.color(component.color ?? "accent", legible: false) ?? .accentColor
         let text = ctx.color(component.textColor, legible: false) ?? GridStyle.contrastingText(on: fillNSColor)
+        let drawable = component.symbol.map { SymbolStyle.isDrawable($0, ctx) } ?? false
+        let parts = component.parts(symbolDrawable: drawable)
         HStack(spacing: 3) {
-            if let sym = component.symbol, SymbolStyle.isDrawable(sym, ctx), sym.placement != .only || bound == nil {
-                if sym.placement != .trailing { SymbolImage(symbol: sym, ctx: ctx, tint: text, size: 9.5, defaultWeight: .semibold) }
-            }
-            if component.symbol?.placement != .only || component.symbol.map({ !SymbolStyle.isDrawable($0, ctx) }) == true {
+            if parts.leadingSymbol, let sym = component.symbol { SymbolImage(symbol: sym, ctx: ctx, tint: text, size: 9.5, defaultWeight: .semibold) }
+            if parts.text {
                 Text(bound ?? " ")
                     .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
                     .foregroundStyle(text)
                     .lineLimit(1)
             }
-            if let sym = component.symbol, SymbolStyle.isDrawable(sym, ctx), sym.placement == .trailing {
-                SymbolImage(symbol: sym, ctx: ctx, tint: text, size: 9.5, defaultWeight: .semibold)
-            }
+            if parts.trailingSymbol, let sym = component.symbol { SymbolImage(symbol: sym, ctx: ctx, tint: text, size: 9.5, defaultWeight: .semibold) }
         }
             .padding(.horizontal, 6).padding(.vertical, 1.5)
             .frame(minWidth: 17)
