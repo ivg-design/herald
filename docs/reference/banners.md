@@ -96,8 +96,8 @@ the app back, open an app, start a reply or snooze. [Buttons and actions](../ACT
 ![A banner with four buttons under its text: Open log, an icon-only button, Dismiss and Post to Slack](../../web/public/shots/docs/banner-actions.png "Buttons sit in a row under the text. When they do not all fit, the rest move into a +N menu.")
 
 A banner can also run one action by itself when nobody answers it, a [follow-up](actions.md#follow-ups). The banner
-stays on screen, and a quiet line under its buttons reads **Follow-up ran: LABEL · TIME**, or **Follow-up failed:
-REASON**.
+stays on screen. A quiet line under its content reads **Follow-up ran: LABEL · TIME** or **Follow-up failed: REASON**.
+When the action needs your approval, the banner shows the question instead and the line appears once it has run.
 
 What pressing a button does to the banner depends on the kind:
 

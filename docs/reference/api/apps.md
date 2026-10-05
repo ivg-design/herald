@@ -440,7 +440,7 @@ curl -s "$HERALD/v1/actions/approvals" -H "Authorization: Bearer $TOKEN"
 | `items[].template` | string | The template name. |
 | `items[].commands` | array | The exact commands the user saw and approved. |
 | `items[].approvedAt` | string | When the user approved, as an ISO 8601 date. |
-| `followUps` | array | One row for each template with an enabled [follow-up](../actions.md#follow-ups) that runs code, and for each manifest that declares one. |
+| `followUps` | array | One row for each template with an enabled [follow-up](../actions.md#follow-ups) that runs code, and one for each manifest that declares an enabled one. |
 | `followUps[].app` | string | The app. |
 | `followUps[].template` | string | The template, for a template follow-up. |
 | `followUps[].source` | string | `template` or `manifest`. |

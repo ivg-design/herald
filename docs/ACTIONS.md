@@ -1,8 +1,8 @@
 # Two-way notifications
 
 A notification does not have to end at the banner. It can carry buttons that open a link, call your server back, take a
-typed answer or run a command, a script or a Shortcut on the Mac. This guide shows how to add each kind and what the user sees when they press
-it. When you finish you will have a banner with working buttons and a program that hears what the user chose. The full
+typed answer or run a command, a script or a Shortcut on the Mac. This guide shows how to add each kind and what the
+user sees when they press it. When you finish you will have a banner with working buttons and a program that hears what the user chose. The full
 list of fields, kinds and rules is in the [actions reference](reference/actions.md).
 
 ## Before you start
@@ -100,6 +100,8 @@ Use it for anything your program has to decide, such as accepting an offer.
 
    The banner stays on screen until you press a button.
 
+   ![A banner titled Counter-offer from Acme with the body They offer $3,900. Accept? and two buttons, Accept and a red Decline](../web/public/shots/docs/banner-accept-decline-reply.png "The banner this request shows. Decline is styled destructive, so it is red.")
+
 4. Press **Accept**.
 
    Your server prints `bid-43 Accept {'decision': 'accept'}` and the banner closes. **Decline** is styled
@@ -149,7 +151,7 @@ Use it when you need a sentence, not a choice.
 
    The buttons give way to a text field with the placeholder **Message to Acme**, a **Send** button and a close button.
 
-   ![A banner titled Migration finished with a text field, a Send button and a close button in place of its buttons](../web/public/shots/docs/banner-reply.png "The reply field replaces the buttons inside the banner. This banner's field says Reply to Claude (build-bot)...; yours shows Message to Acme. The close button brings the buttons back.")
+   ![A banner titled Counter-offer from Acme asking What should we answer?, with a text field with the placeholder Message to Acme, a Send button and a close button in place of its buttons](../web/public/shots/docs/banner-reply-bidbot.png "The reply field replaces the buttons inside the banner. The field shows the placeholder you sent.")
 
 3. Type an answer and press **Send**.
 
@@ -227,12 +229,12 @@ from an app the user has trusted.
    The buttons give way to a question in the banner: **Run this command for BidBot?** The command is shown in a box,
    with **Run once**, **Always allow BidBot** and **Cancel**.
 
-   ![A banner titled Preview looks good asking Run Deploy, with a warning icon, a line saying the button is marked destructive, a red Deploy button and a Cancel button](../web/public/shots/docs/banner-confirm.png "The same kind of question, here for a destructive Deploy button: the question, a line about why Herald asks, and the answers. A command question shows Run once, Always allow and Cancel in this place.")
+   ![A banner titled Report ready with the question Run this command for BidBot?, the command open ~/Reports/bids.pdf in a box, and the buttons Run once, Always allow BidBot and Cancel](../web/public/shots/docs/banner-command-question.png "The question replaces the buttons. It shows the exact command, and Run once runs it this time only.")
 
 4. Press **Run once**.
 
-   The command runs and the banner closes. **Always allow BidBot** turns on **Allow this app to run commands, scripts and Shortcuts**
-   under **Settings > Apps**, so later presses run at once. Turn the switch off to ask again.
+   The command runs and the banner closes. **Always allow BidBot** turns on **Allow this app to run commands, scripts
+   and Shortcuts** under **Settings > Apps**, so later presses run at once. Turn the switch off to ask again.
 
 If the app never registered with `allowCommands`, the press fails with **commands are not allowed for BidBot** and
 nothing runs. The command text is never edited. The notification's data arrives on standard input as JSON and in
@@ -240,8 +242,8 @@ nothing runs. The command text is never edited. The notification's data arrives 
 [What a process receives](reference/actions.md#what-a-process-receives).
 
 A `script` button, which names a file in Herald's scripts folder, and a `shortcut` button, which names an installed
-Apple Shortcut, work the same way and ask under the same switch. Their question names the script with its SHA-256, or
-the Shortcut with its input text:
+Apple Shortcut, work the same way and ask under the same switch. The question reads **Run this script for BidBot?** or
+**Run this Shortcut for BidBot?** and names the script with its SHA-256, or the Shortcut with its input text:
 
 ```json
 {"label": "Forward", "shortcut": "Forward to phone", "input": "{title}"}
@@ -290,7 +292,8 @@ curl -s -X POST "$HERALD/v1/notify" \
   }'
 ```
 
-The action asks for the same approval a button of that kind asks for. After it runs, the banner stays and shows
+The action needs the same approval as an issuer's button of that kind: the app must be registered with `allowCommands`,
+and you answer the question on the banner the first time. After it runs, the banner stays and shows
 **Follow-up ran: Forward**. The timer, the approval and the record are in
 [Follow-ups](reference/actions.md#follow-ups). The whole task, from the Shortcut to the Designer, is in
 [Forward a notification you missed](FORWARD-MISSED.md).

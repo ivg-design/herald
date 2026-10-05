@@ -213,8 +213,8 @@ LABEL after DURATION**.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `after` | number or string | yes | Seconds from 5 to 604800, or a string such as `"90s"`, `"10m"` or `"2h"`. |
-| `actionRef` | string | no | The id of one of the manifest's `actions`. |
+| `after` | number or string | yes | Seconds from 5 to 604800, or a string such as `"90s"`, `"10m"` or `"2h"`. Not needed when `enabled` is `false`. |
+| `actionRef` | string | no | The id of one of the manifest's `actions`, which must be able to follow up. |
 | `action` | object | no | An action written inline. |
 | `enabled` | boolean | no | `false` switches it off. Default `true`. |
 
@@ -240,8 +240,9 @@ action receives and what the banner shows is in [Follow-ups](actions.md#follow-u
 }
 ```
 
-A follow-up that runs code needs the app's permission, the same as a button of the same kind. Until you allow it,
-the question appears on the banner when the timer ends and nothing runs.
+A follow-up that runs code needs the app's permission, the same as a button of the same kind. When the app has asked
+for command access and you have not yet allowed it, the question appears on the banner when the timer ends and nothing
+runs. When the app never asked, or you refused, the follow-up is recorded as failed.
 
 ## Assets
 
@@ -292,9 +293,11 @@ The rules:
 - `app` is required and is at most 128 bytes.
 - `version` is 1 or greater.
 - A field `key` is made of letters, digits, `_`, `.` and `-`, and is unique.
-- An action has a label, a `kind` from the eight issuer kinds, a `shortcut` or `script` name when it has that kind, and a `style` of `default`, `normal`, `prominent`,
-  `destructive` or `cancel`.
+- An action has a label, a `kind` from the eight issuer kinds, and a `style` of `default`, `normal`, `prominent`,
+  `destructive` or `cancel`. A `script` or `shortcut` action also names its script or Shortcut.
 - Action ids are unique, whether declared or taken from the label.
+- An enabled `followUp` has an `after` of 5 to 604800 seconds and exactly one of `actionRef` and `action`. An
+  `actionRef` names a declared action, and the action's kind is `shortcut`, `script`, `command` or `callback`.
 - `appBundleId` looks like `com.example.App`: two or more parts of letters, digits, `-` and `_`, separated by dots.
 - `appPath` ends in `.app`.
 - An asset has a unique `id` made of letters, digits, `_`, `.` and `-`, and it has a `type` and a `path`.

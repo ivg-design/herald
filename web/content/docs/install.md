@@ -65,7 +65,9 @@ port, use **Settings > General > Port** and **Apply**. [The Herald app](APP.md#g
 
 The `herald` tool is inside the app. Open **Settings > MCP**, find **Command line tool** and press
 **Install `herald` command line tool**. Herald copies it to `/usr/local/bin/herald` and asks for an administrator
-password only if that folder is not writable. The same section lists the MCP server for AI agents; see
+password only if that folder is not writable. The copy is not a link: after you update Herald, press the button again to
+replace it. The tool inside the app, `Herald.app/Contents/Helpers/herald`, is always current. See
+[Install the tool](reference/cli.md#install-the-tool). The same section lists the MCP server for AI agents; see
 [Herald MCP server](MCP.md).
 
 ### Update Herald

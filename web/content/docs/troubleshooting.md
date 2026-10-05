@@ -55,7 +55,7 @@ menu to see it, then check these.
 | Clicking the banner does not open the app. | A registered `bundleId` alone does not open anything on a click. | Send a `url`, or set the template's `onClick` to `openApp`. |
 | A link shows **Action failed**. | Only `http`, `https` and `mailto` links open. | Send an `https` link. |
 | A button does nothing. | A command, script or Shortcut button needs the app to have asked for `allowCommands` and you to have allowed it. | Turn on **Allow this app to run commands, scripts and Shortcuts** under **Settings > Apps**. |
-| A follow-up never ran. | The banner was dismissed, answered or opened first, Herald quit, the banner's timeout is shorter than the follow-up time, or the follow-up waits for approval. | Check the banner for the approval question, then [Follow-ups](reference/actions.md#follow-ups). |
+| A follow-up never ran. | You dismissed, answered or opened the banner first, Herald quit, the banner closed itself sooner, or the follow-up waits for approval. | Look for an approval question on the banner and a **Follow-up failed** line in History. See [Follow-ups](reference/actions.md#follow-ups). |
 | A button asks a question in the banner. | Herald asks before it runs code on your Mac or sends data to another computer. | Answer **Run once**, **Always allow** or **Cancel**. See [Actions](reference/actions.md#approvals). |
 | A callback button does nothing for an address that is not on this Mac. | Callbacks to another host need your approval. | Turn on **Allow callbacks to HOST** under **Settings > Apps**, or answer **Send once** in the banner. |
 | **Add to Reminders** fails. | Herald has no access to Reminders. | Allow Herald in **System Settings > Privacy & Security > Reminders**. |

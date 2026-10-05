@@ -64,6 +64,7 @@ Start with the task pages. Each one has numbered steps and says what you should 
 | [Design a banner](docs/AUTHORING.md) | Lay out a banner in the Designer. |
 | [Templates](docs/TEMPLATES.md) | Save, share and reuse banner designs. |
 | [Buttons and actions](docs/ACTIONS.md) | Make buttons that open links, run commands or call your app back. |
+| [Forward a notification you missed](docs/FORWARD-MISSED.md) | Run an action, such as a Shortcut that messages your phone, when a banner goes unanswered. |
 | [Voice](docs/VOICE.md) | Speak notifications and play voice messages. |
 | [Herald MCP server](docs/MCP.md) | Install the MCP server and connect an agent. |
 | [Testing](docs/TESTING.md) | Check a design and a flow without waiting for real events. |

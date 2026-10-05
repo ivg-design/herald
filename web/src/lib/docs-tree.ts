@@ -38,6 +38,7 @@ export const DOC_TREE: DocGroup[] = [
       { slug: "design-a-banner", title: "Design a banner", file: "docs/AUTHORING.md" },
       { slug: "templates", title: "Templates", file: "docs/TEMPLATES.md" },
       { slug: "actions", title: "Two-way notifications", file: "docs/ACTIONS.md" },
+      { slug: "forward-missed", title: "Forward a notification you missed", file: "docs/FORWARD-MISSED.md" },
       { slug: "voice", title: "Make Herald speak", file: "docs/VOICE.md" },
       { slug: "mcp", title: "Agents and MCP", file: "docs/MCP.md" },
       { slug: "testing", title: "Testing", file: "docs/TESTING.md" },

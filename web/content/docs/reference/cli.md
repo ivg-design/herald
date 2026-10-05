@@ -7,12 +7,25 @@ the task. Every command below names the endpoint it calls, so the API reference 
 
 ## Install the tool
 
-The tool ships inside Herald.app at `Herald.app/Contents/Helpers/herald`. To put it on your shell path:
+The tool ships inside Herald.app at `Herald.app/Contents/Helpers/herald`. That copy is always the one that matches the
+installed app, and you can run it by its full path. To put a copy on your shell path:
 
 1. Open Herald's **Settings** and choose the **MCP** tab.
-2. Press **Install `herald` command line tool**.
+2. Under **Command line tool**, press **Install `herald` command line tool**.
 3. If macOS asks for an administrator password, enter it. The tool is copied to `/usr/local/bin/herald`, which
    needs it when that folder is not writable by you.
+
+The installer makes a copy, not a link, so the copy on your path does not change when you update Herald. To bring a
+stale copy up to date, press the same button again: it replaces `/usr/local/bin/herald` with the copy inside the app.
+To see whether the two differ, compare their versions:
+
+```sh
+herald --version
+/Applications/Herald.app/Contents/Helpers/herald --version
+```
+
+The MCP server is different: the **Settings > MCP** installers point your agent at the copy inside the app, so it is
+always current.
 
 Check the result in a terminal:
 
@@ -158,7 +171,7 @@ Shows a notification as a banner and stores it in History. Sending the same `--i
 | `--snooze`, `--no-snooze` | flag | Show the snooze menu on the banner, or hide it. |
 | `--priority P` | string | One of `low`, `normal`, `high`, `urgent`. `urgent` breaks quiet hours only for apps that allow it. |
 | `--button "Label=target"` | string | Add a button. Repeat the option for more. See the targets below. |
-| `--follow-up-after DURATION` | string | Run one action if the banner is still unattended after this long: seconds, or `90s`, `10m`, `2h`. From 5 seconds to 7 days. Give it with one of the next four options. |
+| `--follow-up-after DURATION` | string | How long the banner may go unattended before the action runs: seconds, or `90s`, `10m`, `2h`. From 5 seconds to 7 days. |
 | `--follow-up-shortcut NAME` | string | The follow-up runs this Apple Shortcut. |
 | `--follow-up-script FILE` | string | The follow-up runs this file from Herald's scripts folder. |
 | `--follow-up-command CMD` | string | The follow-up runs this shell command. |
@@ -191,7 +204,8 @@ The `--button` target decides what the button does:
 
 The speech options build the notification's `speak` field. See [Voice](voice.md) for the field and its limits.
 
-The follow-up options build the notification's `followUp` object. How a follow-up works is in
+The `--follow-up-*` options build the notification's `followUp` object. Give `--follow-up-after` together with exactly one
+of `--follow-up-shortcut`, `--follow-up-script`, `--follow-up-command` and `--follow-up-ref`. How a follow-up works is in
 [Follow-ups](actions.md#follow-ups).
 
 **Example**
@@ -222,6 +236,7 @@ echo '{"app":"example.bidbot","title":"Bid accepted","buttons":[{"label":"Open",
 **Exit status**
 
 - `1` with `herald: notify needs --app` or `herald: notify needs --title (or --template)` when those are missing.
+- `1` with a message such as `herald: a follow-up needs --follow-up-after (seconds, or 90s | 10m | 2h)` when the follow-up options are incomplete, out of range or name the action twice.
 - `1` and Herald's error when it rejects the notification.
 
 **HTTP route**
@@ -961,8 +976,8 @@ code: you approve at the Mac, in the banner's question.
 | `--command CMD` | string | Run this shell command. |
 | `--action-ref ID` | string | Run the action of this id, or label, that the notification offers. |
 | `--input TEXT` | string | Text for the Shortcut or script, with `{tokens}` filled. |
-| `--label TEXT` | string | The name shown on the banner line **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
-| `--off` | flag | Switch the follow-up off, including one the issuer declares. Replaces `--after` and an action. |
+| `--label TEXT` | string | The name shown on the banner line **Follow-up ran: LABEL**. Default: the Shortcut or script name, or `Follow-up` for a command. |
+| `--off` | flag | Switch the follow-up off, including one the issuer declares. Use it alone, with `--app` and `--name`. |
 
 Give one of `--shortcut`, `--script`, `--command` and `--action-ref` with `--after`, or give `--off`.
 
@@ -982,19 +997,21 @@ herald template follow-up --app example.bidbot --name "Bid won" \
   "template": "Bid won",
   "createdTemplate": false,
   "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
-                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
-  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+               "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}},
+  "action": {"id": "follow-up", "label": "Forward to phone",
+             "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"},
   "origin": "template",
   "approval": "needs-approval",
   "needsApproval": true,
-  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+  "note": "Approval stays with the person at the Mac: the banner asks the first time the action would run, and Always allow lets later follow-ups run unattended. Nothing was approved here. list_shortcuts names the installed Shortcuts."
 }
 ```
 
 **Exit status**
 
 - `1` with the message when the options are incomplete, such as `--after` without an action.
-- `1` and Herald's error when it rejects the follow-up, for example for a kind that cannot follow up.
+- `1` with `herald: --off takes no other follow-up option` when `--off` comes with `--after`, an action or `--input`.
+- `1` and Herald's error when it rejects the follow-up, for example for a kind that cannot follow up, an `--action-ref` the app does not offer, or a built-in layout named with `--name`.
 
 **HTTP route**
 

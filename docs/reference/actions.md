@@ -3,8 +3,8 @@
 An action is a button on a banner and the thing that happens when the user presses it. This page is the reference
 for all of them: where they come from, the nine kinds, the fields each kind takes, the approvals Herald asks for
 before it runs code, the rules a template uses to change buttons, the follow-up that runs one action when nobody
-answers a banner, and the exact request Herald sends to your server when a callback button is pressed. If you want to add a button and see it work, start with
-[Two-way notifications](../ACTIONS.md).
+answers a banner, and the exact request Herald sends to your server when a callback button is pressed. If you want to
+add a button and see it work, start with [Two-way notifications](../ACTIONS.md).
 
 ## Concepts
 
@@ -79,8 +79,8 @@ The question shows the exact command, script or address in a monospaced box.
 
 | What | Who asks | What you see | How it is remembered |
 |---|---|---|---|
-| An issuer's `command`, `script` or `shortcut` | The app's permission to run commands, scripts and Shortcuts. | **Run this command for APP?** with **Run once** and **Always allow APP**. The box names the command, or the script with its SHA-256, or the Shortcut with its input. | **Always allow** turns on **Allow this app to run commands, scripts and Shortcuts** under **Settings > Apps**. |
-| A template's `command`, `script` or `shortcut` | One confirmation per template. | **Run a command from the "TEMPLATE" template?** with **Run once** and **Always allow this template**. | Stored per template. Listed under **Settings > Actions**, where you can revoke it. |
+| An issuer's `command`, `script` or `shortcut` | The app's permission to run commands, scripts and Shortcuts. | **Run this command for APP?** with **Run once** and **Always allow APP**. A script or Shortcut reads **Run this script for APP?** or **Run this Shortcut for APP?**. | **Always allow** turns on **Allow this app to run commands, scripts and Shortcuts** under **Settings > Apps**. |
+| A template's `command`, `script` or `shortcut` | One confirmation per template. | **Run a command from the "TEMPLATE" template?** with **Run once** and **Always allow this template**. A script or Shortcut reads **Run a script from** or **Run a Shortcut from**. | Stored per template. Listed under **Settings > Actions**, where you can revoke it. |
 | A callback to a host that is not this Mac | The app's callback host approval. | **Send APP's button action to HOST?** with **Send once** and **Always allow HOST**. | Stored on the app. The **Allow callbacks to HOST** switch under **Settings > Apps** shows it. |
 | Any action styled `destructive` | The button itself. | **Run "LABEL"?** with the label in red and **Cancel**. | Never remembered. It asks every time. |
 
@@ -763,7 +763,8 @@ A banner has one follow-up. When more than one place declares it, the nearest to
 2. The notification's `followUp`.
 3. The manifest's `followUp`.
 
-A template that sets `"enabled": false` switches the issuer's follow-up off.
+A template that sets `"enabled": false` switches the issuer's follow-up off. A notification that sets it switches off
+the manifest's.
 
 The origin of the action decides which approval applies. An action written inline takes the origin of the place that
 declares it: the issuer for a manifest or a notification, the template for a template. An `actionRef` takes the
@@ -773,11 +774,10 @@ when approval is missing.
 
 ### When it runs
 
-- The timer starts when the banner is on screen. Quiet hours and mute hold the banner back, and the timer waits with
-  it.
+- The timer starts when the banner is on screen. When quiet hours hold the banner back, the timer waits with it.
 - Dismissing the banner, pressing any button, replying and opening the banner cancel the timer.
 - Snoozing drops the timer. When the banner returns, a new timer starts.
-- A follow-up runs at most once per notification.
+- A follow-up runs at most once per notification. Sending the notification again under the same id starts it over.
 - Timers live in memory. When Herald quits, they are gone and the follow-up does not run.
 - A banner whose auto-dismiss timeout is not longer than `after` closes first, so it never follows up. Validation
   warns about it.
@@ -798,14 +798,19 @@ A callback follow-up posts the usual request with two more fields:
 
 ### Approval and what you see
 
-A follow-up runs under the gates of a pressed button of its origin. An issuer follow-up that runs code needs the app's
-**Allow this app to run commands, scripts and Shortcuts** switch. A template follow-up needs the template's one-time
-approval, and **Always allow this template** covers an inline follow-up action, because it is part of the template's own
-actions.
+A follow-up runs under the gates of a pressed button of its origin.
+
+- An issuer follow-up that runs code needs the app's **Allow this app to run commands, scripts and Shortcuts** switch,
+  and the app must have registered with `allowCommands`. Without the registration the follow-up fails and nothing
+  asks.
+- A template follow-up needs the template's one-time approval. **Always allow this template** covers an inline
+  follow-up action, because it is part of the template's own actions.
+- A callback to a host that is not this Mac, and an action styled `destructive`, ask the same questions as for a
+  button.
 
 When approval is missing at the moment the timer ends, nothing runs. The usual question appears on the banner, History
 records the outcome `waitingForApproval`, and the log says `follow-up waiting for approval`. Herald never opens a
-window or takes the keyboard for it.
+window or takes the keyboard for it. The action runs when you answer **Run once** or **Always allow**.
 
 After the action runs, the banner stays. A line under the buttons reads **Follow-up ran: LABEL · TIME**, or
 **Follow-up failed: REASON**. The log at `~/Library/Logs/Herald/actions.log` gets a `follow-up ran`,

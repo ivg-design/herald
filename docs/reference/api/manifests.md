@@ -88,6 +88,9 @@ curl -s -X PUT "$HERALD/v1/manifest" \
   `invalid manifest: actions[1].shortcut: a shortcut action needs 'shortcut': the name of an installed Shortcut`.
 - A `script` or `shortcut` action, or a follow-up that runs one, runs only when the user has allowed the app to
   run commands, scripts and Shortcuts. The manifest alone grants nothing.
+- A `followUp` is checked with the manifest: `after` must be 5 to 604800 seconds, it names one action, `actionRef`
+  must be the id of one of the manifest's actions, and the kind must be `shortcut`, `script`, `command` or `callback`.
+  Otherwise the call fails with `400`.
 - A Rive file that cannot be installed does not block the manifest. The problem is reported when a banner
   tries to draw the animation. Check a file with [`POST /v1/rive/check`](diagnostics.md#post-v1rivecheck).
 

@@ -247,15 +247,17 @@ shortcut receives the whole notification as JSON.
 
 To make the button do something:
 
-1. Open **Shortcuts.app** and create a shortcut named exactly **Bid follow-up**.
-2. Let it accept text input: open its details and enable it as a Quick Action or Share Sheet shortcut that receives text.
-   **Shortcut Input** then holds the line Herald sends.
-3. Add the actions you want, such as **Add New Reminder** with Shortcut Input as the title, **Create Note** or **Send Message**.
+1. Open the Shortcuts app and create a shortcut named exactly `Bid follow-up`.
+2. Make it take the text Herald sends as its input.
+3. Add the steps you want it to run with that text, such as adding a reminder, creating a note or sending a message.
 
 The first time you press the button, Herald shows the shortcut's name and the exact input and asks you to confirm. It asks
-again if either changes. Nothing runs on delivery, only when you press. See
-[Apple Shortcuts](../../ACTIONS.md). The script lists installed shortcuts with
+again if either changes. Nothing runs when a banner arrives, only when you press the button. The page
+[Actions](../../ACTIONS.md) has the rules. The script lists installed shortcuts with
 [`GET /v1/shortcuts`](../../reference/api/templates.md#get-v1shortcuts) and prints the `note` line above while yours is missing.
+
+A template can also run the same shortcut by itself when a banner goes unanswered. That is a follow-up, and BidBot does not
+send one. See [Forward a notification you missed](../../FORWARD-MISSED.md).
 
 ### Mark seen: a callback
 

@@ -288,10 +288,12 @@ tool that grants one.
 ### `list_approvals`
 
 Lists the commands, scripts and Shortcuts the user has approved. Call it to see what a template is already allowed to
-run, or to find the app and template names to pass to `revoke_approval`. The `followUps` list has one row for each
-template with an enabled follow-up that runs code, and for each manifest that declares one, with its `approval`:
-`approved`, `needs-approval`, `app-permission-needed`, `app-not-allowed` or `none`. Use it to see which follow-ups are
-waiting for the person.
+run, or to find the app and template names to pass to `revoke_approval`.
+
+The `followUps` list has one row for each template with an enabled follow-up that runs code, and one for each manifest
+that declares an enabled one. Each row has an `approval`: `approved`, `needs-approval`, `app-permission-needed`,
+`app-not-allowed` or `none`. Use it to see which follow-ups are waiting for the person. The fields are in
+[`GET /v1/actions/approvals`](../api/apps.md#get-v1actionsapprovals).
 
 **Arguments**
 

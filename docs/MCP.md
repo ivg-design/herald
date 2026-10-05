@@ -22,7 +22,7 @@ Once connected, the agent can do three things:
 
    The **Server** section shows the path of the bundled server. Herald.app carries it in `Herald.app/Contents/Helpers/`, signed with the app.
 
-2. Press **Test connection**. Herald starts the server, asks it for its tools and shows the result in green, for example **OK: 69 tools**. A red message means the server could not start; see [If it does not work](#if-it-does-not-work).
+2. Press **Test connection**. Herald starts the server, asks it for its tools and shows the result in green, for example **OK: 70 tools**. A red message means the server could not start; see [If it does not work](#if-it-does-not-work).
 
 3. In the **Clients** section, find the row for your client. Its status reads **Installed**, **Not installed** or **Client not found**. Press **Install**. If the status is **Installed** the button reads **Reinstall**.
 
@@ -79,7 +79,7 @@ A banner appears on screen with the agent's name and icon. In Claude Code the to
 
 ## What the agent can do
 
-Once connected, the agent has 69 tools. They fall into five groups. The [tool index](reference/mcp/README.md#tool-index) lists every one.
+Once connected, the agent has 70 tools. They fall into five groups. The [tool index](reference/mcp/README.md#tool-index) lists every one.
 
 | The agent can | Main tools | Where it is described |
 |---|---|---|

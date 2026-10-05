@@ -1,6 +1,6 @@
 # MCP server
 
-`herald-mcp` is Herald's MCP server. It lets an AI agent, such as Claude Code, Codex, Claude Desktop or any other MCP client, do on your Mac what you do with Herald's own windows: show a banner, speak a message, ask you a question and read your answer, and design how an app's banners look and what their buttons do. This page is the reference for the server as a whole: how it connects, what every tool shares, how an agent is identified, which resources it offers, and an index of all 69 tools. It is for people who build or configure an agent integration. To install the server in a client, see [Connect an agent](../../MCP.md).
+`herald-mcp` is Herald's MCP server. It lets an AI agent, such as Claude Code, Codex, Claude Desktop or any other MCP client, do on your Mac what you do with Herald's own windows: show a banner, speak a message, ask you a question and read your answer, and design how an app's banners look and what their buttons do. This page is the reference for the server as a whole: how it connects, what every tool shares, how an agent is identified, which resources it offers, and an index of all 70 tools. It is for people who build or configure an agent integration. To install the server in a client, see [Connect an agent](../../MCP.md).
 
 ## Concepts
 
@@ -180,7 +180,7 @@ Resources are documents an agent can read without calling a tool. The URI parts 
 
 ## Tool index
 
-There are 69 tools in five areas. Each tool is described once, in the page named in its row.
+There are 70 tools in five areas. Each tool is described once, in the page named in its row.
 
 ### Notifications
 
@@ -217,6 +217,7 @@ Read the fields an app sends, design templates, check them, add buttons, and man
 | [`duplicate_template`](templates.md#duplicate_template) | Copies a template, optionally for another app. |
 | [`rename_template`](templates.md#rename_template) | Renames a template. |
 | [`set_default_template`](templates.md#set_default_template) | Sets or clears the app's default template. |
+| [`set_follow_up`](templates.md#set_follow_up) | Sets or removes the action a template runs when a banner goes unanswered. |
 | [`validate_template`](templates.md#validate_template) | Checks a template without saving it. |
 | [`render_preview`](templates.md#render_preview) | Draws a template offscreen and returns a PNG. |
 | [`designer_snapshot`](templates.md#designer_snapshot) | Draws the Designer window offscreen and returns a PNG. |

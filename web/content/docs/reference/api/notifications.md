@@ -193,23 +193,24 @@ A button has a label and one thing it does. Give exactly one of `url`, `command`
 }
 ```
 
-A `script` or `shortcut` button asks the person the first time, in the banner, and names the script with its SHA-256 or
-the Shortcut with its input. `snooze` is not a button an app can send.
+The first time a `script` or `shortcut` button runs for an app, the banner asks the person to allow it. The question
+names the script with its SHA-256 or the Shortcut with its input. `snooze` is not a button an app can send.
 
 #### Follow-up object
 
 A follow-up runs one action when the banner is left unattended: nobody dismisses it, presses a button, replies or
-opens it for the time you set. Use it to forward a missed banner. The reference for how it works is
+opens it for the time you set. Use it to forward a missed banner. How it works is in
 [Follow-ups](../actions.md#follow-ups).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `after` | number or string | yes | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. |
+| `after` | number or string | yes | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. Not needed when `enabled` is `false`. |
 | `actionRef` | string | no | The id, or label, of one of this notification's buttons. |
 | `action` | object | no | An action written inline, as a button with an `id` and a `label`. |
 | `enabled` | boolean | no | `false` switches it off. Default `true`. |
 
-Give exactly one of `actionRef` and `action`. The kind must be `shortcut`, `script`, `command` or `callback`.
+Give exactly one of `actionRef` and `action`. The kind must be `shortcut`, `script`, `command` or `callback`: a link,
+an app, a reply, a snooze or a dismiss would take focus, need the person or hide the banner.
 
 ```json
 {
@@ -226,7 +227,8 @@ Give exactly one of `actionRef` and `action`. The kind must be `shortcut`, `scri
 ```
 
 - A template's follow-up wins over the notification's, and the notification's over the manifest's.
-- The timer starts when the banner is on screen. Dismissing, any button, a reply and opening cancel it.
+- The timer starts when the banner is on screen. Dismissing, any button, a reply and opening cancel it. Snoozing restarts it when the banner comes back.
+- A follow-up runs at most once for a notification.
 - A follow-up that runs code runs under the app's permission. A notification cannot grant it.
 - A `timeout` that is not longer than `after` means the banner closes first and never follows up.
 - Herald keeps the timer in memory. Quitting Herald drops it.

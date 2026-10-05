@@ -297,18 +297,31 @@ with `allowCommands: true` to ask for it. Until the user agrees, the press fails
 
 ![The Apps tab of Settings with one app selected: its icon, banner, sound and display settings and the Remove button](../web/public/shots/docs/settings-apps.png#focus=60 "Per-app settings, including the switch that allows the app's buttons to run commands. Herald never grants it for the user.")
 
-**Scripts and Shortcuts.** An action can also run a file from Herald's scripts folder (`"kind": "script"`, a plain
-file name) or an Apple Shortcut (`"kind": "shortcut"`, with an optional `input` text). They run under the same switch as
-a command, and the banner question names the script and its hash, or the Shortcut and its input.
+**Scripts and Shortcuts.** An action can also run a file from Herald's scripts folder or an Apple Shortcut. They run
+under the same permission as a command: the user allows your app once, and the banner question names the script with
+its hash, or the Shortcut with its input.
+
+| Kind | Fields | What it runs |
+|---|---|---|
+| `script` | `script` | A file in Herald's scripts folder. Give a plain file name, not a path. |
+| `shortcut` | `shortcut`, optional `input` | An installed Apple Shortcut. `input` is the text it receives, with `{tokens}` filled. |
 
 ```json
 {"id": "forward", "label": "Forward", "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}
 ```
 
-**Follow-up.** Your manifest can name what to run when one of your notifications is left unattended: `"followUp":
-{"after": "10m", "actionRef": "forward"}`. The timer starts when the banner appears and stops when the person does
-anything with it. A callback follow-up receives `"event": "unattended"`. The person's template can replace or switch
-off your follow-up. See [Follow-ups](reference/actions.md#follow-ups) and the how-to
+**Follow-up.** Your manifest can name one action to run when a notification of yours is left unattended:
+
+```json
+{"followUp": {"after": "10m", "actionRef": "forward"}}
+```
+
+- The timer starts when the banner appears. Dismissing the banner, pressing a button, replying or opening it stops the timer.
+- The action is a `shortcut`, `script`, `command` or `callback`, and it runs under the same permission as a button.
+- A callback follow-up posts `"event": "unattended"` to your callback URL.
+- The person's template can replace your follow-up or switch it off.
+
+See [Follow-ups](reference/actions.md#follow-ups) for the full rules and the how-to
 [Forward a notification you missed](FORWARD-MISSED.md).
 
 ### Step 5: ship a default template and Rive assets (optional)

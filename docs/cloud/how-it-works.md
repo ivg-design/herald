@@ -38,10 +38,12 @@ An agent that holds a valid credential can do exactly four things:
 3. Wait for your reply to a notification it sent.
 4. Ask whether your Mac is online and whether quiet hours are on.
 
-It cannot run commands, scripts or Shortcuts, and it cannot add a follow-up. It cannot add buttons that call a server, show a picture from a
-file, or play audio. It cannot read your History, see another agent's notifications, change settings, or create
-or approve keys. The fields and endpoints are in the [relay API](../reference/relay/README.md).
-You can add a follow-up to a connector's notifications in the Designer; the connector cannot add one itself.
+It cannot run commands, scripts or Shortcuts. It cannot add a follow-up. It cannot add buttons that call a server,
+show a picture from a file, or play audio. It cannot read your History, see another agent's notifications, change
+settings, or create or approve keys. The fields and endpoints are in the [relay API](../reference/relay/README.md).
+
+You can give a connector's notifications a follow-up in the Designer. See
+[Forward a notification you missed](../FORWARD-MISSED.md).
 
 A cloud notification arrives in Herald as an ordinary notification of an app named `cloud.` followed by the
 key's name, so it has its own entry in **Settings > Apps**, its own History and its own template.

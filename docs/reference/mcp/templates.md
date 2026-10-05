@@ -850,14 +850,14 @@ get around it. How a follow-up works is in [Follow-ups](../actions.md#follow-ups
 | Name | Type | Required | Description |
 |---|---|---|---|
 | `app` | string | yes | The app id. Cloud connectors are `cloud.NAME`. |
-| `template` | string | no | The saved template to edit. Default: the app's default template, created from the current layout when the app has none. |
+| `template` | string | no | The saved template to edit. A built-in layout is refused. Default: the app's default template, created from the current layout when the app has none. |
 | `after` | number or string | no | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. Required unless `enabled` is `false`. |
 | `shortcut` | string | no | An installed Shortcut. Take the name from [`list_shortcuts`](#list_shortcuts). |
 | `script` | string | no | A file name in Herald's scripts folder. |
 | `command` | string | no | A shell command. |
 | `actionRef` | string | no | The id, or label, of an action the notification offers. |
 | `input` | string | no | Text for the Shortcut or script, with `{tokens}` filled. |
-| `label` | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
+| `label` | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name, or `Follow-up` for a command. |
 | `enabled` | boolean | no | `false` switches the follow-up off, including one the issuer declares. |
 
 Give exactly one of `shortcut`, `script`, `command` and `actionRef`, unless `enabled` is `false`.
@@ -883,21 +883,22 @@ Give exactly one of `shortcut`, `script`, `command` and `actionRef`, unless `ena
   "template": "Bid won",
   "createdTemplate": false,
   "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
-                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
-  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+               "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}},
+  "action": {"id": "follow-up", "label": "Forward to phone",
+             "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"},
   "origin": "template",
   "approval": "needs-approval",
   "needsApproval": true,
-  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+  "note": "Approval stays with the person at the Mac: the banner asks the first time the action would run, and Always allow lets later follow-ups run unattended. Nothing was approved here. list_shortcuts names the installed Shortcuts."
 }
 ```
 
 The result's fields are the ones in [`PUT /v1/templates/follow-up`](../api/templates.md#put-v1templatesfollow-up),
-with the `approval` values listed there.
+with the `approval` values listed there. A refused call returns the same message as the route's `400` or `404`.
 
 **HTTP route**
 
-[`PUT /v1/templates/follow-up`](../api/templates.md#put-v1templatesfollow-up).
+[`PUT /v1/templates/follow-up`](../api/templates.md#put-v1templatesfollow-up)
 
 **Side effects**
 

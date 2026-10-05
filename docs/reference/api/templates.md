@@ -327,14 +327,14 @@ never approves code. When the action runs code, the result says the person still
 | Name | In | Type | Required | Description |
 |---|---|---|---|---|
 | `app` | body | string | yes | The app that owns the template. |
-| `template` | body | string | no | The template to edit. Default: the app's default template. When the app has none, Herald creates one from the current layout. |
+| `template` | body | string | no | The template to edit. Default: the app's default template, which Herald creates from the current layout when the app has none. |
 | `after` | body | number or string | no | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. Required unless `enabled` is `false`. |
 | `shortcut` | body | string | no | Run this Apple Shortcut. |
 | `script` | body | string | no | Run this file from Herald's scripts folder. |
 | `command` | body | string | no | Run this shell command. |
 | `actionRef` | body | string | no | Run the action of this id, or label, that the notification offers. |
 | `input` | body | string | no | Text for the Shortcut or script, with `{tokens}` filled. |
-| `label` | body | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
+| `label` | body | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name, or `Follow-up` for a command. |
 | `enabled` | body | boolean | no | `false` switches the follow-up off. Default `true`. |
 
 Give exactly one of `shortcut`, `script`, `command` and `actionRef`, unless `enabled` is `false`.
@@ -357,12 +357,13 @@ curl -s -X PUT "$HERALD/v1/templates/follow-up" \
   "template": "Bid won",
   "createdTemplate": false,
   "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
-                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
-  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+               "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}},
+  "action": {"id": "follow-up", "label": "Forward to phone",
+             "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"},
   "origin": "template",
   "approval": "needs-approval",
   "needsApproval": true,
-  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+  "note": "Approval stays with the person at the Mac: the banner asks the first time the action would run, and Always allow lets later follow-ups run unattended. Nothing was approved here. list_shortcuts names the installed Shortcuts."
 }
 ```
 
@@ -373,9 +374,11 @@ curl -s -X PUT "$HERALD/v1/templates/follow-up" \
 | `saved` | boolean | `true` when the template was written. |
 | `app`, `template` | string | The app and the template that now carries the follow-up. |
 | `createdTemplate` | boolean | `true` when Herald made the template because the app had none. |
+| `manifestCreated` | boolean | With `createdTemplate`: `true` when Herald also made a manifest for the app. |
+| `defaultTemplate` | string | With `createdTemplate`: the new template, now the app's default. |
 | `followUp` | object | The stored follow-up, with `after` in seconds. |
-| `action` | object | The action it runs: `id`, `label` and `kind`. |
-| `origin` | string | `template`. The template's approval applies. |
+| `action` | object | The action it runs, as stored. `null` when the follow-up is off. |
+| `origin` | string | `template` or `issuer`. It decides which approval applies. `null` when the follow-up is off. |
 | `approval` | string | `approved`, `needs-approval`, `app-permission-needed`, `app-not-allowed` or `none`. See below. |
 | `needsApproval` | boolean | `true` when nothing runs until the person approves. |
 | `note` | string | A sentence that says what happens next. |
@@ -387,21 +390,26 @@ The `approval` values:
 | `approved` | The person already approved this template's code. The follow-up runs. |
 | `needs-approval` | The person has to approve the template's code, in the banner's question, the first time. |
 | `app-permission-needed` | The action is an issuer action. The app asked to run commands, scripts and Shortcuts and the person has not allowed it yet: the banner asks the first time it would run. |
-| `app-not-allowed` | The action is an issuer action and the app never registered with `allowCommands`, so it cannot run. |
-| `none` | The action runs no code, such as a callback to this Mac. |
+| `app-not-allowed` | The action is an issuer action and the app did not register with `allowCommands`, so it cannot run. |
+| `none` | The action runs no code, such as a callback to this Mac, or the follow-up is off. |
 
 **Errors**
 
 | Status | When |
 |---|---|
-| `400` | `after` is out of range, no action or more than one is named, the kind cannot follow up, or `actionRef` names an action the notification does not offer. |
-| `404` | The app, or the template named, does not exist. |
+| `400` | `after` is missing or outside 5 to 604800 seconds, or is not a duration. |
+| `400` | No action, or more than one, is named; `input` goes with a `command` or `actionRef`; or `script` is a path. |
+| `400` | The kind cannot follow up, or `actionRef` names an action the app does not offer. |
+| `400` | `enabled` is `false` together with another follow-up field, or `template` names a built-in layout. |
+| `404` | The template named does not exist. |
 
 **Notes**
 
 - Priority is template, then notification, then manifest. A template follow-up wins over the issuer's.
 - `"enabled": false` also switches off a follow-up that the issuer declares.
+- With `actionRef`, the action may be one the issuer offers. It then runs under the app's permission and `origin` is `issuer`.
 - Approval is bound to the template's name and its code. Changing the Shortcut asks again.
+- A built-in layout is read-only. Duplicate it first, or leave out `template` to use the app's default.
 
 ## Move templates between Macs
 

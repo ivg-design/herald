@@ -240,16 +240,20 @@ A command, a script or a Shortcut that you add runs only after the user confirms
 The **Follow-up** block of the **Actions** tab, under **Buttons**, runs one action when a banner goes unanswered. It
 is the way to forward a missed banner to your phone, an email or a channel.
 
-1. Switch on **If not dismissed**.
-2. Under **After**, type a number and choose a unit: seconds, minutes or hours. The range is 5 seconds to 7 days.
+1. Switch on **If not dismissed**. The **After** and **Run** controls appear under it.
+2. Under **After**, type a number and choose a unit: seconds, minutes or hours. The range is 5 seconds to 7 days. A
+   value outside the range shows a warning under the field.
 3. Open the **Run** menu and choose one of the banner's actions, or **New Shortcut action...** to add a Shortcut that
-   belongs to the follow-up alone.
-4. When the issuer already declares a follow-up, the block says **From the issuer: LABEL after DURATION**. Use its
-   switch to turn it off for this template.
+   belongs to the follow-up alone. The menu then shows the action you chose.
+4. When the issuer already declares a follow-up, the block starts with **From the issuer: LABEL after DURATION**. Use
+   its switch to turn it off for this template.
 
-Only a Shortcut, a script, a command or a callback can follow up, so the menu offers no link or reply actions. The
-first time a follow-up that runs code fires, the banner asks you, and **Always allow this template** lets later ones run
-while you are away. [Forward a notification you missed](FORWARD-MISSED.md) goes through it with a Shortcut, and
+Only a Shortcut, a script, a command or a callback can follow up, so the menu offers no link or reply actions.
+
+The first time a follow-up that runs code fires, nothing runs yet: the banner shows the question, and the History row
+reads **Follow-up waiting for approval**. Answer **Run once** or **Always allow this template**, and later follow-ups
+run while you are away. A follow-up whose action comes from the issuer follows the app's **Allow this app to run
+commands, scripts and Shortcuts** switch instead. [Forward a notification you missed](FORWARD-MISSED.md) goes through it with a Shortcut, and
 [Follow-ups](reference/actions.md#follow-ups) is the reference.
 
 #### The look of each button

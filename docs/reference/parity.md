@@ -52,7 +52,7 @@ A template is one JSON document, and every edit the Designer makes rewrites it. 
 | The problems button | none | none | [`validate_template`](mcp/templates.md#validate_template) |
 | **Component** menu in the **Cell** tab | [`GET /v1/components`](api/templates.md#get-v1components) | none | [`component_schema`](mcp/templates.md#component_schema) |
 | **Actions** tab, add a rule | [`PUT /v1/templates`](api/templates.md#put-v1templates) | [`herald template put`](cli.md#herald-template-put) | [`add_action_rule`](mcp/templates.md#add_action_rule) |
-| **Actions** tab, **Follow-up** block | [`PUT /v1/templates/follow-up`](api/templates.md#put-v1templatesfollow-up) | [`herald template follow-up`](cli.md#herald-template-follow-up) | [`set_follow_up`](mcp/templates.md#set_follow_up) |
+| **Actions** tab, **Follow-up** block, **If not dismissed** switch | [`PUT /v1/templates/follow-up`](api/templates.md#put-v1templatesfollow-up) | [`herald template follow-up`](cli.md#herald-template-follow-up) | [`set_follow_up`](mcp/templates.md#set_follow_up) |
 | Symbol browser | [`GET /v1/symbols`](api/templates.md#get-v1symbols) | [`herald symbols`](cli.md#herald-symbols) | [`list_symbols`](mcp/templates.md#list_symbols) |
 | **Run Apple Shortcut** form | [`GET /v1/shortcuts`](api/templates.md#get-v1shortcuts) | none | [`list_shortcuts`](mcp/templates.md#list_shortcuts) |
 | Select a cell, undo, redo, zoom, drag | none | none | UI only |
