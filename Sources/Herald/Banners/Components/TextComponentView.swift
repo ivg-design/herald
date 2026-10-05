@@ -17,33 +17,6 @@ struct TextComponentView: View {
     }
 }
 
-/// True when any text under a view is cut short by its line limit.
-struct TextTruncatedKey: PreferenceKey {
-    static var defaultValue = false
-    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
-}
-
-/// Sits behind a line-limited text and reports whether the same text, at the same width, would be taller without the limit.
-private struct TruncationProbe: View {
-    let text: AttributedString
-    let alignment: TextAlignment
-
-    var body: some View {
-        GeometryReader { shown in
-            Text(text)
-                .multilineTextAlignment(alignment)
-                .fixedSize(horizontal: false, vertical: true)
-                .hidden()
-                .background(GeometryReader { full in
-                    Color.clear.preference(key: TextTruncatedKey.self, value: full.size.height > shown.size.height + 1)
-                })
-                .frame(width: shown.size.width, alignment: .topLeading)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
 /// The drawing half, shared with the Designer's live preview (which has no GridContext).
 struct RichTextLines: View {
     let component: HeraldTextComponent
@@ -74,19 +47,15 @@ struct RichTextLines: View {
             } else {
                 ForEach(Array(shown.enumerated()), id: \.offset) { _, line in
                     let a = line.align?.textAlignment ?? cellAlign
-                    let text = attributed(line, base: base)
-                    Text(text)
+                    Text(attributed(line, base: base))
                         .lineLimit(perLine)
                         .multilineTextAlignment(a)
-                        .background(TruncationProbe(text: text, alignment: a))
                         .frame(maxWidth: fills ? .infinity : nil, alignment: frameAlignment(a))
                 }
             }
         }
         .opacity(resolved == nil ? 0 : 1)
         .frame(maxWidth: fills ? .infinity : nil, alignment: .leading)
-        // Whole lines dropped by the limit count as cut short too.
-        .preference(key: TextTruncatedKey.self, value: (resolved ?? []).count > limit)
     }
 
     private func stackAlignment(_ a: TextAlignment) -> HorizontalAlignment {

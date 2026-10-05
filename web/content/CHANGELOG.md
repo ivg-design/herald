@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.1 (Build 20) - 2026-10-04
+
+### Fixed
+
+- Clicking a banner whose text is cut short now really expands it. In 1.8.0 the click was swallowed: the banner neither
+  expanded nor closed. The banner no longer tries to measure cut text while it sits there; a click lifts the line limits
+  and the banner checks whether it grew. If it grew it stays open (click again to fold it back); if there was nothing
+  more to show, a banner with a link opens the link and any other banner is left exactly as it was.
+
+1201 tests.
+
 ## 1.8.0 (Build 19) - 2026-10-04
 
 ### Added

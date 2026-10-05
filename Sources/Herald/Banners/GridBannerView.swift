@@ -162,7 +162,6 @@ struct GridBannerView: View {
             }
         }
         .contentShape(Rectangle())
-        .onPreferenceChange(TextTruncatedKey.self) { model.textTruncated = $0 }
         .onTapGesture { bannerTapped() }
         .environment(\.openURL, linkAction)
     }
@@ -223,14 +222,7 @@ struct GridBannerView: View {
             if linkClicks.swallowsBannerTap() { return }
             // A stray click on the card must not open it (and dismiss it, cancelling the question) while it is asking.
             if model.replacesActions { return }
-            let n = model.item.notification
-            switch BannerTap.decide(truncated: model.textTruncated, expanded: model.expanded,
-                                    hasLink: !(n.url ?? "").isEmpty, stacked: model.stackCount > 1) {
-            case .expand: model.expanded = true
-            case .collapse: model.expanded = false
-            case .open: model.onOpen()
-            case .nothing: break
-            }
+            model.bodyClicked()
         }
     }
 }

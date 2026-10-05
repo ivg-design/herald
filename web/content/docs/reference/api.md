@@ -94,7 +94,7 @@ No auth. `{"ok":true,"version":"1.2.0","pid":123}`. Use it to detect that Herald
 | `app` | Required. Up to 128 bytes. |
 | `appName` | Display name. |
 | `icon` | A file path or `data:image/png;base64,...`, at most 256 KB. |
-| `bundleId` | The app's bundle identifier, used by `openApp` actions. A click on a banner without a `url` does nothing in 1.8.0, see [Clicking a banner](#clicking-a-banner). |
+| `bundleId` | The app's bundle identifier, used by `openApp` actions. A registered `bundleId` alone does not make a click on the banner open the app; a template with `onClick: "openApp"` does, see [Clicking a banner](#clicking-a-banner). |
 | `callbackURL` | Where `callback` buttons POST ([actions.md](actions.md#callbacks)). Non-loopback hosts need the user's approval. |
 | `allowCommands` | A request only: the user must confirm it in Settings > Apps (or "Always allow") before `command` buttons run. |
 | `defaults` | `sound`, `persistent`, `timeout`, `corner` (`topRight`, `topLeft`, `bottomRight`, `bottomLeft`). |
@@ -173,7 +173,7 @@ an `image` or `icon` over 256 KB, or any other single field over 2 KB gets `413`
 A click on a banner body does not dismiss it. What it does depends on the banner:
 
 - Text that is cut short (by `maxLines` or `maxBodyLines`) expands to show all of it; a second click folds it back.
-- A banner that carries a `url` opens the link on click, after expanding first when its text was cut. Opening the link puts the banner away.
+- A banner that carries a `url` opens the link on click, after expanding first when its text was cut. Opening the link puts the banner away. A template with `onClick: "openApp"` brings the issuing app forward the same way.
 - A closed stack opens in place.
 - A banner with nothing to open stays until its close button is pressed (or `timeout` ends it, or the API dismisses it).
 

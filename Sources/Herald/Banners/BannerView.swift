@@ -33,8 +33,10 @@ final class BannerModel: ObservableObject {
     @Published var hovering = false
     /// The user clicked a banner whose text was cut short: every text shows in full and the panel grows to fit.
     @Published var expanded = false
-    /// Some text of the banner is cut short right now (reported by the text views; not published, it only steers the next click).
-    var textTruncated = false
+    /// The card's height as last measured. A click compares it before and after lifting the line limits: if the card did not
+    /// grow, nothing was cut short. Nothing is measured while the banner just sits there.
+    var lastHeight: CGFloat = 0
+    private var clickPending = false
     /// False when `ImageRenderer` draws the banner (the preview PNG): it cannot draw AppKit-backed views, so
     /// Rive animations and menus (snooze, "+N") are drawn as static stand-ins.
     @Published var liveAnimations = true
@@ -76,6 +78,32 @@ final class BannerModel: ObservableObject {
 
     var onClose: () -> Void = {}
     var onOpen: () -> Void = {}
+
+    /// A click on the banner's body (not on a button or a link): see `BannerTap`.
+    func bodyClicked() {
+        guard !clickPending else { return }
+        // Something to open: the notification's link, or a template that says a click brings the issuing app forward.
+        let hasLink = !(item.notification.url ?? "").isEmpty || template?.onClick == .openApp
+        switch BannerTap.click(expanded: expanded, hasLink: hasLink, stacked: stackCount > 1) {
+        case .open: onOpen()
+        case .collapse: expanded = false
+        case .nothing: break
+        case .expand:
+            // Lift the limits and look at the result: a card that grew had text cut short and now shows it.
+            let before = lastHeight
+            clickPending = true
+            expanded = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + BannerTap.settleSeconds) { [weak self] in
+                guard let self else { return }
+                self.clickPending = false
+                switch BannerTap.afterExpanding(grew: self.lastHeight > before + 1, hasLink: hasLink) {
+                case .open: self.expanded = false; self.onOpen()
+                case .collapse: self.expanded = false
+                default: break
+                }
+            }
+        }
+    }
     /// An action other than dismiss, the snooze menu and Add to Reminders was pressed. `BannerCenter` routes it
     /// to the app controller; a preview leaves it a no-op.
     var onAction: (HeraldAction, HeraldActionOrigin) -> Void = { _, _ in }
@@ -339,7 +367,7 @@ struct BannerView: View {
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
             .tint(model.accent(dark: scheme == .dark))
             .background(GeometryReader { g in Color.clear.preference(key: BannerHeightKey.self, value: g.size.height) })
-            .onPreferenceChange(BannerHeightKey.self) { if reportsHeight { model.onHeight($0) } }
+            .onPreferenceChange(BannerHeightKey.self) { model.lastHeight = $0; if reportsHeight { model.onHeight($0) } }
     }
 }
 

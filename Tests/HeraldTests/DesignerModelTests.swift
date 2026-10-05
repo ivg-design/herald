@@ -1270,19 +1270,24 @@ final class GridGrowRoomTests: XCTestCase {
 }
 
 final class BannerTapTests: XCTestCase {
-    func testAClickShowsCutTextInFullBeforeAnythingElse() {
-        XCTAssertEqual(BannerTap.decide(truncated: true, expanded: false, hasLink: false, stacked: false), .expand)
-        XCTAssertEqual(BannerTap.decide(truncated: true, expanded: false, hasLink: true, stacked: false), .expand, "even a banner with a link expands first")
+    func testAClickLiftsTheLimitsFirstEvenWhenThereIsALink() {
+        XCTAssertEqual(BannerTap.click(expanded: false, hasLink: false, stacked: false), .expand)
+        XCTAssertEqual(BannerTap.click(expanded: false, hasLink: true, stacked: false), .expand)
     }
 
-    func testAClickNeverDismissesABannerThatHasNothingToOpen() {
-        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: false, stacked: false), .nothing)
-        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: true, hasLink: false, stacked: false), .collapse)
+    func testABannerThatGrewStaysOpenAndIsNeverDismissedByTheClick() {
+        XCTAssertEqual(BannerTap.afterExpanding(grew: true, hasLink: false), .nothing)
+        XCTAssertEqual(BannerTap.afterExpanding(grew: true, hasLink: true), .nothing, "cut text is shown before a link is opened")
     }
 
-    func testALinkOrAClosedStackStillOpens() {
-        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: true, stacked: false), .open)
-        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: true, hasLink: true, stacked: false), .open)
-        XCTAssertEqual(BannerTap.decide(truncated: false, expanded: false, hasLink: false, stacked: true), .open)
+    func testABannerWithNothingMoreToShowGoesOnToItsLinkOrStaysAsItWas() {
+        XCTAssertEqual(BannerTap.afterExpanding(grew: false, hasLink: true), .open)
+        XCTAssertEqual(BannerTap.afterExpanding(grew: false, hasLink: false), .collapse, "back to exactly what it was; never dismissed")
+    }
+
+    func testASecondClickFoldsItBackOrOpensTheLinkAndAClosedStackStillOpens() {
+        XCTAssertEqual(BannerTap.click(expanded: true, hasLink: false, stacked: false), .collapse)
+        XCTAssertEqual(BannerTap.click(expanded: true, hasLink: true, stacked: false), .open)
+        XCTAssertEqual(BannerTap.click(expanded: false, hasLink: false, stacked: true), .open)
     }
 }

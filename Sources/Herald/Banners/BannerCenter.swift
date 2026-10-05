@@ -173,6 +173,13 @@ final class BannerCenter {
         // on a lone banner and on a row of the open list, on that notification alone.
         model.onClose = { [weak self] in self?.closePressed(app: item.app, id: item.id) }
         model.onOpen = { [weak self] in self?.openPressed(app: item.app, id: item.id) }
+        #if DEBUG
+        // Verification without touching the screen: a Debug build started with HERALD_DEBUG_TAP_AFTER=<seconds> clicks each
+        // banner's body once, that long after it is made, so its height before and after can be read from /v1/stacks.
+        if let s = ProcessInfo.processInfo.environment["HERALD_DEBUG_TAP_AFTER"], let d = Double(s) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + d) { [weak model] in model?.bodyClicked() }
+        }
+        #endif
         model.onAction = { [weak self] action, origin in self?.route(action, origin: origin, app: item.app, id: item.id) }
         model.onSnooze = { [weak self] o in self?.snoozePressed(app: item.app, id: item.id, option: o) }
         model.onExpandStack = { [weak self] in self?.setStackOpen(key: key, true) }
