@@ -15,6 +15,6 @@ interface Env {
   QUEUE_TTL_HOURS?: string;
   MAX_BODY_BYTES?: string;
   RATE_LIMIT_PER_KEY?: string;
-  EVENT_CALLBACK_HOSTS?: string; // optional, comma separated: callback hosts for MCP Events, in addition to the ones the user allows in Herald
+  EVENT_CALLBACK_HOSTS?: string; // optional, comma separated: when set, MCP Events callbacks may go only to these hosts; unset means any public https host
   BUNDLE_HASH?: string;       // set by Herald when it deploys this Worker: the hash of the bundle that is running
 }

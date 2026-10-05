@@ -558,7 +558,7 @@ var Mailbox = class extends DurableObject {
       row = this.sql("SELECT * FROM keys WHERE id = ?", p.keyId)[0];
       good = !!row && !row.revoked_at && row.kind !== "oauth" && safeEqual(row.hash, await sha256Hex(p.secret));
     }
-    if (!good || !row) return err(401, "unauthorized", p.kind === "oauth" ? "invalid, expired or revoked access token" : "invalid or revoked agent key");
+    if (!good || !row) return err(401, "unauthorized", p.kind === "oauth" ? "invalid or revoked access token" : "invalid or revoked agent key");
     if (row.scope !== "notify") return err(403, "scope", "this key has no notify scope");
     if (!row.last_used_at || Date.now() - row.last_used_at > 10 * 6e4) this.sql("UPDATE keys SET last_used_at = ? WHERE id = ?", Date.now(), row.id);
     return { p, key: row };
