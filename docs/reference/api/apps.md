@@ -416,6 +416,17 @@ curl -s "$HERALD/v1/actions/approvals" -H "Authorization: Bearer $TOKEN"
       "approvedAt": "2026-10-02T13:15:00.000Z"
     }
   ],
+  "followUps": [
+    {
+      "app": "example.bidbot",
+      "template": "bid-won",
+      "source": "template",
+      "action": "Forward",
+      "kind": "shortcut",
+      "origin": "template",
+      "approval": "approved"
+    }
+  ],
   "note": "Approvals are granted by the user when a banner asks; here they can only be listed and revoked."
 }
 ```
@@ -429,6 +440,13 @@ curl -s "$HERALD/v1/actions/approvals" -H "Authorization: Bearer $TOKEN"
 | `items[].template` | string | The template name. |
 | `items[].commands` | array | The exact commands the user saw and approved. |
 | `items[].approvedAt` | string | When the user approved, as an ISO 8601 date. |
+| `followUps` | array | One row for each template with an enabled [follow-up](../actions.md#follow-ups) that runs code, and for each manifest that declares one. |
+| `followUps[].app` | string | The app. |
+| `followUps[].template` | string | The template, for a template follow-up. |
+| `followUps[].source` | string | `template` or `manifest`. |
+| `followUps[].action`, `kind` | string | The label and kind of the action it runs. |
+| `followUps[].origin` | string | `issuer` or `template`. It decides which approval applies. |
+| `followUps[].approval` | string | `approved`, `needs-approval`, `app-permission-needed`, `app-not-allowed` or `none`. See [`PUT /v1/templates/follow-up`](templates.md#put-v1templatesfollow-up). |
 
 ### `DELETE /v1/actions/approvals`
 

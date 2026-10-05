@@ -34,6 +34,7 @@ only the endpoints.
 | [`POST /v1/templates/duplicate`](#post-v1templatesduplicate) | Copy a template. |
 | [`POST /v1/templates/rename`](#post-v1templatesrename) | Rename a template. |
 | [`PUT /v1/templates/default`](#put-v1templatesdefault) | Set or clear an app's default template. |
+| [`PUT /v1/templates/follow-up`](#put-v1templatesfollow-up) | Set or switch off a template's follow-up. |
 | [`GET /v1/templates/export`](#get-v1templatesexport) | Pack a template and its assets into a bundle. |
 | [`POST /v1/templates/import`](#post-v1templatesimport) | Install a bundle. |
 | [`POST /v1/preview`](#post-v1preview) | Render a template to a PNG. |
@@ -314,6 +315,93 @@ curl -s -X PUT "$HERALD/v1/templates/default" \
 |---|---|
 | `400` | The app has no manifest. Save one with [`PUT /v1/manifest`](manifests.md#put-v1manifest) first. |
 | `404` | `name` is not a saved template or built-in layout. |
+
+### `PUT /v1/templates/follow-up`
+
+Sets the follow-up of a template, or switches it off. A follow-up runs one action when a banner is left unattended
+(see [Follow-ups](../actions.md#follow-ups)). The route edits the template for you, so you do not read and rewrite it. It
+never approves code. When the action runs code, the result says the person still has to approve it at the Mac.
+
+**Request**
+
+| Name | In | Type | Required | Description |
+|---|---|---|---|---|
+| `app` | body | string | yes | The app that owns the template. |
+| `template` | body | string | no | The template to edit. Default: the app's default template. When the app has none, Herald creates one from the current layout. |
+| `after` | body | number or string | no | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. Required unless `enabled` is `false`. |
+| `shortcut` | body | string | no | Run this Apple Shortcut. |
+| `script` | body | string | no | Run this file from Herald's scripts folder. |
+| `command` | body | string | no | Run this shell command. |
+| `actionRef` | body | string | no | Run the action of this id, or label, that the notification offers. |
+| `input` | body | string | no | Text for the Shortcut or script, with `{tokens}` filled. |
+| `label` | body | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
+| `enabled` | body | boolean | no | `false` switches the follow-up off. Default `true`. |
+
+Give exactly one of `shortcut`, `script`, `command` and `actionRef`, unless `enabled` is `false`.
+
+**Example request**
+
+```sh
+curl -s -X PUT "$HERALD/v1/templates/follow-up" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"app": "example.bidbot", "template": "Bid won", "after": "10m",
+       "shortcut": "Forward to phone", "input": "{title}"}'
+```
+
+**Example response**
+
+```json
+{
+  "saved": true,
+  "app": "example.bidbot",
+  "template": "Bid won",
+  "createdTemplate": false,
+  "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
+                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
+  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+  "origin": "template",
+  "approval": "needs-approval",
+  "needsApproval": true,
+  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+}
+```
+
+**Response fields**
+
+| Field | Type | Description |
+|---|---|---|
+| `saved` | boolean | `true` when the template was written. |
+| `app`, `template` | string | The app and the template that now carries the follow-up. |
+| `createdTemplate` | boolean | `true` when Herald made the template because the app had none. |
+| `followUp` | object | The stored follow-up, with `after` in seconds. |
+| `action` | object | The action it runs: `id`, `label` and `kind`. |
+| `origin` | string | `template`. The template's approval applies. |
+| `approval` | string | `approved`, `needs-approval`, `app-permission-needed`, `app-not-allowed` or `none`. See below. |
+| `needsApproval` | boolean | `true` when nothing runs until the person approves. |
+| `note` | string | A sentence that says what happens next. |
+
+The `approval` values:
+
+| Value | Meaning |
+|---|---|
+| `approved` | The person already approved this template's code. The follow-up runs. |
+| `needs-approval` | The person has to approve the template's code, in the banner's question, the first time. |
+| `app-permission-needed` | The action is an issuer action. The app asked to run commands, scripts and Shortcuts and the person has not allowed it yet: the banner asks the first time it would run. |
+| `app-not-allowed` | The action is an issuer action and the app never registered with `allowCommands`, so it cannot run. |
+| `none` | The action runs no code, such as a callback to this Mac. |
+
+**Errors**
+
+| Status | When |
+|---|---|
+| `400` | `after` is out of range, no action or more than one is named, the kind cannot follow up, or `actionRef` names an action the notification does not offer. |
+| `404` | The app, or the template named, does not exist. |
+
+**Notes**
+
+- Priority is template, then notification, then manifest. A template follow-up wins over the issuer's.
+- `"enabled": false` also switches off a follow-up that the issuer declares.
+- Approval is bound to the template's name and its code. Changing the Shortcut asks again.
 
 ## Move templates between Macs
 
@@ -715,6 +803,8 @@ curl -s "$HERALD/v1/shortcuts" -H "Authorization: Bearer $TOKEN"
 
 ## Related
 
+- [Follow-ups](../actions.md#follow-ups): the timer, the approval and what the banner shows.
+- [Forward a notification you missed](../../FORWARD-MISSED.md): a follow-up that forwards a banner.
 - [Templates guide](../../TEMPLATES.md): what to put in a template and why.
 - [Design a banner in the Designer](../../AUTHORING.md): the same work by hand.
 - [Grid and layout](../grid-and-layout.md): every field of the template object.

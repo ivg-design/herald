@@ -105,6 +105,10 @@ final class ParityToolTests: XCTestCase {
             Case(tool: "rename_template", args: ["app": s("demo"), "name": s("hero"), "newName": s("b")], method: "POST", path: "/v1/templates/rename", body: ["app": s("demo"), "name": s("hero"), "newName": s("b")]),
             Case(tool: "set_default_template", args: ["app": s("demo"), "name": s("hero")], method: "PUT", path: "/v1/templates/default", body: ["app": s("demo"), "name": s("hero")]),
             Case(tool: "set_default_template", args: ["app": s("demo")], method: "PUT", path: "/v1/templates/default", body: ["app": s("demo")]),
+            Case(tool: "set_follow_up", args: ["app": s("demo"), "template": s("hero"), "after": s("10m"), "shortcut": s("Forward"), "input": s("{title}"), "label": s("Fwd")], method: "PUT", path: "/v1/templates/follow-up",
+                 body: ["app": s("demo"), "template": s("hero"), "after": s("10m"), "shortcut": s("Forward"), "input": s("{title}"), "label": s("Fwd")]),
+            Case(tool: "set_follow_up", args: ["app": s("cloud.x"), "after": .number(300), "actionRef": s("cb")], method: "PUT", path: "/v1/templates/follow-up", body: ["app": s("cloud.x"), "after": .number(300), "actionRef": s("cb")]),
+            Case(tool: "set_follow_up", args: ["app": s("demo"), "enabled": .bool(false)], method: "PUT", path: "/v1/templates/follow-up", body: ["app": s("demo"), "enabled": .bool(false)]),
             Case(tool: "export_template_bundle", args: ["app": s("demo"), "name": s("hero"), "path": s("/tmp/h.heraldtemplate")], method: "GET", path: "/v1/templates/export", query: ["app": "demo", "name": "hero", "path": "/tmp/h.heraldtemplate"]),
             Case(tool: "import_template_bundle", args: ["path": s("/tmp/h.heraldtemplate"), "onConflict": s("replace")], method: "POST", path: "/v1/templates/import", body: ["path": s("/tmp/h.heraldtemplate"), "onConflict": s("replace")]),
             Case(tool: "delete_app", args: ["app": s("example.bidbot")], method: "DELETE", path: "/v1/apps/example.bidbot"),
@@ -158,7 +162,7 @@ final class ParityToolTests: XCTestCase {
 
     func testMissingArgumentsAreToolErrorsNotRequests() async throws {
         for (tool, args) in [("set_settings", [String: JSONValue]()), ("update_app_settings", ["app": s("demo")]), ("delete_history", ["app": s("demo")]),
-                             ("snooze", ["app": s("demo"), "id": s("a")]), ("revoke_approval", ["app": s("demo")]), ("duplicate_template", ["app": s("x")])] {
+                             ("snooze", ["app": s("demo"), "id": s("a")]), ("revoke_approval", ["app": s("demo")]), ("duplicate_template", ["app": s("x")]), ("set_follow_up", [:])] {
             let r = try await run(tool, args)
             XCTAssertTrue(r.isError, tool)
         }
@@ -179,7 +183,7 @@ final class ParityToolTests: XCTestCase {
         let names = MCPToolCatalog.all.map(\.name)
         XCTAssertEqual(names.count, Set(names).count, "tool names are unique")
         let expected = ["get_settings", "set_settings", "list_apps", "update_app_settings", "register_app", "delete_app", "voice_status", "install_voice",
-                        "install_mcp", "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template",
+                        "install_mcp", "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template", "set_follow_up",
                         "export_template_bundle", "import_template_bundle", "delete_manifest", "list_assets", "upload_asset", "delete_asset",
                         "list_symbols", "rive_check", "history_search", "reshow_notification", "delete_history", "export_history", "snooze",
                         "expand_stack", "designer_snapshot"]
@@ -189,7 +193,7 @@ final class ParityToolTests: XCTestCase {
             guard case .object(let schema) = d.inputSchema, schema["type"] == .string("object") else { XCTFail("\(d.name) schema"); continue }
         }
         // Destructive tools say so; read tools are read-only.
-        for n in ["delete_history", "delete_app", "delete_asset", "delete_manifest", "revoke_approval", "rename_template", "import_template_bundle"] {
+        for n in ["delete_history", "delete_app", "delete_asset", "delete_manifest", "revoke_approval", "rename_template", "import_template_bundle", "set_follow_up"] {
             XCTAssertTrue(MCPToolCatalog.byName[n]?.destructive == true, "\(n) is destructive")
         }
         for n in ["get_settings", "list_apps", "list_symbols", "history_search", "list_assets", "voice_status", "list_approvals", "designer_snapshot", "rive_check"] {

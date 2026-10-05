@@ -42,7 +42,8 @@ in the [manifest reference](../manifests.md).
 | `app` | body | string | yes | The app the manifest describes. |
 | `appName` | body | string | no | The display name. A name set with `POST /v1/register` wins over it. |
 | `fields` | body | array | no | The fields the app sends: `key`, `type`, `sample`, `required`. |
-| `actions` | body | array | no | The buttons the app offers: `id`, `label`, `kind`. |
+| `actions` | body | array | no | The buttons the app offers: `id`, `label`, `kind`. A `script` or `shortcut` button carries its `script` or `shortcut` name. |
+| `followUp` | body | object | no | A default follow-up: `after`, and `actionRef` or `action`. See [Follow-up](../manifests.md#follow-up). |
 | `assets` | body | array | no | Rive files to install: `id`, `type`, `path`. |
 | `defaultTemplate` | body | string | no | The template used when a notification names none. |
 
@@ -84,7 +85,9 @@ curl -s -X PUT "$HERALD/v1/manifest" \
 **Notes**
 
 - A validation message names where the problem is, for example
-  `invalid manifest: actions[1].kind: 'shortcut' actions are authored in templates`.
+  `invalid manifest: actions[1].shortcut: a shortcut action needs 'shortcut': the name of an installed Shortcut`.
+- A `script` or `shortcut` action, or a follow-up that runs one, runs only when the user has allowed the app to
+  run commands, scripts and Shortcuts. The manifest alone grants nothing.
 - A Rive file that cannot be installed does not block the manifest. The problem is reported when a banner
   tries to draw the animation. Check a file with [`POST /v1/rive/check`](diagnostics.md#post-v1rivecheck).
 

@@ -107,7 +107,7 @@ Delivers a real notification: a banner appears on the user's screen and the noti
 
 Two rules protect the user:
 
-- A button that carries a shell `command` is refused unless `allowCommandButtons` is `true`. Anyone can send as any app id, and a command button would run under the command permission the user gave that app.
+- A button, or a follow-up action, that carries a shell `command`, a `script` or a `shortcut` is refused unless `allowCommandButtons` is `true`. Anyone can send as any app id, and such a button would run under the permission the user gave that app to run commands, scripts and Shortcuts.
 - When the app is an agent app (its id starts with `agent.`) and the call names no buttons, Herald shows the agent's own buttons: Open, Reply and, when the notification has a `link`, Open link.
 
 ![A banner from an agent app with the agent icon, a title, a message and the buttons Open and Reply](../../../web/public/shots/docs/banner-agent.png "A banner from an agent app with no buttons named in the call: Herald adds Open and Reply.")
@@ -125,9 +125,10 @@ To ask a question, send with `persistent: true` and an `id`, then call [`wait_fo
 | `id` | string | no | Your id for this notification. Sending the same id again overwrites the banner on screen. |
 | `template` | string | no | The name of a saved template of this app. |
 | `fields` | object | no | Manifest field values, such as `{"bids": 3}`. They are sent as top-level keys. |
-| `buttons` | array | no | Buttons for this notification. Each is an object with a `label` and one of `url`, `command` or `callback`, and optionally a `style`. `actions` is accepted as another name. |
+| `buttons` | array | no | Buttons for this notification. Each is an object with a `label` and one of `url`, `command`, `script`, `shortcut` or `callback`, and optionally a `style`. `actions` is accepted as another name. |
 | `actionIds` | array of string | no | The ids of actions the app's manifest declares, instead of repeating the buttons. |
-| `allowCommandButtons` | boolean | no | Allows buttons that carry a shell `command`. Default `false`. |
+| `followUp` | object | no | One action to run if the banner goes unanswered: `after`, and `actionRef` or `action`. See [Follow-up object](../api/notifications.md#follow-up-object). A cloud connector's notification cannot carry one. |
+| `allowCommandButtons` | boolean | no | Allows buttons and a follow-up that run a shell `command`, a `script` or a `shortcut`. Default `false`. |
 | `metadata` | object | no | Free-form values, readable as `{key}` in templates. |
 | `speak` | boolean or object | no | Says the notification aloud. `true` speaks the title and then the body. An object sets the text and voice, as in [Voice](../voice.md). |
 | `audio` | string | no | A voice message to play: a WAV, MP3 or M4A file path, an `https` URL or a `data:` URI, at most 20 MB. |

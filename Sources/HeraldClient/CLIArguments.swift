@@ -78,7 +78,7 @@ public enum CLIArguments {
       dismiss-all   Dismiss all banners of an app (--app), or of one stack (--app --group G)
       stacks        List the stacks of banners on screen ([--app ID])
       history       Show an app's history (--app [--limit N] [--clear]); search | reshow | delete | export
-      template      export | import | list | put | delete | duplicate | rename | default
+      template      export | import | list | put | delete | duplicate | rename | default | follow-up
       apps          List registered apps; apps settings | apps set (per-app settings)
       settings      Show or change Herald's settings: settings | settings set KEY=VALUE ...
       assets        An app's Rive files and images: assets list | add | rm
@@ -111,6 +111,12 @@ public enum CLIArguments {
       --button "Label=https://..."        Open URL (repeatable)
       --button "Label=cmd:shell command"  Run command (app needs allowCommands)
       --button "Label=cb:{\\"k\\":1}"       POST JSON payload to the app's callback URL
+      --button "Label=script:file.sh"     Run a script from Herald's scripts folder (app needs allowCommands)
+      --button "Label=shortcut:Name"      Run an Apple Shortcut (app needs allowCommands)
+      --follow-up-after 10m               Run one action if the banner is still unattended after this long
+                                          (seconds, or 90s | 10m | 2h; 5 s to 7 days), with ONE of:
+      --follow-up-shortcut NAME | --follow-up-script FILE | --follow-up-command CMD | --follow-up-ref ID
+      --follow-up-input TEXT              Input for the Shortcut or script ({tokens} allowed)
       --reminder "Title|2026-10-02T09:00" Add-to-Reminders action (title|ISO8601)
       --metadata JSON       Arbitrary JSON object stored with the notification
       --template NAME       Use a saved template (--title may then be omitted); {placeholders}
@@ -139,6 +145,14 @@ public enum CLIArguments {
                             app. When the name is taken: --keep-both (default) saves it as
                             "NAME 2", --replace overwrites, --fail stops.
 
+      template follow-up --app ID [--name TEMPLATE] --after 10m
+                         (--shortcut NAME | --script FILE | --command CMD | --action-ref ID) [--input TEXT] [--label TEXT]
+      template follow-up --app ID [--name TEMPLATE] --off
+                            Run one action when a banner is left unattended. Edits the template
+                            (default: the app's default template, created from the current layout
+                            when the app has none). Shows whether the action still needs the
+                            user's one-time approval; the person approves at the Mac, never here.
+
     parity commands (docs/reference/parity.md)
       settings set muteAllSounds=true stacking=bySender voiceSpeed=1.2      (values are JSON: true, 3, null, "text")
       apps settings [--app ID]
@@ -149,6 +163,7 @@ public enum CLIArguments {
       template list [--app ID] | template put FILE|- | template delete --app ID --name N
       template duplicate --app ID --name N [--new-name M] [--to-app ID] | template rename --app ID --name N --new-name M
       template default --app ID (--name N | --clear)
+      template follow-up --app ID --after 10m --shortcut "Forward to phone" [--input "{title}"]
       mcp install CLIENT [--reinstall] [--name "My Bot"] [--icon FILE] [--opens APP]   (also registers the agent as app agent.<client>)
 
     register OPTIONS
@@ -209,6 +224,7 @@ public enum CLIArguments {
     static let valueFlagsNotify: Set<String> = ["--app", "--id", "--title", "--subtitle", "--body", "--image", "--url",
         "--sound", "--timeout", "--priority", "--button", "--reminder", "--icon", "--callback-url", "--metadata", "--json",
         "--template", "--layout", "--accent", "--max-body-lines", "--group",
+        "--follow-up-after", "--follow-up-shortcut", "--follow-up-script", "--follow-up-command", "--follow-up-ref", "--follow-up-input",
         "--speak-text", "--voice", "--speed", "--lang", "--audio", "--presentation"]
     static let boolFlagsNotify: Set<String> = ["--persistent", "--no-persistent", "--snooze", "--no-snooze",
         "--no-subtitle", "--no-body", "--no-time", "--speak"]
@@ -338,7 +354,7 @@ public enum CLIArguments {
     // MARK: template
 
     static func parseTemplate(_ rest: [String], readInput: (String) throws -> Data = { _ in Data() }) throws -> CLIAction {
-        guard let sub = rest.first else { throw CLIParseError("template needs export, import, list, put, delete, duplicate, rename or default") }
+        guard let sub = rest.first else { throw CLIParseError("template needs export, import, list, put, delete, duplicate, rename, default or follow-up") }
         var args = Array(rest.dropFirst())
         switch sub {
         case "export":
@@ -364,7 +380,7 @@ public enum CLIArguments {
             return .templateImport(CLITemplateImport(file: file, app: app, conflict: conflict))
         default:
             if let a = try parseTemplateParity(sub, args, readInput: readInput) { return a }
-            throw CLIParseError("unknown template command '\(sub)' (use export, import, list, put, delete, duplicate, rename or default)")
+            throw CLIParseError("unknown template command '\(sub)' (use export, import, list, put, delete, duplicate, rename, default or follow-up)")
         }
     }
 
@@ -411,6 +427,11 @@ public enum CLIArguments {
         if let v = o.value("--reminder") { body["reminder"] = try parseReminder(v) }
         let buttons = try o.values("--button").map(parseButton)
         if !buttons.isEmpty { body["buttons"] = (body["buttons"] as? [Any] ?? []) + buttons }
+        if let f = try followUpBody(after: o.value("--follow-up-after"), shortcut: o.value("--follow-up-shortcut"),
+                                    script: o.value("--follow-up-script"), command: o.value("--follow-up-command"),
+                                    ref: o.value("--follow-up-ref"), input: o.value("--follow-up-input"), flagPrefix: "--follow-up-") {
+            body["followUp"] = f
+        }
         try o.finish()
         guard let app = body["app"] as? String, !app.isEmpty else { throw CLIParseError("notify needs --app") }
         // A named template may supply the title, so --title is only required without one.
@@ -534,7 +555,46 @@ public enum CLIArguments {
             if !p.isEmpty { cb["payload"] = try parseJSONValue(p, "--button cb: payload") }
             return ["label": label, "callback": cb]
         }
+        if target.hasPrefix("script:") {
+            let f = String(target.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            guard !f.isEmpty else { throw CLIParseError("--button '\(label)' has an empty script:") }
+            return ["label": label, "script": f]
+        }
+        if target.hasPrefix("shortcut:") {
+            let n = String(target.dropFirst(9)).trimmingCharacters(in: .whitespaces)
+            guard !n.isEmpty else { throw CLIParseError("--button '\(label)' has an empty shortcut:") }
+            return ["label": label, "shortcut": n]
+        }
         return ["label": label, "url": target]
+    }
+
+    /// The `followUp` object for `herald notify` (`--follow-up-*`); nil when no follow-up flag is given. `after` is sent in
+    /// seconds. Exactly one of shortcut, script, command and ref names the action.
+    static func followUpBody(after: String?, shortcut: String?, script: String?, command: String?, ref: String?, input: String?,
+                             flagPrefix p: String) throws -> [String: Any]? {
+        let named = [("shortcut", shortcut), ("script", script), ("command", command), (p == "--" ? "action-ref" : "ref", ref)].filter { $0.1 != nil }
+        guard after != nil || !named.isEmpty || input != nil else { return nil }
+        guard let after else { throw CLIParseError("a follow-up needs \(p)after (seconds, or 90s | 10m | 2h)") }
+        guard let seconds = HeraldFollowUp.parseDuration(after) else { throw CLIParseError("\(p)after '\(after)' is not a duration: seconds, or 90s | 10m | 2h") }
+        guard seconds >= HeraldFollowUp.minSeconds, seconds <= HeraldFollowUp.maxSeconds else {
+            throw CLIParseError("\(p)after must be \(Int(HeraldFollowUp.minSeconds)) seconds to 7 days")
+        }
+        guard named.count == 1 else {
+            throw CLIParseError("a follow-up names its action once: \(p)shortcut, \(p)script, \(p)command or \(p == "--" ? "--action-ref" : "\(p)ref")")
+        }
+        var f: [String: Any] = ["after": seconds == seconds.rounded() ? Int(seconds) : seconds]
+        let value = named[0].1 ?? ""
+        guard !value.trimmingCharacters(in: .whitespaces).isEmpty else { throw CLIParseError("\(p)\(named[0].0) needs a value") }
+        switch named[0].0 {
+        case "shortcut": f["action"] = ["id": "follow-up", "label": value, "kind": "shortcut", "shortcut": value].merging(input.map { ["input": $0] } ?? [:]) { a, _ in a }
+        case "script": f["action"] = ["id": "follow-up", "label": value, "kind": "script", "script": value].merging(input.map { ["input": $0] } ?? [:]) { a, _ in a }
+        case "command": f["action"] = ["id": "follow-up", "label": "Follow-up", "kind": "command", "command": value]
+        default: f["actionRef"] = value
+        }
+        if named[0].0 == "command" || named[0].0 == "ref" || named[0].0 == "action-ref", input != nil {
+            throw CLIParseError("\(p)input goes with a Shortcut or a script")
+        }
+        return f
     }
 
     /// "Title|ISO8601" (split on the last '|'); a bare string is just a title.

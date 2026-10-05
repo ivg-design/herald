@@ -2,8 +2,8 @@
 
 An action is a button on a banner and the thing that happens when the user presses it. This page is the reference
 for all of them: where they come from, the nine kinds, the fields each kind takes, the approvals Herald asks for
-before it runs code, the rules a template uses to change buttons, and the exact request Herald sends to your server
-when a callback button is pressed. If you want to add a button and see it work, start with
+before it runs code, the rules a template uses to change buttons, the follow-up that runs one action when nobody
+answers a banner, and the exact request Herald sends to your server when a callback button is pressed. If you want to add a button and see it work, start with
 [Two-way notifications](../ACTIONS.md).
 
 ## Concepts
@@ -11,8 +11,9 @@ when a callback button is pressed. If you want to add a button and see it work, 
 ### What an action is
 
 Every action has a label, a kind and the data its kind needs. The kind says what pressing the button does: open a
-link, call your server, run a command, open an app, show a reply field. Herald runs the action only when a person
-presses the button. Nothing runs when a notification arrives.
+link, call your server, run a command, open an app, show a reply field. Herald runs the action when a person
+presses the button, or when a [follow-up](#follow-ups) fires on a banner nobody answered. Nothing runs when a
+notification arrives.
 
 A successful action closes the banner and records the button in History. A failed action leaves the banner on
 screen and shows **Action failed** with a short reason for four seconds. [Failures](#failures) lists the reasons.
@@ -56,15 +57,17 @@ can write `"match": "markRead"` for it.
 | [`url`](#url-action) | Opens a link. | yes | no |
 | [`callback`](#callback-action) | Sends an HTTP request to a server. | yes | Only for a host that is not this Mac. |
 | [`command`](#command-action) | Runs a shell command. | yes | yes |
-| [`script`](#script-action) | Runs a file from Herald's scripts folder. | no | yes |
-| [`shortcut`](#shortcut-action) | Runs an Apple Shortcut. | no | yes |
+| [`script`](#script-action) | Runs a file from Herald's scripts folder. | yes | yes |
+| [`shortcut`](#shortcut-action) | Runs an Apple Shortcut. | yes | yes |
 | [`openApp`](#openapp-action) | Brings an application to the front. | yes | no |
 | [`reply`](#reply-action) | Shows a text field in the banner. | yes | Only for a callback to a host that is not this Mac. |
 | [`dismiss`](#dismiss-action) | Closes the banner. | yes | no |
 | [`snooze`](#snooze-action) | Hides the banner and brings it back later. | no | no |
 
-An issuer cannot declare `script`, `shortcut` or `snooze`. Those run code on your Mac or change how the banner
-behaves, so only you author them, in a template.
+An issuer can send `script` and `shortcut` actions, in a manifest or in a notification's `buttons`. They run under the
+same permission as an issuer's `command`: the app must be allowed to run commands, scripts and Shortcuts (see
+[Approvals](#approvals)). An issuer cannot declare `snooze`, because it changes how the banner behaves, so only you
+author it, in a template.
 
 ### Approvals
 
@@ -76,16 +79,18 @@ The question shows the exact command, script or address in a monospaced box.
 
 | What | Who asks | What you see | How it is remembered |
 |---|---|---|---|
-| An issuer's `command`, `script` or `shortcut` | The app's command permission. | **Run this command for APP?** with **Run once** and **Always allow APP**. | **Always allow** turns on **Allow this app to run commands** under **Settings > Apps**. |
+| An issuer's `command`, `script` or `shortcut` | The app's permission to run commands, scripts and Shortcuts. | **Run this command for APP?** with **Run once** and **Always allow APP**. The box names the command, or the script with its SHA-256, or the Shortcut with its input. | **Always allow** turns on **Allow this app to run commands, scripts and Shortcuts** under **Settings > Apps**. |
 | A template's `command`, `script` or `shortcut` | One confirmation per template. | **Run a command from the "TEMPLATE" template?** with **Run once** and **Always allow this template**. | Stored per template. Listed under **Settings > Actions**, where you can revoke it. |
 | A callback to a host that is not this Mac | The app's callback host approval. | **Send APP's button action to HOST?** with **Send once** and **Always allow HOST**. | Stored on the app. The **Allow callbacks to HOST** switch under **Settings > Apps** shows it. |
 | Any action styled `destructive` | The button itself. | **Run "LABEL"?** with the label in red and **Cancel**. | Never remembered. It asks every time. |
 
 The rules behind the table:
 
-- An issuer's command runs only when the app registered with `allowCommands: true` and you confirmed it. If the app
-  never asked, the press fails with **commands are not allowed for APP**. See
+- An issuer's command, script or Shortcut runs only when the app registered with `allowCommands: true` and you
+  confirmed it. If the app never asked, the press fails with **commands are not allowed for APP**. See
   [`POST /v1/register`](api/apps.md#post-v1register).
+- An issuer's script question shows the file name and the SHA-256 of the file as it is now, so a changed file is a
+  different question. A Shortcut question shows the Shortcut's name and its input text.
 - A template's approval is bound to exactly what you saw: the command text, the script's name and SHA-256, or the
   Shortcut's name and input. If any of them changes, Herald asks again. **Always allow this template** covers every
   piece of code in that template that was listed.
@@ -258,7 +263,9 @@ data reaches the command on standard input and in environment variables, describ
 ### `script` action
 
 Runs a file from Herald's scripts folder, `~/Library/Application Support/Herald/scripts/`. Herald creates the folder at
-launch. Only a template can add a script action.
+launch. A template can add a script action, and so can an issuer, which runs only when the app is allowed to run
+commands, scripts and Shortcuts. The script is always a plain file name: the issuer names a file, and you put it in the
+folder.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -282,6 +289,13 @@ How the file runs:
 The working directory is the scripts folder. The data arrives as described in
 [What a process receives](#what-a-process-receives).
 
+In a manifest or a notification's `buttons`, the same action is written with the kind or without it. Herald infers
+`script` from the field.
+
+```json
+{"id": "log", "label": "Log", "kind": "script", "script": "log.sh"}
+```
+
 **Minimal example**
 
 ```json
@@ -303,7 +317,8 @@ The working directory is the scripts folder. The data arrives as described in
 ### `shortcut` action
 
 Runs an Apple Shortcut with `shortcuts run`, which is headless, so Herald treats it as code and asks for approval.
-Only a template can add one. The picker in the Designer and
+A template can add one, and so can an issuer, which runs only when the app is allowed to run commands, scripts and
+Shortcuts. The picker in the Designer and
 [`GET /v1/shortcuts`](api/templates.md#get-v1shortcuts) list the installed Shortcuts.
 
 | Field | Type | Required | Description |
@@ -313,6 +328,14 @@ Only a template can add one. The picker in the Designer and
 
 Text input goes to the Shortcut's **Receive input from** action as a `.txt` file. Without `input`, the Shortcut gets
 the merged payload as a `.json` file.
+
+An issuer writes the same action in a manifest or a notification's `buttons`:
+
+```json
+{"id": "fwd", "label": "Forward", "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"}
+```
+
+A `kind` of `shortcut` or `script` without its `shortcut` or `script` name is rejected.
 
 **Minimal example**
 
@@ -479,7 +502,8 @@ notification and the button. It is one JSON object.
   "extra": {"queue": "inbox"},
   "notification": {"app": "example.bidbot", "title": "Bid accepted", "metadata": {"amount": 4200}},
   "template": "bid-update",
-  "imagePath": "/Users/you/Library/Application Support/Herald/history/images/bid-42.png"
+  "imagePath": "/Users/you/Library/Application Support/Herald/history/images/bid-42.png",
+  "herald": {"followUp": false, "unattendedSeconds": null}
 }
 ```
 
@@ -489,6 +513,7 @@ notification and the button. It is one JSON object.
 | `extra` | The template's own key and value pairs, from **Extra data** in the Designer. |
 | `notification` | The full notification as it was sent. |
 | `template`, `imagePath` | The template's name and the cached copy of the image, when there are any. |
+| `herald` | `followUp`, which is `true` when a [follow-up](#follow-ups) runs the action, and `unattendedSeconds`, how long the banner went unanswered. A pressed button gets `false` and `null`. |
 
 Where it goes:
 
@@ -496,7 +521,7 @@ Where it goes:
 |---|---|
 | `command` | The JSON on standard input, plus the environment variables below. |
 | `script` | The JSON on standard input, plus the same environment variables. |
-| `shortcut` | The `input` text, or else the JSON, in a temporary file passed with `--input-path`. |
+| `shortcut` | The `input` text, or else the JSON, in a temporary file passed with `--input-path`. The tokens `{herald.followUp}` and `{herald.unattendedSeconds}` work in `input`. |
 
 The environment variables, at most 100 of them and 4 KB each:
 
@@ -508,6 +533,8 @@ The environment variables, at most 100 of them and 4 KB each:
 | `HERALD_ACTION_ID` | The action id. |
 | `HERALD_ACTION_KIND` | The action kind. |
 | `HERALD_ORIGIN` | `issuer` or `template`. |
+| `HERALD_FOLLOW_UP` | `1` when a follow-up runs the action. Not set for a pressed button. |
+| `HERALD_UNATTENDED_SECONDS` | How many seconds the banner went unanswered. Set only for a follow-up. |
 | `HERALD_TEMPLATE` | The template name, when there is one. |
 | `HERALD_FIELD_NAME` | One per field. The name is the field key in upper case, with every character that is not a letter or digit written as `_`. |
 | `HERALD_EXTRA_KEY` | One per `extra` value, named the same way. |
@@ -674,6 +701,127 @@ when it has one. An app that runs no server reads the queue.
 
 The queue keeps at most 200 replies per app. A second reply to the same notification replaces the first.
 
+## Follow-ups
+
+A follow-up runs one action when a notification is left unattended. Use it for a missed banner you still want to hear
+about: forward it to your phone, send an email, post to a channel. The follow-up uses the same action kinds and the
+same approvals as a button. It differs from a button in only one way: nobody presses it, so a timer does.
+
+### The follow-up object
+
+The object is the same in a manifest, in a notification and in a template, under the key `followUp`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `after` | number or string | yes | How long the banner must go unanswered, from 5 seconds to 604800 (7 days). A string such as `"90s"`, `"10m"` or `"2h"` is accepted and stored as seconds. |
+| `actionRef` | string | no | The id, or the label, of an action the notification offers. Hidden actions count. |
+| `action` | object | no | An action written inline, with the fields in [Action object](#action-object). |
+| `enabled` | boolean | no | `false` switches the follow-up off. Default `true`. |
+
+Give exactly one of `actionRef` and `action`.
+
+**Minimal example**
+
+```json
+{"after": 600, "actionRef": "forward"}
+```
+
+**Realistic example**
+
+```json
+{
+  "after": "10m",
+  "action": {"id": "fwd", "label": "Forward", "kind": "shortcut",
+             "shortcut": "Forward to phone", "input": "{title}"}
+}
+```
+
+A template can switch off a follow-up that the issuer declares:
+
+```json
+{"enabled": false}
+```
+
+### Which actions can follow up
+
+| Kind | Allowed | Why |
+|---|---|---|
+| `shortcut` | yes | It runs without anyone at the Mac. |
+| `script` | yes | It runs without anyone at the Mac. |
+| `command` | yes | It runs without anyone at the Mac. |
+| `callback` | yes | Herald posts the usual [callback request](api/replies.md#callback-request) with an `unattended` event. |
+| `url`, `openApp` | no | They open something on the screen of a person who is not there. |
+| `reply`, `dismiss`, `snooze` | no | They need a person, or only change the banner. |
+
+A follow-up that names one of the other kinds is refused with a message that says why.
+
+### Which follow-up applies
+
+A banner has one follow-up. When more than one place declares it, the nearest to you wins.
+
+1. The template's `followUp`.
+2. The notification's `followUp`.
+3. The manifest's `followUp`.
+
+A template that sets `"enabled": false` switches the issuer's follow-up off.
+
+The origin of the action decides which approval applies. An action written inline takes the origin of the place that
+declares it: the issuer for a manifest or a notification, the template for a template. An `actionRef` takes the
+issuer's origin when the declaration is the issuer's or the named action is the issuer's, and the template's origin
+otherwise. Origin and approval are explained under [Approvals](#approvals), and the next section says what Herald does
+when approval is missing.
+
+### When it runs
+
+- The timer starts when the banner is on screen. Quiet hours and mute hold the banner back, and the timer waits with
+  it.
+- Dismissing the banner, pressing any button, replying and opening the banner cancel the timer.
+- Snoozing drops the timer. When the banner returns, a new timer starts.
+- A follow-up runs at most once per notification.
+- Timers live in memory. When Herald quits, they are gone and the follow-up does not run.
+- A banner whose auto-dismiss timeout is not longer than `after` closes first, so it never follows up. Validation
+  warns about it.
+
+### What the action receives
+
+The action gets what a pressed button gets (see [What a process receives](#what-a-process-receives)), plus the
+`herald` key in the merged payload, the environment variables `HERALD_FOLLOW_UP` and `HERALD_UNATTENDED_SECONDS`, and
+the tokens `{herald.followUp}` and `{herald.unattendedSeconds}` in a Shortcut's `input`. One script or Shortcut can
+serve a button and a follow-up by branching on `herald.followUp`.
+
+A callback follow-up posts the usual request with two more fields:
+
+```json
+{"notificationId": "bid-42", "app": "example.bidbot", "action": "Forward",
+ "event": "unattended", "unattendedSeconds": 612}
+```
+
+### Approval and what you see
+
+A follow-up runs under the gates of a pressed button of its origin. An issuer follow-up that runs code needs the app's
+**Allow this app to run commands, scripts and Shortcuts** switch. A template follow-up needs the template's one-time
+approval, and **Always allow this template** covers an inline follow-up action, because it is part of the template's own
+actions.
+
+When approval is missing at the moment the timer ends, nothing runs. The usual question appears on the banner, History
+records the outcome `waitingForApproval`, and the log says `follow-up waiting for approval`. Herald never opens a
+window or takes the keyboard for it.
+
+After the action runs, the banner stays. A line under the buttons reads **Follow-up ran: LABEL · TIME**, or
+**Follow-up failed: REASON**. The log at `~/Library/Logs/Herald/actions.log` gets a `follow-up ran`,
+`follow-up failed` or `follow-up waiting for approval` entry. History keeps the
+[`followUp` record](api/history.md#the-history-record).
+
+### Setting a follow-up
+
+| Where | How |
+|---|---|
+| The Designer | The **Follow-up** block of the **Actions** tab. See [Forward a notification you missed](../FORWARD-MISSED.md). |
+| A manifest | `followUp` in the [manifest](manifests.md#follow-up). |
+| A notification | `followUp` in [`POST /v1/notify`](api/notifications.md#follow-up-object), or `herald notify --follow-up-after`. |
+| A template, from an agent | [`set_follow_up`](mcp/templates.md#set_follow_up) or [`PUT /v1/templates/follow-up`](api/templates.md#put-v1templatesfollow-up). |
+| A template, from a terminal | [`herald template follow-up`](cli.md#herald-template-follow-up). |
+
 ## Failures
 
 A failed action leaves the banner on screen. It shows `Action failed` followed by a short reason for four seconds, and
@@ -700,7 +848,10 @@ reason is cut at 100 characters.
 
 | Mistake | What happens | Fix |
 |---|---|---|
-| An issuer sends `"kind": "shortcut"`. | The manifest is rejected, and a payload button cannot express it. | Add the action in a template with an `add` rule. |
+| An issuer sends `"kind": "shortcut"` without a `shortcut` name. | The manifest or notification is rejected. | Add the `shortcut` field, or the `script` field for a script. |
+| An issuer sends `"kind": "snooze"`. | The manifest is rejected. | Add a snooze action in a template with an `add` rule. |
+| A follow-up with kind `url` or `reply`. | Validation refuses it. | Use a Shortcut, a script, a command or a callback. |
+| A follow-up on a banner with a 5-second auto-dismiss and `after` of `"10m"`. | The banner closes first and never follows up. | Raise the timeout or lower `after`. |
 | Expecting `{title}` inside `command` to be filled. | The text is not edited, so the braces stay. | Read `$HERALD_FIELD_TITLE`, or parse the JSON on standard input. |
 | A script named `../x.sh` or `/tmp/x.sh`. | Refused. | Put the file in the scripts folder and use its name. |
 | `snoozeMinutes` of `0` or `20000`. | Validation error. | Use 1 to 10080. |
@@ -724,6 +875,7 @@ reason is cut at 100 characters.
 - [Notifications API](api/notifications.md#button-object): the button object a notification sends.
 - [Manifests](manifests.md): declare an app's actions once.
 - [Replies API](api/replies.md): read what the user typed, and the callback request.
+- [Forward a notification you missed](../FORWARD-MISSED.md): a follow-up that forwards a banner with a Shortcut.
 - [`actions`](components/actions.md) and [`button`](components/button.md): draw actions in a template.
 - [Symbols](symbols.md): icons for buttons.
 - [`add_action_rule`](mcp/templates.md#add_action_rule): add a rule from an agent.

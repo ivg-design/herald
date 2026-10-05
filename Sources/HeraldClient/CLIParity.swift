@@ -189,6 +189,28 @@ extension CLIArguments {
             if !o.flag("--clear") { body["name"] = try o.require("--name") }
             else if o.value("--name") != nil { throw CLIParseError("use --name or --clear, not both") }
             return .request(CLIRequest(method: "PUT", path: "/v1/templates/default", body: body))
+        case "follow-up":
+            let o = try Options(args, values: ["--app", "--name", "--after", "--shortcut", "--script", "--command", "--action-ref", "--input", "--label"], bools: ["--off"])
+            var body: [String: Any] = ["app": try o.require("--app")]
+            if let n = o.value("--name") { body["template"] = n }
+            if o.flag("--off") {
+                guard o.value("--after") == nil, o.value("--shortcut") == nil, o.value("--script") == nil, o.value("--command") == nil,
+                      o.value("--action-ref") == nil, o.value("--input") == nil else { throw CLIParseError("--off takes no other follow-up option") }
+                body["enabled"] = false
+                return .request(CLIRequest(method: "PUT", path: "/v1/templates/follow-up", body: body))
+            }
+            guard let f = try followUpBody(after: o.value("--after"), shortcut: o.value("--shortcut"), script: o.value("--script"),
+                                           command: o.value("--command"), ref: o.value("--action-ref"), input: o.value("--input"), flagPrefix: "--") else {
+                throw CLIParseError("template follow-up needs --after 10m and one of --shortcut NAME, --script FILE, --command CMD or --action-ref ID (or --off)")
+            }
+            body["after"] = f["after"]
+            if let r = f["actionRef"] { body["actionRef"] = r }
+            if let a = f["action"] as? [String: Any] {
+                for k in ["shortcut", "script", "command"] { if let v = a[k] { body[k] = v } }
+            }
+            if let i = o.value("--input") { body["input"] = i }
+            if let l = o.value("--label") { body["label"] = l }
+            return .request(CLIRequest(method: "PUT", path: "/v1/templates/follow-up", body: body))
         default:
             return nil
         }

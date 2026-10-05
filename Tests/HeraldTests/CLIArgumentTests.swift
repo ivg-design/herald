@@ -26,6 +26,40 @@ final class CLIArgumentTests: XCTestCase {
         XCTAssertEqual(b["id"] as? String, "bid-42")
     }
 
+    func testNotifyFollowUpFlags() throws {
+        func body(_ extra: [String]) throws -> [String: Any] {
+            let inv = try CLIArguments.parse(["notify", "--app", "a", "--title", "t"] + extra)
+            guard case .request(let r) = inv.action else { XCTFail(); return [:] }
+            return r.body ?? [:]
+        }
+        var f = try XCTUnwrap(try body(["--follow-up-after", "10m", "--follow-up-shortcut", "Forward", "--follow-up-input", "{title}"])["followUp"] as? [String: Any])
+        XCTAssertEqual(f["after"] as? Int, 600)
+        var a = try XCTUnwrap(f["action"] as? [String: Any])
+        XCTAssertEqual(a["kind"] as? String, "shortcut"); XCTAssertEqual(a["shortcut"] as? String, "Forward"); XCTAssertEqual(a["input"] as? String, "{title}")
+        f = try XCTUnwrap(try body(["--follow-up-after", "90s", "--follow-up-script", "log.sh"])["followUp"] as? [String: Any])
+        a = try XCTUnwrap(f["action"] as? [String: Any])
+        XCTAssertEqual(a["kind"] as? String, "script"); XCTAssertEqual(f["after"] as? Int, 90)
+        f = try XCTUnwrap(try body(["--follow-up-after", "1.5h", "--follow-up-command", "echo hi"])["followUp"] as? [String: Any])
+        XCTAssertEqual((f["action"] as? [String: Any])?["command"] as? String, "echo hi"); XCTAssertEqual(f["after"] as? Int, 5400)
+        f = try XCTUnwrap(try body(["--follow-up-after", "600", "--follow-up-ref", "forward"])["followUp"] as? [String: Any])
+        XCTAssertEqual(f["actionRef"] as? String, "forward"); XCTAssertNil(f["action"])
+        XCTAssertNil(try body([])["followUp"])
+        XCTAssertThrowsError(try body(["--follow-up-shortcut", "S"]), "needs --follow-up-after")
+        XCTAssertThrowsError(try body(["--follow-up-after", "10m"]), "needs an action")
+        XCTAssertThrowsError(try body(["--follow-up-after", "10m", "--follow-up-shortcut", "S", "--follow-up-ref", "x"]))
+        XCTAssertThrowsError(try body(["--follow-up-after", "never", "--follow-up-ref", "x"]))
+        XCTAssertThrowsError(try body(["--follow-up-after", "99d", "--follow-up-ref", "x"]))
+        let help = try XCTUnwrap(CLIArguments.usage(for: "notify"))
+        XCTAssertTrue(help.contains("--follow-up-after"))
+        XCTAssertTrue(try XCTUnwrap(CLIArguments.usage(for: "template")).contains("template follow-up"))
+    }
+
+    func testScriptAndShortcutButtons() throws {
+        XCTAssertEqual(try CLIArguments.parseButton("Log=script:log.sh")["script"] as? String, "log.sh")
+        XCTAssertEqual(try CLIArguments.parseButton("Fwd=shortcut:Forward to phone")["shortcut"] as? String, "Forward to phone")
+        XCTAssertThrowsError(try CLIArguments.parseButton("X=script:"))
+    }
+
     func testButtons() throws {
         let r = try request(["notify", "--app", "a", "--title", "t",
                              "--button", "Open=https://x.com/?a=b", "--button", "Archive=cmd:bidbot archive 42",

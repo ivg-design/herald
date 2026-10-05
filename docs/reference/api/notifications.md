@@ -77,6 +77,7 @@ Fields that add buttons:
 |---|---|---|---|---|
 | `buttons` | body | array | no | Up to 8 buttons. See [Button object](#button-object). |
 | `actionIds` | body | array | no | Ids of actions the app's manifest declares, used when you send no `buttons`. |
+| `followUp` | body | object | no | One action to run if the banner goes unanswered. See [Follow-up object](#follow-up-object). |
 
 Fields that add speech (explained in the [voice reference](../voice.md)):
 
@@ -149,8 +150,8 @@ curl -s -X POST "$HERALD/v1/notify" \
 
 #### Button object
 
-A button has a label and one thing it does. Give exactly one of `url`, `command`, `callback`, `openApp` or
-`reply`. The full behaviour of each kind is in the [actions reference](../actions.md).
+A button has a label and one thing it does. Give exactly one of `url`, `command`, `script`, `shortcut`, `callback`,
+`openApp` or `reply`. The full behaviour of each kind is in the [actions reference](../actions.md).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -158,6 +159,9 @@ A button has a label and one thing it does. Give exactly one of `url`, `command`
 | `style` | string | no | `default`, `destructive` or `cancel`. |
 | `url` | string | no | Opens this link. |
 | `command` | string | no | Runs this shell command. The user must allow commands for the app first. |
+| `script` | string | no | Runs this file from Herald's scripts folder. A plain file name, not a path. The user must allow the app to run commands, scripts and Shortcuts first. |
+| `shortcut` | string | no | Runs this Apple Shortcut. The same permission applies. |
+| `input` | string | no | With `shortcut` or `script`: the text handed over, with `{tokens}` filled. Default: the notification as JSON. |
 | `callback` | object | no | Posts to your callback URL. Fields: `url` and `payload`, both optional. |
 | `openApp` | object | no | Brings an app to the front. Fields: `bundleId` or `path`; empty means the sender. |
 | `reply` | object | no | Shows a text field in the banner. Fields: `placeholder`, `callback`, `voice`. |
@@ -177,6 +181,56 @@ A button has a label and one thing it does. Give exactly one of `url`, `command`
 
 > [!NOTE]
 > `actions` is accepted as another name for `buttons`. When a request has both, `buttons` is used.
+
+```json
+{
+  "app": "example.bidbot",
+  "title": "Bid accepted",
+  "buttons": [
+    {"label": "Forward", "shortcut": "Forward to phone", "input": "{title}"},
+    {"label": "Log", "script": "log.sh"}
+  ]
+}
+```
+
+A `script` or `shortcut` button asks the person the first time, in the banner, and names the script with its SHA-256 or
+the Shortcut with its input. `snooze` is not a button an app can send.
+
+#### Follow-up object
+
+A follow-up runs one action when the banner is left unattended: nobody dismisses it, presses a button, replies or
+opens it for the time you set. Use it to forward a missed banner. The reference for how it works is
+[Follow-ups](../actions.md#follow-ups).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `after` | number or string | yes | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. |
+| `actionRef` | string | no | The id, or label, of one of this notification's buttons. |
+| `action` | object | no | An action written inline, as a button with an `id` and a `label`. |
+| `enabled` | boolean | no | `false` switches it off. Default `true`. |
+
+Give exactly one of `actionRef` and `action`. The kind must be `shortcut`, `script`, `command` or `callback`.
+
+```json
+{
+  "app": "example.bidbot",
+  "id": "bid-42",
+  "title": "Bid accepted",
+  "persistent": true,
+  "followUp": {
+    "after": "10m",
+    "action": {"id": "fwd", "label": "Forward", "kind": "shortcut",
+               "shortcut": "Forward to phone", "input": "{title}"}
+  }
+}
+```
+
+- A template's follow-up wins over the notification's, and the notification's over the manifest's.
+- The timer starts when the banner is on screen. Dismissing, any button, a reply and opening cancel it.
+- A follow-up that runs code runs under the app's permission. A notification cannot grant it.
+- A `timeout` that is not longer than `after` means the banner closes first and never follows up.
+- Herald keeps the timer in memory. Quitting Herald drops it.
+- An app that reaches Herald through the cloud relay cannot send `followUp`. Its owner adds one to the template.
 
 #### Reminder object
 

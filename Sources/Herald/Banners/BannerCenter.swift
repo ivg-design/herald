@@ -293,6 +293,11 @@ final class BannerCenter {
         #if DEBUG
         // Documentation screenshots: banners are laid out as usual but far outside every display (Debug/ScreenshotMode.swift).
         if let o = ScreenshotMode.bannerOffset { return NSPoint(x: x + o.x, y: y + o.y) }
+        // A development instance checked end to end (HERALD_DEBUG_OFFSCREEN_BANNERS=1): the same layout, far outside every
+        // display, so nothing appears on the screen of the person using the Mac.
+        if ProcessInfo.processInfo.environment["HERALD_DEBUG_OFFSCREEN_BANNERS"] == "1" {
+            return NSPoint(x: x + ShotKit.far.x, y: y + ShotKit.far.y)
+        }
         #endif
         return NSPoint(x: x, y: y)
     }

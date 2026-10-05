@@ -79,6 +79,26 @@ public enum PayloadLimits {
         if let buttons = n.buttons {
             guard buttons.count <= maxButtons else { throw BackendError(413, "too many buttons (at most \(maxButtons))") }
             try checkEncoded("buttons", buttons, maxButtonsBytes)
+            for b in buttons {
+                try check("button script", b.script, maxSmallFieldBytes)
+                try check("button shortcut", b.shortcut, maxSmallFieldBytes)
+                try check("button input", b.input, maxSmallFieldBytes)
+                if let script = b.script?.trimmingCharacters(in: .whitespaces), !script.isEmpty, !HeraldScriptName.isPlain(script) {
+                    throw BackendError(400, "buttons: script must be a plain file name in Herald's scripts folder, not a path")
+                }
+            }
+        }
+        if let f = n.followUp {
+            try checkEncoded("followUp", f, maxButtonsBytes)
+            if let a = f.action {
+                try check("followUp.action.script", a.script, maxSmallFieldBytes)
+                try check("followUp.action.shortcut", a.shortcut, maxSmallFieldBytes)
+                try check("followUp.action.input", a.input, maxSmallFieldBytes)
+                try check("followUp.action.command", a.command, maxSmallFieldBytes)
+            }
+            if let first = f.problems(path: "followUp").first(where: { $0.isError }) {
+                throw BackendError(400, "\(first.path): \(first.message)")
+            }
         }
         if let metadata = n.metadata { try checkEncoded("metadata", metadata, maxMetadataBytes) }
         if let reminder = n.reminder {

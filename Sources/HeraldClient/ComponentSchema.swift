@@ -84,6 +84,9 @@ public enum ComponentSchema {
 
         Every action receives the merged payload (the notification, its resolved fields, the template's `extra`). Shortcut input is the `input` text with tokens filled, or the full JSON when `input` is omitted.
 
+        ## Follow-up
+        `followUp` (`{"after": "10m", "actionRef": "<id>" | "action": {...}, "enabled"?}`) runs one action when the banner is left unattended. It sits on the template (the user's choice, replaces the others), the notification and the manifest. Kinds: shortcut, script, command, callback. `{"enabled": false}` switches an issuer's off. Use `set_follow_up` to edit it; code still needs the person's approval at the Mac.
+
         ## Components
         """
         for t in HeraldComponent.typeNames {

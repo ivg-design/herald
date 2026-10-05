@@ -158,6 +158,12 @@ Shows a notification as a banner and stores it in History. Sending the same `--i
 | `--snooze`, `--no-snooze` | flag | Show the snooze menu on the banner, or hide it. |
 | `--priority P` | string | One of `low`, `normal`, `high`, `urgent`. `urgent` breaks quiet hours only for apps that allow it. |
 | `--button "Label=target"` | string | Add a button. Repeat the option for more. See the targets below. |
+| `--follow-up-after DURATION` | string | Run one action if the banner is still unattended after this long: seconds, or `90s`, `10m`, `2h`. From 5 seconds to 7 days. Give it with one of the next four options. |
+| `--follow-up-shortcut NAME` | string | The follow-up runs this Apple Shortcut. |
+| `--follow-up-script FILE` | string | The follow-up runs this file from Herald's scripts folder. |
+| `--follow-up-command CMD` | string | The follow-up runs this shell command. |
+| `--follow-up-ref ID` | string | The follow-up runs the action of this id, or label, that the notification offers. |
+| `--follow-up-input TEXT` | string | Text for the Shortcut or script, with `{tokens}` filled. Not valid with a command or a reference. |
 | `--reminder "Title\|ISO8601"` | string | Add an Add-to-Reminders action. The text is split on the last `\|`; a bare string is only a title. |
 | `--metadata JSON` | JSON | An object of extra values. Templates read it for their `{tokens}`. |
 | `--template NAME` | string | A saved template for this app. |
@@ -178,10 +184,15 @@ The `--button` target decides what the button does:
 | Target form | What the button does |
 |---|---|
 | `Label=https://example.com` | Opens the URL. |
-| `Label=cmd:shell command` | Runs the command. The app must be allowed to run commands. |
+| `Label=cmd:shell command` | Runs the command. The app must be allowed to run commands, scripts and Shortcuts. |
+| `Label=script:file.sh` | Runs a file from Herald's scripts folder. The app must be allowed to run commands, scripts and Shortcuts. |
+| `Label=shortcut:Name` | Runs an Apple Shortcut. The app must be allowed to run commands, scripts and Shortcuts. |
 | `Label=cb:{"k":1}` | Sends the JSON as the payload of a callback to the app's callback URL. `cb:` alone sends an empty payload. |
 
 The speech options build the notification's `speak` field. See [Voice](voice.md) for the field and its limits.
+
+The follow-up options build the notification's `followUp` object. How a follow-up works is in
+[Follow-ups](actions.md#follow-ups).
 
 **Example**
 
@@ -930,6 +941,64 @@ herald template default --app example.bidbot --name bid-accepted
 **HTTP route**
 
 [`PUT /v1/templates/default`](api/templates.md#put-v1templatesdefault)
+
+### `herald template follow-up`
+
+Sets, or switches off, the follow-up of an app's template: one action that runs when a banner is left unattended. The
+command edits the template. With no `--name` it uses the app's default template, and creates one from the current
+layout when the app has none. It prints whether the action still needs your one-time approval. It never approves
+code: you approve at the Mac, in the banner's question.
+
+**Options**
+
+| Option | Type | Description |
+|---|---|---|
+| `--app ID` | string | The app id. Required. |
+| `--name TEMPLATE` | string | The template to edit. Default: the app's default template. |
+| `--after DURATION` | string | How long the banner goes unanswered first: seconds, or `90s`, `10m`, `2h`. From 5 seconds to 7 days. |
+| `--shortcut NAME` | string | Run this Apple Shortcut. |
+| `--script FILE` | string | Run this file from Herald's scripts folder. |
+| `--command CMD` | string | Run this shell command. |
+| `--action-ref ID` | string | Run the action of this id, or label, that the notification offers. |
+| `--input TEXT` | string | Text for the Shortcut or script, with `{tokens}` filled. |
+| `--label TEXT` | string | The name shown on the banner line **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
+| `--off` | flag | Switch the follow-up off, including one the issuer declares. Replaces `--after` and an action. |
+
+Give one of `--shortcut`, `--script`, `--command` and `--action-ref` with `--after`, or give `--off`.
+
+**Example**
+
+```sh
+herald template follow-up --app example.bidbot --name "Bid won" \
+  --after 10m --shortcut "Forward to phone" --input "{title}"
+```
+
+**Output**
+
+```json
+{
+  "saved": true,
+  "app": "example.bidbot",
+  "template": "Bid won",
+  "createdTemplate": false,
+  "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
+                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
+  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+  "origin": "template",
+  "approval": "needs-approval",
+  "needsApproval": true,
+  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+}
+```
+
+**Exit status**
+
+- `1` with the message when the options are incomplete, such as `--after` without an action.
+- `1` and Herald's error when it rejects the follow-up, for example for a kind that cannot follow up.
+
+**HTTP route**
+
+[`PUT /v1/templates/follow-up`](api/templates.md#put-v1templatesfollow-up)
 
 ### `herald template export`
 

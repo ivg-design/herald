@@ -165,6 +165,8 @@ Herald posts to the `url` of the button's callback, or to the `callbackURL` the 
 | `app` | body | string | yes | The app that sent the notification. |
 | `action` | body | string | yes | The label of the button. |
 | `payload` | body | any | no | The `payload` you attached to the button. |
+| `event` | body | string | no | `unattended` when a [follow-up](../actions.md#follow-ups) sent the request. Absent for a pressed button. |
+| `unattendedSeconds` | body | number | no | With `unattended`: how long the banner went unanswered. |
 
 **Example request**
 

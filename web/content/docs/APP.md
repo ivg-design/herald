@@ -74,7 +74,7 @@ The form has these sections, from the top. A live preview of the banner, in ligh
 | **Look** | **Design Template...** | Switches to design mode for the same app, because the look of a banner comes from its template. |
 
 A **Callback** button also takes a **Callback URL** and a **Payload**, which must be valid JSON. A **Command**
-button takes a shell command and runs only if the app is allowed to run commands. The line at the bottom shows the
+button takes a shell command and runs only if the app is allowed to run commands, scripts and Shortcuts. The line at the bottom shows the
 first problem with the form, or the result of the last action.
 
 The action bar at the bottom of the window has these buttons.
@@ -143,6 +143,7 @@ Each row draws the notification as its banner looked, with a line under it.
 | **Used** and a label, such as **Used Archive**. | You pressed the button with that label. |
 | A clock and **Snoozed until** a time. | The banner is hidden and will return at that time. |
 | A note after the status. | Extra detail from an action, such as an app that could not be found. |
+| **Follow-up ran: LABEL** and a time. | A [follow-up](reference/actions.md#follow-ups) ran after the banner went unanswered. It can also read **Follow-up failed: REASON** or **Follow-up waiting for approval: LABEL**. |
 | A speaker icon, the spoken text and a length. | The notification was spoken. The speaker plays it again. |
 
 Two or more notifications of one app that were sent with the same `group` fold into one row with a name, a count and a
@@ -220,7 +221,8 @@ Select an app to see its page. It has these parts, from the top.
 | **Mute banners** | Hides this app's banners. Its notifications still reach History, as not dismissed, and sounds follow the sound setting. |
 | **Stack notifications** | How this app's banners fold together. **Default** follows the menu's choice. |
 | **Templates...** | Opens the template editor for this app's banner designs. |
-| **Allow this app to run commands** | Lets banner buttons from this app run shell commands as you. Turning it on asks first. |
+| **Allow this app to run commands, scripts and Shortcuts** | Lets banner buttons and follow-ups from this app run shell commands, scripts and Shortcuts as you. Turning it on asks first. |
+| **Declares a follow-up: LABEL after DURATION** | Appears only for an app whose manifest declares a [follow-up](reference/actions.md#follow-ups). It is information: the Designer has the switch that turns it off. |
 | **Allow callbacks to HOST** | Appears only for an app whose callback address is not on this Mac. Callback buttons send their data there only after you allow it. |
 | **Remove NAME...** | Deletes the app. See [Remove an app](#remove-an-app). |
 
@@ -228,7 +230,7 @@ Three rules apply to these controls.
 
 - The sound, **Stay until dismissed** and **Auto-dismiss** controls set what a notification gets when it does not say
   otherwise. A notification's own fields win. [Notifications API](reference/api/notifications.md#post-v1notify) lists them.
-- A command button runs only if the app also asked for command access when it registered. When you allow it but the app
+- A command, script or Shortcut button, or a follow-up that runs one, runs only if the app also asked for command access when it registered. When you allow it but the app
   never asked, the page says **Confirmed, but the app has not requested command access.**
 - Confirming command access happens only here or in the banner's own question, never through the API.
 
@@ -313,7 +315,7 @@ files, and commands that a template carries.
 A script action runs a file from the scripts folder with the notification as JSON on standard input, and has 30 seconds.
 A command, script or Shortcut that a template carries asks once per template, the first time it runs. Changing the
 command, the script file or the Shortcut's name or input asks again. Commands an app sends in its own buttons follow the
-**Allow this app to run commands** switch under [Apps](#apps) instead. [Actions](reference/actions.md) explains the
+**Allow this app to run commands, scripts and Shortcuts** switch under [Apps](#apps) instead. [Actions](reference/actions.md) explains the
 approvals, and the list of approvals is also available as
 [`GET /v1/actions/approvals`](reference/api/apps.md#get-v1actionsapprovals).
 

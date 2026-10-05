@@ -41,6 +41,7 @@ A worked example of this session is in [Connect an agent](../../MCP.md#a-worked-
 - Buttons
   - [`list_shortcuts`](#list_shortcuts)
   - [`add_action_rule`](#add_action_rule)
+  - [`set_follow_up`](#set_follow_up)
 - Sharing
   - [`export_template_bundle`](#export_template_bundle)
   - [`import_template_bundle`](#import_template_bundle)
@@ -160,7 +161,7 @@ Creates a manifest or replaces the whole one. Read it with `get_manifest`, edit 
 Rules for what you send:
 
 - A shortened marker that `get_manifest` wrote is swapped back for the stored value. A marker that matches nothing stored is refused: read the manifest again with `full: true`.
-- An issuer action is one of the kinds `url`, `callback`, `command`, `openApp`, `reply` or `dismiss`. Each kind is described in [Actions](../actions.md#action-kinds). Shortcut, script and snooze actions are authored in templates with [`add_action_rule`](#add_action_rule).
+- An issuer action is one of the kinds `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `reply` or `dismiss`. Each kind is described in [Actions](../actions.md#action-kinds). A `script` or `shortcut` action runs only when the user has allowed the app to run commands, scripts and Shortcuts. A snooze action is authored in a template with [`add_action_rule`](#add_action_rule). The manifest can also carry a default `followUp`, described in [Manifests](../manifests.md#follow-up).
 - An invalid manifest is rejected with the path of the field.
 - Rive files named in `assets` are copied into Herald's assets folder.
 
@@ -729,7 +730,7 @@ None. Read-only. Opens no window.
 
 ## Buttons
 
-A template can change the buttons the issuing app sent and add buttons of its own. The rules live in the template's `actionRules`; see [Actions](../actions.md). An agent cannot press a button and cannot grant the permission to run a command. The user confirms a command, script or Shortcut in Herald the first time its button is pressed.
+A template can change the buttons the issuing app sent and add buttons of its own. The rules live in the template's `actionRules`; see [Actions](../actions.md). An agent cannot press a button and cannot grant the permission to run a command. The user confirms a command, script or Shortcut in Herald the first time its button is pressed, or the first time a follow-up would run it.
 
 ### `list_shortcuts`
 
@@ -773,7 +774,7 @@ Adds one rule to a saved template's `actionRules`. A rule either changes an issu
 Rules that apply to every rule:
 
 - A `script` action runs a file in `~/Library/Application Support/Herald/scripts/`, which [`herald_status`](notifications.md#herald_status) lists. The script receives the notification JSON on stdin. This server only talks to Herald's API, so an agent that wants a script writes the file itself and then adds the rule.
-- A command, script or Shortcut you add is confirmed by the user the first time its button is pressed, and again whenever it changes.
+- A command, script or Shortcut you add is confirmed by the user the first time its button is pressed, and again whenever it changes. A follow-up uses the same confirmation, so a button and a follow-up that run the same Shortcut share it.
 - An add with the id of one of the issuer's own actions overwrites that button, and the confirmation says so. An action id that an earlier add rule already uses overwrites that rule.
 - Any action can carry an SF Symbol, as a name (`checkmark.circle`) or a full styling object. An unknown name is a warning.
 - The tool validates the template before saving it. It warns about a script that is missing or cannot run, a Shortcut that is not installed, and a `match` that matches nothing.
@@ -833,6 +834,75 @@ Rules that apply to every rule:
 **Side effects**
 
 Saves the template with the rule added. The user must confirm a new command, script or Shortcut in Herald before it first runs.
+
+### `set_follow_up`
+
+Gives a template a follow-up: one action that runs when a banner from the app is left unattended, such as a Shortcut
+that forwards it to a phone. Use it when you want to add or change a follow-up without reading and rewriting the whole
+template. The tool saves the template with the follow-up and reports what the person still has to do.
+
+This tool never approves code. A Shortcut, script or command that follows up asks the person at the Mac the first time,
+in the banner. The result's `approval` and `note` tell you where things stand. Tell the person, and do not retry to
+get around it. How a follow-up works is in [Follow-ups](../actions.md#follow-ups).
+
+**Arguments**
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `app` | string | yes | The app id. Cloud connectors are `cloud.NAME`. |
+| `template` | string | no | The saved template to edit. Default: the app's default template, created from the current layout when the app has none. |
+| `after` | number or string | no | Seconds from 5 to 604800, or `"90s"`, `"10m"`, `"2h"`. Required unless `enabled` is `false`. |
+| `shortcut` | string | no | An installed Shortcut. Take the name from [`list_shortcuts`](#list_shortcuts). |
+| `script` | string | no | A file name in Herald's scripts folder. |
+| `command` | string | no | A shell command. |
+| `actionRef` | string | no | The id, or label, of an action the notification offers. |
+| `input` | string | no | Text for the Shortcut or script, with `{tokens}` filled. |
+| `label` | string | no | The name shown in **Follow-up ran: LABEL**. Default: the Shortcut or script name. |
+| `enabled` | boolean | no | `false` switches the follow-up off, including one the issuer declares. |
+
+Give exactly one of `shortcut`, `script`, `command` and `actionRef`, unless `enabled` is `false`.
+
+**Example call**
+
+```json
+{
+  "app": "example.bidbot",
+  "template": "Bid won",
+  "after": "10m",
+  "shortcut": "Forward to phone",
+  "input": "{title}"
+}
+```
+
+**Example result**
+
+```json
+{
+  "saved": true,
+  "app": "example.bidbot",
+  "template": "Bid won",
+  "createdTemplate": false,
+  "followUp": {"after": 600, "action": {"id": "follow-up", "label": "Forward to phone",
+                                       "kind": "shortcut", "shortcut": "Forward to phone"}},
+  "action": {"id": "follow-up", "label": "Forward to phone", "kind": "shortcut"},
+  "origin": "template",
+  "approval": "needs-approval",
+  "needsApproval": true,
+  "note": "Saved. The follow-up will not run until the person approves this template's Shortcut at the Mac."
+}
+```
+
+The result's fields are the ones in [`PUT /v1/templates/follow-up`](../api/templates.md#put-v1templatesfollow-up),
+with the `approval` values listed there.
+
+**HTTP route**
+
+[`PUT /v1/templates/follow-up`](../api/templates.md#put-v1templatesfollow-up).
+
+**Side effects**
+
+Saves the template, and creates it when the app has none. Runs nothing and approves nothing. The person must approve
+code at the Mac before the follow-up first runs.
 
 ## Share a template
 

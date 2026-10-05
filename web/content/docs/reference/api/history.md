@@ -33,12 +33,32 @@ Every endpoint that returns notifications returns them in this shape.
 | `imagePath` | string | The local copy of the notification's picture. |
 | `fields` | object | The values the template's tokens resolved to at delivery. |
 | `speech` | object | What was spoken: `text`, `voice`, `audioPath`, `durationSeconds`, `suppressed`. |
+| `followUp` | object | The follow-up that ran, or tried to. See below. |
 | `reply` | string | What the user typed into the banner's reply field. |
 | `repliedAt` | string | When the user replied. |
 | `replyAudioPath` | string | The recording of a voice reply. |
 | `replyTranscript` | string | The transcript of a voice reply, made on this Mac. |
 
 Fields that do not apply to a notification are absent from its record.
+
+The `followUp` object appears when a [follow-up](../actions.md#follow-ups) fired for the notification.
+
+| Field | Type | Description |
+|---|---|---|
+| `ranAt` | string | When the follow-up fired, as an ISO 8601 date. |
+| `action` | string | The label of the action it ran. |
+| `actionId` | string | The id of that action. |
+| `kind` | string | `shortcut`, `script`, `command` or `callback`. |
+| `outcome` | string | `ran`, `failed` or `waitingForApproval`. |
+| `detail` | string | Why it failed. Absent when it ran. |
+| `unattendedSeconds` | number | How long the banner went unanswered before it fired. |
+
+```json
+{"ranAt": "2026-10-02T13:25:12Z", "action": "Forward", "actionId": "fwd", "kind": "shortcut",
+ "outcome": "ran", "unattendedSeconds": 612}
+```
+
+`waitingForApproval` means the action needs the person's approval and nothing ran. The banner carries the question.
 
 ## Endpoints
 

@@ -13,7 +13,7 @@
 **What it never does.** The server never presses a banner button and never runs an action. In practice:
 
 - A command, script or Apple Shortcut that a template adds asks you for confirmation inside Herald the first time it would run, and again whenever it changes.
-- The permissions that let an app run commands or call a remote host cannot be granted through the server. The agent is the program that approval guards against, so only you can give it, in **Settings > Apps**.
+- The permissions that let an app run commands, scripts and Shortcuts, or call a remote host, cannot be granted through the server. The agent is the program that approval guards against, so only you can give it, in **Settings > Apps**.
 - An agent can read those approvals and withdraw them. See [Actions](../actions.md).
 
 **Transport.** The server speaks JSON-RPC 2.0, one message per line, on standard input and output. It implements MCP protocol version `2025-06-18` and also accepts `2025-03-26` and `2024-11-05`. It writes logs to standard error only, so standard output carries protocol messages and nothing else. It offers tools and resources. It offers no prompts.

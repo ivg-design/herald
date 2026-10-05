@@ -16,11 +16,11 @@ edits the same record in **Settings > Apps**.
 timeout, the screen corner and display, whether its banners are muted, how they stack, and whether its notifications are
 spoken. `update_app_settings` changes them. They are the user's preferences, so say what you change.
 
-![The Settings window on the Apps tab with GitHub Actions selected: Sound, Stay until dismissed, Auto-dismiss after, Display, Screen corner, Mute banners, Stack notifications and Allow this app to run commands](../../../web/public/shots/docs/settings-apps.png "The Apps tab is what list_apps reads and update_app_settings writes. The Allow this app to run commands switch is an approval that can only be granted here.")
+![The Settings window on the Apps tab with GitHub Actions selected: Sound, Stay until dismissed, Auto-dismiss after, Display, Screen corner, Mute banners, Stack notifications and Allow this app to run commands, scripts and Shortcuts](../../../web/public/shots/docs/settings-apps.png "The Apps tab is what list_apps reads and update_app_settings writes. The Allow this app to run commands switch is an approval that can only be granted here.")
 
 **Approvals** are the permissions only the user can give. There are two kinds:
 
-- An app can be allowed to run **command buttons**, and to call a **callback host** that is not on this Mac. These are
+- An app can be allowed to run **command, script and Shortcut buttons**, and to call a **callback host** that is not on this Mac. These are
   shown by `list_apps` under `approvals`.
 - A template's **commands, scripts and Shortcuts** are approved one template at a time, the first time its button is
   pressed. These are shown by `list_approvals`.
@@ -288,7 +288,10 @@ tool that grants one.
 ### `list_approvals`
 
 Lists the commands, scripts and Shortcuts the user has approved. Call it to see what a template is already allowed to
-run, or to find the app and template names to pass to `revoke_approval`.
+run, or to find the app and template names to pass to `revoke_approval`. The `followUps` list has one row for each
+template with an enabled follow-up that runs code, and for each manifest that declares one, with its `approval`:
+`approved`, `needs-approval`, `app-permission-needed`, `app-not-allowed` or `none`. Use it to see which follow-ups are
+waiting for the person.
 
 **Arguments**
 
@@ -310,6 +313,17 @@ No arguments.
       "template": "Bid won",
       "commands": ["open -a Notes"],
       "approvedAt": "2026-10-01T09:30:00.000Z"
+    }
+  ],
+  "followUps": [
+    {
+      "app": "example.bidbot",
+      "template": "Bid won",
+      "source": "template",
+      "action": "Forward",
+      "kind": "shortcut",
+      "origin": "template",
+      "approval": "needs-approval"
     }
   ],
   "note": "Approvals are granted by the user when a banner asks; here they can only be listed and revoked."

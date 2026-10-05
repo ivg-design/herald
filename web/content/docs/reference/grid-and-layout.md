@@ -54,6 +54,7 @@ short file is valid. A grid template shows nothing until it has cells.
 | `collapseEmpty` | boolean | no | Default for components without their own `emptyBehavior`. Default `true`. |
 | `onClick` | string | no | `url` opens the notification's link. `openApp` brings the issuing app to the front. Default `url`. |
 | `actionRules` | array | no | Rules that hide, relabel, restyle, reorder or add buttons. See [Action rules](actions.md). |
+| `followUp` | object | no | One action to run when a banner is left unattended, or `{"enabled": false}` to switch off the issuer's. See [Follow-ups](actions.md#follow-ups). |
 | `extra` | object | no | Your own string values. Components read them as `{extra.key}` and every action receives them. |
 | `accentColor` | string | no | A hex colour (`#RGB`, `#RRGGBB` or `#RRGGBBAA`) that tints accent-coloured components and default buttons. |
 

@@ -126,6 +126,7 @@ The **Actions** tab edits the banner's buttons.
 |---|---|
 | **Buttons** | Every button the issuer sends and every one you added. For an issuer button you can rename it, hide it, restyle it, move it up or down and reset it. For yours you can edit or delete it. |
 | **Add your own** | One button for each kind: **Run Apple Shortcut**, **Run script**, **Run shell command**, **Open link**, **Call back the issuer** and **Snooze**. |
+| **Follow-up** | Runs one action when the banner is left unattended. See [Add a follow-up](#add-a-follow-up). |
 | **Extra data** | Your own key and value pairs. Every action receives them, and a binding reads one as `{extra.key}`. |
 
 ![The Cell tab for an Actions cell with its Shows, Layout, Max, Align and Which settings](../web/public/shots/docs/designer-actions-cell-selected.png "An Actions cell in the grid has its own settings in the Cell tab: which actions it shows, how it lays them out and how many buttons fit.")
@@ -233,6 +234,23 @@ how to add one in the Designer.
    to **Listed** and choose the action. An action is drawn in one cell only.
 
 A command, a script or a Shortcut that you add runs only after the user confirms it once for the template.
+
+#### Add a follow-up
+
+The **Follow-up** block of the **Actions** tab, under **Buttons**, runs one action when a banner goes unanswered. It
+is the way to forward a missed banner to your phone, an email or a channel.
+
+1. Switch on **If not dismissed**.
+2. Under **After**, type a number and choose a unit: seconds, minutes or hours. The range is 5 seconds to 7 days.
+3. Open the **Run** menu and choose one of the banner's actions, or **New Shortcut action...** to add a Shortcut that
+   belongs to the follow-up alone.
+4. When the issuer already declares a follow-up, the block says **From the issuer: LABEL after DURATION**. Use its
+   switch to turn it off for this template.
+
+Only a Shortcut, a script, a command or a callback can follow up, so the menu offers no link or reply actions. The
+first time a follow-up that runs code fires, the banner asks you, and **Always allow this template** lets later ones run
+while you are away. [Forward a notification you missed](FORWARD-MISSED.md) goes through it with a Shortcut, and
+[Follow-ups](reference/actions.md#follow-ups) is the reference.
 
 #### The look of each button
 

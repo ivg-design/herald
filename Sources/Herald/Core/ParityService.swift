@@ -68,6 +68,8 @@ public final class ParityService: @unchecked Sendable {
     let bundles: TemplateBundleService
     let approvals: TemplateCommandApprovals
     let host: ParityHost
+    /// Computes script hashes and the approval gates for follow-ups (it never grants anything).
+    let actionRunner: ActionRunner
     /// The answers typed into banners' inline Reply (see `ReplyQueue`).
     public let replies: ReplyQueue
     /// Saves go through the app (it refreshes open windows); a service in a test passes the stores' own.
@@ -78,13 +80,14 @@ public final class ParityService: @unchecked Sendable {
 
     public init(templates: TemplateStore, manifests: ManifestStore, history: HistoryStore, registry: AppRegistry,
                 assets: AssetStore, approvals: TemplateCommandApprovals, host: ParityHost,
-                replies: ReplyQueue = ReplyQueue(),
+                replies: ReplyQueue = ReplyQueue(), actionRunner: ActionRunner = ActionRunner(),
                 saveTemplate: ((HeraldTemplate) throws -> Void)? = nil,
                 removeTemplate: ((String, String) throws -> Void)? = nil,
                 saveManifest: ((HeraldManifest) throws -> Void)? = nil,
                 symbols: @escaping () -> SymbolListing? = { ParityService.systemSymbols }) {
         self.templates = templates; self.manifests = manifests; self.history = history; self.registry = registry
         self.assets = assets; self.approvals = approvals; self.host = host; self.replies = replies
+        self.actionRunner = actionRunner
         self.bundles = TemplateBundleService(templates: templates, assets: assets, manifest: { manifests.get(app: $0) })
         self.saveTemplate = saveTemplate ?? { t in
             guard templates.put(t) else { throw BackendError(500, "could not save template \(t.name)") }
@@ -110,6 +113,7 @@ public final class ParityService: @unchecked Sendable {
         "/v1/templates/duplicate": ["POST"],
         "/v1/templates/rename": ["POST"],
         "/v1/templates/default": ["PUT"],
+        "/v1/templates/follow-up": ["PUT"],
         "/v1/templates/export": ["GET"],
         "/v1/templates/import": ["POST"],
         "/v1/history/search": ["GET"],
@@ -156,6 +160,7 @@ public final class ParityService: @unchecked Sendable {
             case ("POST", "/v1/templates/duplicate"): return try duplicateTemplate(req)
             case ("POST", "/v1/templates/rename"): return try renameTemplate(req)
             case ("PUT", "/v1/templates/default"): return try setDefaultTemplate(req)
+            case ("PUT", "/v1/templates/follow-up"): return try setFollowUp(req)
             case ("GET", "/v1/templates/export"): return try exportBundle(req)
             case ("POST", "/v1/templates/import"): return try importBundle(req)
             case ("GET", "/v1/history/search"): return try searchHistory(req)
@@ -394,7 +399,7 @@ public final class ParityService: @unchecked Sendable {
     // MARK: Approvals
 
     func listApprovals() -> HTTPResponse {
-        Self.reply(["items": Self.jsonObject(approvals.all()),
+        Self.reply(["items": Self.jsonObject(approvals.all()), "followUps": followUpRows(),
                     "note": "Approvals are granted by the user when a banner asks; here they can only be listed and revoked."])
     }
 

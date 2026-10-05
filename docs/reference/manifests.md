@@ -57,6 +57,7 @@ Only `app` is required. `{"app": "example.bidbot"}` is a valid, empty manifest.
 | `fields` | array | no | The data the app sends. At most 200. See [Fields](#fields). |
 | `actions` | array | no | The app's own buttons. At most 32. See [Actions](#actions). |
 | `assets` | array | no | Files the app ships, such as Rive animations. At most 32. See [Assets](#assets). |
+| `followUp` | object | no | A default follow-up: one action to run when a banner goes unanswered. See [Follow-up](#follow-up). |
 | `defaultTemplate` | string | no | The name of the app's template that Herald uses when a notification names none. |
 | `family` | string | no | The product family used by `byApp` stacking. Default: the app id up to its first dot. |
 | `appBundleId` | string | no | The app's bundle identifier, so an `openApp` action can bring it to the front. |
@@ -153,23 +154,35 @@ The app's own buttons. Declare them once with a stable id, then offer them from 
 `"actionIds": ["accept"]` or send them in full as `buttons`. A declared action is not shown on its own: a notification
 has to name it. The Designer's sample preview stands in for a notification that names them all, and says so.
 
-An issuer action is one of six kinds. The fields and behaviour of each kind are in the
+An issuer action is one of eight kinds. The fields and behaviour of each kind are in the
 [actions reference](actions.md#fields-by-kind).
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | no | The stable name that rules and `actionRef` use. Default: a slug of the label, so `Mark as Read` becomes `mark-as-read`. Unique. |
 | `label` | string | yes | The button text. At most 1024 bytes. |
-| `kind` | string | no | `url`, `callback`, `command`, `openApp`, `reply` or `dismiss`. |
+| `kind` | string | no | `url`, `callback`, `command`, `script`, `shortcut`, `openApp`, `reply` or `dismiss`. Inferred from the field when omitted. |
 | `style` | string | no | `normal`, `prominent`, `destructive` or `cancel`. |
 | `url` | string | no | The link, for `url`. At most 2048 bytes. |
 | `command` | string | no | The shell command, for `command`. Runs only with the app's command permission. |
+| `script` | string | no | A plain file name in Herald's scripts folder, for `script`. Runs only with the app's command permission. |
+| `shortcut`, `input` | string | no | The name of an installed Shortcut, and optional text with `{tokens}` to hand it, for `shortcut`. Runs only with the app's command permission. |
 | `callback` | object | no | `url` and `payload`, for `callback`. An empty callback means "call the app back". |
 | `bundleId`, `path` | string | no | The application to open, for `openApp`. |
 | `placeholder`, `voice` | string, boolean | no | The field's hint and a voice switch, for `reply`. |
 
-A manifest cannot declare `script`, `shortcut` or `snooze`. Those are authored in templates by the user, and a
-manifest that names one is rejected with `'shortcut' actions are authored in templates, not declared by an issuer`.
+A manifest can declare `script` and `shortcut` actions. A script is a file name in the scripts folder, not a path. A
+`script` or `shortcut` kind without its name is rejected. They run only when the app is allowed to run commands,
+scripts and Shortcuts (**Settings > Apps**), and the banner's question names the script with its SHA-256 or the
+Shortcut with its input. A manifest cannot declare `snooze`: it changes how the banner behaves, so it is authored in a
+template.
+
+```json
+[
+  {"id": "fwd", "label": "Forward", "kind": "shortcut", "shortcut": "Forward to phone", "input": "{title}"},
+  {"id": "log", "label": "Log", "kind": "script", "script": "log.sh"}
+]
+```
 
 A `url` action whose value is exactly one token, such as `{link}`, is a link taken from the notification. Herald fills it
 from the field of that name and leaves the button out when the notification has no value. A button that has nothing to
@@ -190,6 +203,45 @@ open never appears. Any other `url` is used as declared.
   {"id": "open-link", "label": "Open bid", "kind": "url", "url": "{link}"}
 ]
 ```
+
+## Follow-up
+
+A manifest can declare a default follow-up: one action to run when a banner from this app goes unanswered, such as
+forwarding it with a Shortcut. It is a suggestion from the app. The person decides: the Designer shows it as **From
+the issuer: LABEL after DURATION** with a switch to turn it off, and **Settings > Apps** shows **Declares a follow-up:
+LABEL after DURATION**.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `after` | number or string | yes | Seconds from 5 to 604800, or a string such as `"90s"`, `"10m"` or `"2h"`. |
+| `actionRef` | string | no | The id of one of the manifest's `actions`. |
+| `action` | object | no | An action written inline. |
+| `enabled` | boolean | no | `false` switches it off. Default `true`. |
+
+Give exactly one of `actionRef` and `action`. The kind must be `shortcut`, `script`, `command` or `callback`. A
+template's follow-up, and then a notification's, take priority over the manifest's. How the timer works, what the
+action receives and what the banner shows is in [Follow-ups](actions.md#follow-ups).
+
+**Minimal example**
+
+```json
+{"after": "10m", "actionRef": "fwd"}
+```
+
+**Realistic example**
+
+```json
+{
+  "followUp": {
+    "after": "15m",
+    "action": {"id": "fwd", "label": "Forward", "kind": "shortcut",
+               "shortcut": "Forward to phone", "input": "{title}"}
+  }
+}
+```
+
+A follow-up that runs code needs the app's permission, the same as a button of the same kind. Until you allow it,
+the question appears on the banner when the timer ends and nothing runs.
 
 ## Assets
 
@@ -240,7 +292,7 @@ The rules:
 - `app` is required and is at most 128 bytes.
 - `version` is 1 or greater.
 - A field `key` is made of letters, digits, `_`, `.` and `-`, and is unique.
-- An action has a label, a `kind` from the six issuer kinds, and a `style` of `default`, `normal`, `prominent`,
+- An action has a label, a `kind` from the eight issuer kinds, a `shortcut` or `script` name when it has that kind, and a `style` of `default`, `normal`, `prominent`,
   `destructive` or `cancel`.
 - Action ids are unique, whether declared or taken from the label.
 - `appBundleId` looks like `com.example.App`: two or more parts of letters, digits, `-` and `_`, separated by dots.
@@ -324,6 +376,7 @@ An agent can also read a manifest as the resource `herald://manifests/APP`. The 
 
 - [Manifests API](api/manifests.md): store, read and delete manifests.
 - [Actions](actions.md): the kinds, fields and rules behind a manifest's `actions`.
+- [Follow-ups](actions.md#follow-ups): the timer, the approval and what the banner shows.
 - [Two-way notifications](../ACTIONS.md): offer a declared action from a notification.
 - [Rive](rive.md): the animations a manifest's `assets` ship.
 - [Stacking](stacking.md): what `family` does.

@@ -74,4 +74,58 @@ final class PayloadTests: XCTestCase {
         XCTAssertFalse(r.commandsAllowed); XCTAssertFalse(r.commandsConfirmed)
         XCTAssertEqual(AppRegistry(file: f).record(for: "a")?.registration.appName, "A")  // persisted
     }
+
+    // MARK: Follow-up and script / shortcut buttons
+
+    func testNotifyDecodesAFollowUpAndScriptAndShortcutButtons() throws {
+        let json = """
+        {"app":"a","title":"t","buttons":[{"label":"Log","script":"log.sh"},{"label":"Fwd","shortcut":"Forward","input":"{title}"}],
+         "followUp":{"after":"10m","action":{"id":"f","label":"Forward","kind":"shortcut","shortcut":"Forward to phone"}}}
+        """
+        let n = try HeraldJSON.decoder().decode(HeraldNotification.self, from: Data(json.utf8))
+        XCTAssertEqual(n.buttons?[0].script, "log.sh")
+        XCTAssertEqual(n.buttons?[1].shortcut, "Forward"); XCTAssertEqual(n.buttons?[1].input, "{title}")
+        XCTAssertEqual(n.followUp?.after, 600)
+        XCTAssertNoThrow(try PayloadLimits.validate(n))
+    }
+
+    func testAFollowUpThatIsInvalidIsRefusedWith400() throws {
+        func status(_ followUp: String) -> Int? {
+            let n = try? HeraldJSON.decoder().decode(HeraldNotification.self, from: Data("{\"app\":\"a\",\"title\":\"t\",\"followUp\":\(followUp)}".utf8))
+            guard let n else { return -1 }
+            do { try PayloadLimits.validate(n); return 200 } catch let e as BackendError { return e.status } catch { return nil }
+        }
+        XCTAssertEqual(status("{\"after\":2,\"actionRef\":\"x\"}"), 400, "after below the minimum")
+        XCTAssertEqual(status("{\"after\":60}"), 400, "no action")
+        XCTAssertEqual(status("{\"after\":60,\"action\":{\"id\":\"u\",\"label\":\"Open\",\"kind\":\"url\",\"url\":\"https://x\"}}"), 400, "a url cannot follow up")
+        XCTAssertEqual(status("{\"after\":60,\"action\":{\"id\":\"s\",\"label\":\"S\",\"kind\":\"script\",\"script\":\"../x.sh\"}}"), 400, "not a plain script name")
+        XCTAssertEqual(status("{\"after\":60,\"actionRef\":\"x\"}"), 200)
+        XCTAssertEqual(status("{\"enabled\":false}"), 200)
+        XCTAssertThrowsError(try PayloadLimits.validate(HeraldNotification(app: "a", title: "t", followUp: HeraldFollowUp(after: 60, actionRef: "a",
+            action: HeraldAction(id: "f", label: "F", kind: .callback))))) { error in
+            XCTAssertEqual((error as? BackendError)?.status, 400)
+            XCTAssertTrue((error as? BackendError)?.message.hasPrefix("followUp") == true)
+        }
+    }
+
+    func testAButtonScriptMustBeAPlainFileName() throws {
+        func validate(script: String) throws {
+            var n = HeraldNotification(app: "a", title: "t")
+            n.buttons = [HeraldButton(label: "L", script: script)]
+            try PayloadLimits.validate(n)
+        }
+        XCTAssertNoThrow(try validate(script: "log.sh"))
+        for bad in ["../log.sh", "/usr/bin/x", "a/b.sh"] {
+            XCTAssertThrowsError(try validate(script: bad), bad) { XCTAssertEqual(($0 as? BackendError)?.status, 400) }
+        }
+    }
+
+    func testScriptShortcutAndInputCountTowardTheSizeLimits() throws {
+        let big = String(repeating: "x", count: PayloadLimits.maxSmallFieldBytes + 1)
+        for button in [HeraldButton(label: "L", shortcut: big), HeraldButton(label: "L", shortcut: "S", input: big)] {
+            var n = HeraldNotification(app: "a", title: "t")
+            n.buttons = [button]
+            XCTAssertThrowsError(try PayloadLimits.validate(n)) { XCTAssertEqual(($0 as? BackendError)?.status, 413) }
+        }
+    }
 }

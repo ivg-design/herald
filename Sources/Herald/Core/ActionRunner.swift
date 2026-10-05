@@ -233,8 +233,12 @@ public struct SystemProcessLauncher: ActionProcessLauncher {
 /// `~/Library/Logs/Herald/actions.log`: every script, command and shortcut run, with its output. The file
 /// itself is a `CommandLog` (one backup generation, so it cannot grow without bound).
 public enum ActionLog {
+    /// A development instance (HERALD_SUPPORT_DIR) logs into its own folder, never into the installed Herald's log.
     public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Herald/actions.log")
+        if let dir = ProcessInfo.processInfo.environment["HERALD_SUPPORT_DIR"], !dir.isEmpty {
+            return URL(fileURLWithPath: (dir as NSString).expandingTildeInPath).appendingPathComponent("Logs/actions.log")
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Herald/actions.log")
     }
 
     /// One line a label or id may not break: sender-supplied text must not be able to forge a log line.

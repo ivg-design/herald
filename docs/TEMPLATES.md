@@ -407,4 +407,5 @@ What a bundle does and does not carry:
 - [Bindings and tokens](reference/bindings.md): how `{token}` placeholders get their values.
 - [Components](reference/components/README.md): the properties of each component.
 - [Actions](ACTIONS.md): the buttons a banner shows and the rules that change them.
+- [Follow-ups](reference/actions.md#follow-ups): the `followUp` a template can carry.
 - [Templates API](reference/api/templates.md): store, preview, export and import over HTTP.

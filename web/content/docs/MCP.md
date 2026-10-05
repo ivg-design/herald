@@ -86,10 +86,11 @@ Once connected, the agent has 69 tools. They fall into five groups. The [tool in
 | Tell you something, with or without a banner. | [`send_notification`](reference/mcp/notifications.md#send_notification), [`speak`](reference/mcp/notifications.md#speak) | [Notification tools](reference/mcp/notifications.md) |
 | Ask you a question and read the answer. | [`wait_for_reply`](reference/mcp/notifications.md#wait_for_reply), [`get_replies`](reference/mcp/notifications.md#get_replies) | [Notification tools](reference/mcp/notifications.md#ask-the-user-a-question) |
 | Design a banner and look at it. | [`put_template`](reference/mcp/templates.md#put_template), [`render_preview`](reference/mcp/templates.md#render_preview), [`send_test`](reference/mcp/notifications.md#send_test) | [Template tools](reference/mcp/templates.md) |
+| Forward a missed banner: give a template a follow-up. | [`set_follow_up`](reference/mcp/templates.md#set_follow_up) | [Template tools](reference/mcp/templates.md#set_follow_up) |
 | Add buttons: an Apple Shortcut, a script, a shell command or a URL. | [`add_action_rule`](reference/mcp/templates.md#add_action_rule), [`list_shortcuts`](reference/mcp/templates.md#list_shortcuts) | [Template tools](reference/mcp/templates.md#buttons) |
 | Change settings, read History, set up the cloud relay. | [`set_settings`](reference/mcp/apps-and-settings.md#set_settings), [`history_search`](reference/mcp/apps-and-settings.md#history_search), [`relay_status`](reference/mcp/relay.md#relay_status) | [Apps and settings](reference/mcp/apps-and-settings.md), [Cloud relay tools](reference/mcp/relay.md) |
 
-The agent never presses a banner button and never runs an action itself. A command, script or Shortcut it adds asks you for confirmation inside Herald the first time it would run, and again if it changes. The permission for an app to run commands or call a remote host cannot be given through the server at all. Only you can give it, in **Settings > Apps**. See [Actions](ACTIONS.md).
+The agent never presses a banner button and never runs an action itself. A command, script or Shortcut it adds asks you for confirmation inside Herald the first time it would run, and again if it changes. The permission for an app to run commands, scripts and Shortcuts or call a remote host cannot be given through the server at all. Only you can give it, in **Settings > Apps**. See [Actions](ACTIONS.md).
 
 ## A worked session
 

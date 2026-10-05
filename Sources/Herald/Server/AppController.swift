@@ -88,7 +88,7 @@ final class AppController {
         confirmations.surface = banners
         parityService = ParityService(templates: templates, manifests: manifests, history: history, registry: registry,
                                       assets: AssetStore.shared, approvals: commandApprovals, host: AppParityHost(controller: self),
-                                      replies: replyQueue)
+                                      replies: replyQueue, actionRunner: actionRunner)
         // Every action a grid banner offers (button, action row, icon button, Rive click) runs through the
         // controller, which works out the origin itself and applies the permission each kind needs.
         banners.actionHandler = { [unowned self] app, id, action, _ in userPerformed(app: app, id: id, action: action) }
@@ -981,6 +981,8 @@ final class AppController {
         let key = BannerCenter.key(app, id)
         guard !followUps.isArmed(key), !followUps.hasFired(key), !followUps.isAttended(key),
               let item = history.item(app: app, id: id), item.dismissedAt == nil, item.snoozedUntil == nil,
+              // Once per notification, also across a relaunch (a restored banner whose follow-up already ran or failed).
+              item.followUp == nil || item.followUp?.outcome == .waitingForApproval,
               let f = ActionRunner.followUp(notification: item.notification, manifest: manifests.get(app: app),
                                             template: templates.template(for: item.notification)) else { return }
         followUps.start(key: key, after: f.after)

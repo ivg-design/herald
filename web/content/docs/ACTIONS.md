@@ -1,7 +1,7 @@
 # Two-way notifications
 
 A notification does not have to end at the banner. It can carry buttons that open a link, call your server back, take a
-typed answer or run a command on the Mac. This guide shows how to add each kind and what the user sees when they press
+typed answer or run a command, a script or a Shortcut on the Mac. This guide shows how to add each kind and what the user sees when they press
 it. When you finish you will have a banner with working buttons and a program that hears what the user chose. The full
 list of fields, kinds and rules is in the [actions reference](reference/actions.md).
 
@@ -231,13 +231,21 @@ from an app the user has trusted.
 
 4. Press **Run once**.
 
-   The command runs and the banner closes. **Always allow BidBot** turns on **Allow this app to run commands**
+   The command runs and the banner closes. **Always allow BidBot** turns on **Allow this app to run commands, scripts and Shortcuts**
    under **Settings > Apps**, so later presses run at once. Turn the switch off to ask again.
 
 If the app never registered with `allowCommands`, the press fails with **commands are not allowed for BidBot** and
 nothing runs. The command text is never edited. The notification's data arrives on standard input as JSON and in
 `HERALD_*` environment variables, so a sender's text can never become part of a command line. See
 [What a process receives](reference/actions.md#what-a-process-receives).
+
+A `script` button, which names a file in Herald's scripts folder, and a `shortcut` button, which names an installed
+Apple Shortcut, work the same way and ask under the same switch. Their question names the script with its SHA-256, or
+the Shortcut with its input text:
+
+```json
+{"label": "Forward", "shortcut": "Forward to phone", "input": "{title}"}
+```
 
 > [!WARNING]
 > A command runs with your user permissions. Allow commands only for apps you trust, and use a template script rather
@@ -264,6 +272,29 @@ for each.
 [Designing a banner](AUTHORING.md) walks through the Designer. The rules and fields are in
 [Action rules](reference/actions.md#action-rules).
 
+## Run an action when nobody answers
+
+A follow-up runs one action when a banner is left unattended: nobody dismisses it, presses a button, replies or opens
+it for the time you set. Use it to forward a missed banner with a Shortcut. You can send one with a notification:
+
+```sh
+curl -s -X POST "$HERALD/v1/notify" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{
+    "app": "example.bidbot",
+    "id": "bid-46",
+    "title": "Bid accepted",
+    "persistent": true,
+    "followUp": {"after": "10m", "action": {"id": "fwd", "label": "Forward", "kind": "shortcut",
+                                           "shortcut": "Forward to phone", "input": "{title}"}}
+  }'
+```
+
+The action asks for the same approval a button of that kind asks for. After it runs, the banner stays and shows
+**Follow-up ran: Forward**. The timer, the approval and the record are in
+[Follow-ups](reference/actions.md#follow-ups). The whole task, from the Shortcut to the Designer, is in
+[Forward a notification you missed](FORWARD-MISSED.md).
+
 ## Check that it works
 
 Send the link notification from the first section and press its button. If the page opens and the banner closes, the
@@ -278,7 +309,7 @@ Designer's preview, which shows every action the manifest declares.
 | The banner shows **Action failed** with `connection refused`. | Nothing listens at the callback address. | Start your server, or correct the address. |
 | The banner shows **Action failed** with `HTTP 500`. | Your server answered with an error. | Fix the server. Herald retried once already. |
 | The banner shows **commands are not allowed for BidBot**. | The app was not registered with `allowCommands`. | Register with `allowCommands: true`, then press the button again. |
-| `send_notification` refuses a command button. | The MCP tool blocks shell commands unless asked. | Pass `allowCommandButtons: true`, or send the button through the API. |
+| `send_notification` refuses a command, script or Shortcut button. | The MCP tool blocks code that runs on the Mac unless asked. | Pass `allowCommandButtons: true`, or send the button through the API. |
 | A link button shows `this link type is not allowed`. | The link uses a scheme other than `http`, `https` or `mailto`. | Use one of those schemes. |
 | The banner closes before the user can answer. | A timeout or the app's defaults closed it. | Send with `"persistent": true`. |
 
@@ -286,6 +317,7 @@ Designer's preview, which shows every action the manifest declares.
 
 - [Actions reference](reference/actions.md): every kind, field, rule, approval and failure.
 - [Manifests](reference/manifests.md): declare an app's buttons once and offer them by id.
+- [Forward a notification you missed](FORWARD-MISSED.md): a follow-up that forwards a banner to your phone.
 - [Notifications API](reference/api/notifications.md#button-object): the button object a notification sends.
 - [Replies API](reference/api/replies.md): read what the user typed, and the callback request.
 - [App settings API](reference/api/apps.md): registration and per-app approvals.
