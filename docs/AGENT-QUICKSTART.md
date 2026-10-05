@@ -36,7 +36,7 @@ Herald().notify(app="example.bidbot", title="Bid accepted", body="…", url="htt
 
 ## 4. Cloud agents (not on this Mac)
 
-An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at the relay's `/mcp` URL (`relay_status` > `mcpURL`) with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications (with presentation fields: `persistent`, `timeoutSeconds`, `sound`, `speak`, `presentation`, ... default: the banner stays until dismissed; `expectReply` only adds Reply and Record), read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected.
+An agent running in the cloud reaches the user's Mac through the relay (docs/CLOUD.md), never directly. Claude, Codex and any client that can send a header use a notify-only key (`Authorization: Bearer hrk_...`, Settings > Cloud > Agent keys). ChatGPT and other connectors that only support OAuth point at the relay's `/mcp` URL (`relay_status` > `mcpURL`) with authentication OAuth; the user approves once on the Mac (banner or the 6-digit code in Settings > Cloud > Connector approvals). Both can send text notifications (with presentation fields: `persistent`, `timeoutSeconds`, `sound`, `speak`, `presentation`, ... default: the banner stays until dismissed; `expectReply` only adds Reply and Record), read receipts and wait for replies, and nothing else. `list_connectors` shows who is connected. An approved connection is durable: it works until the user revokes it in Herald, its tokens never expire, and there is nothing to refresh. A client on protocol `2026-07-28` can also subscribe to the `notification.reply` event and be called when the user answers, instead of polling (see [CLOUD.md](CLOUD.md#being-told-about-a-reply-event-subscription)).
 
 ### Set up the cloud relay (scripted walkthrough)
 
@@ -64,6 +64,9 @@ create a token, and approve a connector on the Mac.
    `create_agent_key {name, client}` (the key is shown once; hand over the connector block). **No browser** in the agent (its consent page is
    blocked, `net::ERR_BLOCKED_BY_CLIENT`)? `relay_instructions {client: "device"}`: register, `POST /device_authorization`, tell the user the
    `user_code`, poll `POST /token`; the user presses Approve on the banner (the pending request and its code are in `list_connectors`).
+7b. An OpenAI dot (Dotcliffe) that must be woken by a reply, rather than poll, needs Herald registered with its host as an app behind an
+   installed plugin; a device-flow connection made from the dot's own code can never be woken. The one-time steps are in
+   [CLOUD.md](CLOUD.md#openai-dots-dotcliffe-as-a-subscriber). The user does them; they involve the user's ChatGPT account.
 8. Turn off with `relay_unpair` (revokes everything); remove with `relay_delete {confirm: true}` after asking the user.
 
 ## Conventions

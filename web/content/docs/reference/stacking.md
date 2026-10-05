@@ -1,7 +1,7 @@
 # Stacking
 
 When several notifications share a key, Herald folds them into **one stacked banner**: the newest notification
-on top, a count badge and the edges of the cards behind it. Clicking the badge opens the stack in place as a
+on top, a count badge and the edges of the cards behind it. Clicking the badge toggles the stack open or closed, like clicking the title; open, it is a
 scrollable list. It keeps a busy issuer (an inbox, a set of watched sites) from covering the screen.
 
 This page is the reference. The short version is in [../API.md](../API.md#stacking-12) and the design notes in
@@ -63,7 +63,7 @@ stacking fold them together ([manifests.md](manifests.md)).
 Clicking the count badge (or the card body when the template has no click URL) opens the stack in place: one panel
 that grows into a list of the group's banners, each drawn with its own template, newest first, **six rows
 before it scrolls** (the height is also bounded by the screen), with **Collapse** and **Dismiss all** at the
-bottom. Clicking a member's body opens its URL; its actions work individually. Expanding never activates Herald
+bottom. Clicking a member's body opens its URL (a member without one stays where it is); its actions work individually. Expanding never activates Herald
 or takes focus.
 
 ## Templates: the counter

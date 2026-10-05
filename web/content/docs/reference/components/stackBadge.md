@@ -30,7 +30,7 @@ alone kept alive, disappears; with `keep` it holds a blank pill-sized cell.
 
 ## Actions wiring
 
-On a stack's top card, clicking the pill expands the stack in place (a scrollable list, newest first, with
+On a stack's top card, clicking the pill toggles the stack: it expands in place when closed and collapses when open (a scrollable list, newest first, with
 Collapse and Dismiss all). It never activates Herald or takes focus from the app you are in. On a lone banner
 it does nothing.
 

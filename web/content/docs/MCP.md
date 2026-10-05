@@ -127,7 +127,7 @@ image, by path or base64) and `delete_asset`, `list_symbols` (SF Symbol names an
 `list_approvals` and `revoke_approval`, and `designer_snapshot` (the Designer drawn offscreen). Each is a thin wrapper
 over one HTTP route; arguments and routes are in [reference/mcp-tools.md](reference/mcp-tools.md#parity-tools).
 The whole cloud relay setup (Settings > Cloud > Enable relay) is reachable too: `relay_token_url`, `relay_set_cloudflare_token`, `relay_deploy`,
-`relay_events`, `relay_remove_event_subscription`, `relay_pair`, `relay_unpair`, `relay_settings`, `relay_zones`, `relay_delete`, `relay_instructions` (`chatgpt`, `claude`, `codex`, or `device` for an agent with no browser: the OAuth device flow) and `relay_test`, with `relay_status`, `list_connectors`,
+`relay_events` (the live reply subscriptions) and `relay_remove_event_subscription` (ends one; the connector stays approved), `relay_pair`, `relay_unpair`, `relay_settings`, `relay_zones`, `relay_delete`, `relay_instructions` (`chatgpt`, `claude`, `codex`, or `device` for an agent with no browser: the OAuth device flow) and `relay_test`, with `relay_status`, `list_connectors`,
 `create_agent_key` and `revoke_agent_key`; the scripted walkthrough is in [AGENT-QUICKSTART.md](AGENT-QUICKSTART.md#set-up-the-cloud-relay-scripted-walkthrough).
 **No browser? Use the device flow.** A cloud agent that cannot open the relay's consent page (its browser says `net::ERR_BLOCKED_BY_CLIENT`)
 signs in without one: `POST /register` (grant `urn:ietf:params:oauth:grant-type:device_code`), `POST /device_authorization`, **tell the user the

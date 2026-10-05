@@ -39,7 +39,7 @@ Templates live at `~/Library/Application Support/Herald/templates/<app>/<name>.j
 | `collapseEmpty` | Template default for empty components, rows and columns. Default `true`. |
 | `actionRules` | Rules over the issuer's actions, see [ACTIONS.md](ACTIONS.md). |
 | `extra` | Key/values you author. They are merged into the payload every action receives. |
-| `onClick` | What a click on the banner body does: `url` (default) opens the notification's link, `openApp` brings the issuing app to the front (see [ACTIONS.md](ACTIONS.md#open-app)). |
+| `onClick` | What a click on the banner body does: `url` (default) opens the notification's link, `openApp` brings the issuing app to the front (see [ACTIONS.md](ACTIONS.md#open-app)). Since 1.8 a click opens only a banner that carries a link; otherwise it expands cut-short text, and the close button dismisses. |
 | `title`, `body`, `url`, ... | v1 defaults still apply: the payload overrides them. |
 
 ## Grid

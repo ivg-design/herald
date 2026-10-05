@@ -222,7 +222,9 @@ revoke itself (`POST /revoke`, RFC 7009).
 
 - **Can**: send notifications (text and presentation fields), read receipts for what it sent, wait for your reply, ask whether the Mac is online. Exactly
   the four tools above, within the same limits as a static key (60 notifications per 10 minutes, 2,000 a day, 32 KB).
-- **Cannot**: run commands, scripts or Shortcuts, set callbacks, add buttons, show images or play audio, read your history, see other
+  A connector on a modern client can also [subscribe to reply events](#being-told-about-a-reply-event-subscription) (at most 5), which makes
+  your relay, not your Mac, call the address the agent names with ids only.
+- **Cannot**: run commands, scripts or Shortcuts, make Herald call back or run an action, add buttons, show images or play audio, read your history, see other
   keys' notifications, change settings or quiet hours, create or revoke keys, approve anything for itself. `/v1/device/*` answers an OAuth
   token with 403. Mute and quiet hours are still enforced on the Mac.
 - **Approval is yours, on the Mac**: a request cannot be approved from the web page alone. It needs the banner (or Settings) on the paired
@@ -233,8 +235,9 @@ revoke itself (`POST /revoke`, RFC 7009).
   it in Herald. Its tokens never expire and are never rotated. The token endpoint still accepts `grant_type=refresh_token`, for clients
   that refresh by habit: it returns a new access token and the same refresh token, earlier access tokens stay valid, and a refresh may
   be repeated safely (a lost response costs nothing). `expires_in` is reported as ten years for clients that require the field.
-  Authorization codes live 5 minutes after approval, work
-  once, and require PKCE (S256). A client that retries the exchange with the same code and verifier gets tokens again; a retry never undoes the approval. Tokens are bound to the `/mcp` resource (RFC 8707) and to
+  An authorization code must be exchanged within 5 minutes of approval and requires PKCE (S256). A client that retries the exchange with the same
+  code and verifier (or repeats a device-flow poll) gets tokens again; a retry never undoes the approval, and a wrong verifier is refused without
+  touching the connection. Tokens are bound to the `/mcp` resource (RFC 8707) and to
   their client. Re-authorizing the same connector replaces its earlier key.
 - Setting up your own relay changes nothing: the URLs above come from the host the connector was added with.
 
@@ -252,7 +255,7 @@ revoke itself (`POST /revoke`, RFC 7009).
 | `POST /device_authorization` | RFC 8628: `client_id`, optional `scope` (`notify`) and `device`. Returns `device_code`, `user_code` (`BDFG-HJKM`), `verification_uri` (`/activate`), `verification_uri_complete`, `expires_in: 600`, `interval: 5`, and which Mac gets the banner: `device_name`, `device_count`, `device_index`, `device_online`. See [No browser?](#no-browser-use-the-device-flow). |
 | `GET /activate`, `POST /activate`, `/activate/approve`, `/activate/deny` | The optional page for a person: user code, then the Mac's 6-digit approval code. |
 | `GET /` | A small plain page: what this is, links to the `.well-known` documents and `/activate`. (`/health` is the JSON check.) |
-| `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`), `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code` (+ `device_code`). Returns `access_token`, `refresh_token`, `expires_in: 3600`, `scope: notify`. |
+| `POST /token` | `authorization_code` (+ `code_verifier`, `redirect_uri`, `resource`), `refresh_token`, and `urn:ietf:params:oauth:grant-type:device_code` (+ `device_code`). Returns `access_token`, `refresh_token`, `expires_in: 315360000` (ten years, reported for clients that require the field; the tokens do not expire), `scope: notify`. A repeated exchange or device poll returns tokens again. |
 | `POST /revoke` | RFC 7009. |
 | `GET /v1/device/consents`, `POST /v1/device/consent` | Device token only: Herald lists pending requests and answers `{id, decision: "approve"\|"deny"}`. The stream also carries `consent` and `consent_resolved` messages. |
 
@@ -409,7 +412,7 @@ unsubscribes, when you end it in Settings > Cloud > **Reply subscriptions**, or 
 - **Subscribe**: `delivery` is `{mode: "webhook", url, secret}`. `url` is https on the default port, a public host, no credentials,
   at most 2048 characters. `secret` is `whsec_` + base64 of 24 to 64 bytes, made by the agent. The relay first POSTs a signed
   `{type: "verification", challenge}`; the callback must answer 2xx with the same `challenge`, otherwise `-32015` with
-  `data.reason` (`unreachable`, `bad_status`, `challenge_mismatch`). Subscribing again with the same URL keeps the id and does not
+  `data.reason` (`unreachable`, `bad_status`, `challenge_mismatch`). On a relay that restricts callback hosts, a host outside the list is refused with `host_not_allowed`. Subscribing again with the same URL keeps the id and does not
   verify again. At most 5 subscriptions per connector. `refreshBefore` is reported ten years ahead for clients that expect the field;
   `ttlMs` is accepted and ignored.
 - **Delivery**: queued in the same step as the reply, sent at once. Each POST carries `webhook-id` (stable across retries),
@@ -424,6 +427,38 @@ unsubscribes, when you end it in Settings > Cloud > **Reply subscriptions**, or 
   `relay_events` and `relay_remove_event_subscription` do the same over the local MCP (`GET /v1/relay/events`,
   `DELETE /v1/relay/events/subscriptions/{id}`). The path of the callback and its secret are never shown.
 
+### OpenAI dots (Dotcliffe) as a subscriber
+
+A dot in Dotcliffe can be woken by a reply instead of polling for it, but only through its host. The host issues the wake-up callback
+(the webhook address a subscription calls) only for an MCP server it knows as an **app behind an installed plugin**. A connection the
+dot makes from its own code, with a device-flow token, can send notifications and read receipts, but it can never be woken by a reply.
+So Herald has to be registered with the host as an app first. The folder `integrations/dotcliffe-plugin` in the Herald repository holds
+the plugin wrapper (`herald-connection`) and its README; nothing in it is a secret.
+
+You do these steps once, with your own ChatGPT account:
+
+1. **Register the app.** In ChatGPT, turn on developer mode and create a custom MCP app named `Herald Connection`. **MCP server URL**:
+   `https://<your-relay>/mcp` (Settings > Cloud shows it; `relay_status` returns it as `mcpURL`). **Authentication: OAuth**, with the client
+   id and client secret left empty. The relay supports discovery, dynamic client registration and PKCE.
+2. **Connect it.** Pressing Connect opens the relay's consent page. On the Mac a banner asks to approve the connector: press **Approve**.
+   If you missed the banner, the 6-digit code is in Settings > Cloud > Connector approvals.
+3. **Map the plugin to the app.** Registering the app gives it an id that looks like `asdk_app_...`. Put it into
+   `integrations/dotcliffe-plugin/herald-connection/.app.json` in place of the placeholder `REPLACE_WITH_REGISTERED_APP_ID`. If a package of the
+   plugin is already installed, raise the version in both `plugin.json` files. Then install the plugin in Dotcliffe and activate it.
+4. **Subscribe through the host.** Ask the dot to subscribe to `notification.reply` on the Herald Connection app, through the host's MCP
+   Events support. The host supplies the callback address and secret, and the relay checks the callback with a signed challenge as
+   described above. Nothing more is asked on the Mac.
+
+**What Herald shows afterwards.** Settings > Cloud > Connector approvals and Agent keys list a connector named after the name the host
+signs in with, for example `ChatGPT`. Settings > Cloud > Reply subscriptions lists a subscription from that connector to the host's
+callback host. The connection the dot made earlier from its own code is now redundant: revoke it in Settings > Cloud if you want to
+tidy up. The new connector is unaffected, because each approval is its own key.
+
+**A 2xx is receipt, not proof.** A successful answer from the callback means the host received the event. It does not prove the dot
+woke. To check the whole path, send a notification with `expectReply: true`, reply on the Mac, and confirm that Reply subscriptions
+shows nothing waiting and that a dot actually ran. If the host's subscribe call fails, the JSON-RPC error (`-32015` with `data.reason`)
+names the cause; the reasons are listed above.
+
 ## Security model
 
 - **Outbound only.** Herald opens the WebSocket; the Mac has no listener for the relay and the loopback API stays on 127.0.0.1.
@@ -433,7 +468,7 @@ unsubscribes, when you end it in Settings > Cloud > **Reply subscriptions**, or 
   (anything else is a 400); stored as SHA-256 hashes in the mailbox; compared in constant time; revocable instantly; a key routes to its own
   device only (the device id is inside the key, signed with a relay secret, and the mailbox re-checks the hash). A key sees only
   notifications sent with that key.
-- **OAuth connectors** (below) get the same notify-only access through short-lived tokens bound to their own `oauth` key; revoking the key
+- **OAuth connectors** (below) get the same notify-only access through tokens bound to their own `oauth` key. The tokens do not expire; revoking the key
   revokes them. A connector is approved on the Mac, never by the web page alone.
 - **No admin surface for agent keys.** `/v1/device/*` (keys, receipts, usage, unpair, the stream) rejects agent keys with 403 and the
   device token is rejected on agent endpoints. There is no endpoint to change permissions, settings, quiet hours or anything on the Mac.

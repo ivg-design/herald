@@ -67,7 +67,7 @@ Pictures are drawn as they are. Corner clipping uses the same radius in both app
 
 ## Actions wiring
 
-None. A click on the picture is a click on the banner (it opens the notification's `url`).
+None. A click on the picture is a click on the banner (it opens the notification's `url`, or expands cut-short text first).
 
 ## Examples
 

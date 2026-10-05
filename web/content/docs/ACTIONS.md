@@ -123,6 +123,28 @@ An action can carry an SF Symbol, drawn on its button (a `button`, the `actions`
 
 A rule can give a symbol to existing actions without touching the issuer: `{"match":"markRead","symbol":{"name":"checkmark.circle.fill","renderingMode":"palette","colors":["white","#34C759"]}}` (`match: "*"` for all). `add_action_rule` accepts `symbol` on the rule and on an added action; an unknown name is a warning and the button simply has no symbol.
 
+## The look of each button
+
+Every action has its own look: it shows its text, an icon with its text, or an icon only. In the Designer, open the Actions tab: each row,
+for the issuer's buttons (from the manifest) and for the ones you added, has **Shows** (Text, Icon and text, Icon only) and its own icon
+picker with the full symbol styling (weight, scale, mode, colours, effect). Buttons that share a cell no longer share one icon. The reset
+arrow on a row puts the action back as the issuer sent it, which also undoes an icon change. The form for adding or editing an action has
+the same **Shows** choice; an **Icon only** action needs no label, and a label you give it is used as the tooltip.
+
+In template JSON the look is the action's `symbol`. For an issuer's action it is a rule with `match` and `symbol`; for an action you
+added it is `symbol` on the action itself. `placement` is `leading` (the default), `trailing` or `only`, and `only` drops the label:
+
+```json
+{"actionRules":[
+  {"match":"markRead","symbol":{"name":"checkmark.circle","placement":"only"}},
+  {"add":{"id":"archive","label":"Archive","kind":"command","command":"/usr/local/bin/archive",
+          "symbol":{"name":"archivebox","placement":"only"}}}
+]}
+```
+
+Text only is an action with no `symbol`. The same fields are in [reference/symbols.md](reference/symbols.md) and
+[reference/actions.md](reference/actions.md#rules-actionrules).
+
 ## Augmenting the payload
 
 Every action receives the **merged payload**: the issuer's top-level fields, its `metadata`, and the

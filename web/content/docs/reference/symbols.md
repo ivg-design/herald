@@ -233,13 +233,14 @@ An icon-only close button:
 - `actions` row: each action's `symbol` (including one set by an `actionRules` rule), else the component's.
 - `iconButton`: its own `symbol` (the glyph) always.
 - A rule's `symbol` replaces the matched action's symbol; an empty name clears it.
+- Each action has its own symbol, so two buttons in one cell can show different icons. `placement: "only"` on an action's symbol makes that button icon only (**1.8**).
 
 ## In the Designer
 
 Selecting one of these components shows a **Symbol** panel in the inspector: a Name field with a symbol picker
 (a warning "Not an SF Symbol on this Mac: the default look is drawn" for an unknown name), Weight, Scale, Place
 (Before, After, Only: leading, trailing, only), Mode (monochrome, hierarchical, palette, multicolor), colours,
-variable value and effect. The live preview pane runs the effects; static previews (including MCP
+variable value and effect. On the Actions tab every action row has its own picker and a **Shows** choice (Text, Icon and text, Icon only), which writes the action's symbol and its `placement` (`only` for Icon only; no symbol for Text). The live preview pane runs the effects; static previews (including MCP
 `render_preview`) show everything except the motion. Control details beyond this are **TBD - verify** against the
 shipped 1.3 build.
 

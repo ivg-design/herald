@@ -12,7 +12,7 @@ One action as a capsule button.
 | `actionId` | string | none | Another spelling of `actionRef` (the id of the issuer action this button runs); it is read as `actionRef`. A button bound by id claims that action: no other cell draws it (see [actions.md](actions.md#one-action-one-cell)). |
 | `style` | string | the action's style, else `normal` | `normal`, `prominent`, `destructive`, `cancel` (the quiet grey); `default` is read as `normal`. Overrides the action's own style. See [Style](#style). The old `"destructive": true` is read as `"style": "destructive"`. |
 | `emptyBehavior` | string | template default | `collapse` or `keep`. |
-| `symbol` | name or object | none | **Available from 1.3.** A symbol drawn with the label; an action's own `symbol` wins. See [../symbols.md](../symbols.md). |
+| `symbol` | name or object | none | **Available from 1.3.** A symbol drawn with the label; an action's own `symbol` wins. With `placement: "only"` (**1.8**) the button is the icon alone. See [../symbols.md](../symbols.md). |
 
 A button needs an inline `action` or an `actionRef`; otherwise validation reports an error. An inline action
 needs `label` and `id` (the id defaults to a slug of the label) and a `kind`, which can be inferred from the

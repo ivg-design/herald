@@ -94,7 +94,7 @@ No auth. `{"ok":true,"version":"1.2.0","pid":123}`. Use it to detect that Herald
 | `app` | Required. Up to 128 bytes. |
 | `appName` | Display name. |
 | `icon` | A file path or `data:image/png;base64,...`, at most 256 KB. |
-| `bundleId` | Focused when a banner is clicked and the notification has no `url`. |
+| `bundleId` | The app's bundle identifier, used by `openApp` actions. A click on a banner without a `url` does nothing in 1.8.0, see [Clicking a banner](#clicking-a-banner). |
 | `callbackURL` | Where `callback` buttons POST ([actions.md](actions.md#callbacks)). Non-loopback hosts need the user's approval. |
 | `allowCommands` | A request only: the user must confirm it in Settings > Apps (or "Always allow") before `command` buttons run. |
 | `defaults` | `sound`, `persistent`, `timeout`, `corner` (`topRight`, `topLeft`, `bottomRight`, `bottomLeft`). |
@@ -146,7 +146,7 @@ unless `template` supplies one.
 | `subtitle` | string (1 KB) | |
 | `body` | string (16 KB) | `[text](url)` Markdown links work. |
 | `image` | string (256 KB) | File path, `data:` URI or https URL (downloaded once, cached). Validated by bytes: PNG, JPEG, GIF, WebP, HEIC/AVIF, TIFF, BMP, at most 10 MB; anything else is ignored. |
-| `url` | string | Opened when the banner is clicked. Only http, https, mailto are opened (also for button URLs). |
+| `url` | string | Opened when the banner is clicked, which also puts the banner away. Only http, https, mailto are opened (also for button URLs). |
 | `sound` | string | `default` (the app's), a system sound name (`Glass`), a file path, or `none`. |
 | `persistent`, `timeout` | bool, number | Stay until dismissed; `timeout` > 0 auto-dismisses after N seconds, hover pauses it. |
 | `priority` | string | `low`, `normal`, `high`, `urgent` (urgent breaks quiet hours only for apps that opted in). |
@@ -167,6 +167,15 @@ an `image` or `icon` over 256 KB, or any other single field over 2 KB gets `413`
 ## POST /v1/speak
 
 [voice.md](voice.md#post-v1speak). `{"app","text","voice?","speed?","lang?","id?"}` returns `{"ok":true,"id":"..."}`.
+
+## Clicking a banner
+
+A click on a banner body does not dismiss it. What it does depends on the banner:
+
+- Text that is cut short (by `maxLines` or `maxBodyLines`) expands to show all of it; a second click folds it back.
+- A banner that carries a `url` opens the link on click, after expanding first when its text was cut. Opening the link puts the banner away.
+- A closed stack opens in place.
+- A banner with nothing to open stays until its close button is pressed (or `timeout` ends it, or the API dismisses it).
 
 ## Dismiss
 
@@ -198,6 +207,7 @@ A dismissed banner stays in History.
 
 Removes the app for good: its record, **all** of its History, its templates, its manifest (and the Rive copies) and the icon files Herald
 made for it. `200 {"ok":true,"deleted":"<id>"}`; `404` for an unknown app; `409` for `herald`, Herald's own app. The id is percent-decoded.
+The Settings equivalent is Settings > Apps: the **Remove** button at the bottom of an app's page, or right-click the app in the list. Herald asks once. For a cloud connector that is still approved the question offers **Remove and Revoke**, which also revokes the connector so it does not return with its next notification; **Remove Only** leaves it approved.
 MCP: `delete_app`. Startup also removes History of apps that are not registered any more, and once the known test leftovers
 (`cloud.herald-test-*`, a bare `bidbot` without a manifest); the docs examples use `example.bidbot`, never registered by default.
 
@@ -439,6 +449,8 @@ Swift package `HeraldClient`; the CLI ([cli.md](cli.md)); the MCP server ([mcp-t
 | `POST /v1/relay/keys` | `{name, client?}` (`client`: `claude`, `codex`, `other`) mints a notify-only key. The reply has `key` (shown once), `mcpURL` and `connectorConfig`, the block to paste into the agent. 409 when the name is taken. |
 | `DELETE /v1/relay/keys/{id}` | Revokes the key at once. |
 | `GET /v1/relay/connectors` | Connectors that signed in with OAuth: `connectors` (the `oauth` keys: `id`, `name`, `displayName`, `kind`, `createdAt`, `lastUsedAt`) and `pending` (requests waiting for approval: `id`, `clientName`, `redirectHost`, `expiresAt`, and for the device flow the `userCode` the agent printed, like `BDFG-HJKM`). The 6-digit approval code is never returned; approving happens on the Mac. Revoke with `DELETE /v1/relay/keys/{id}`. |
+| `GET /v1/relay/events` | The live reply subscriptions (MCP Events): `restrictedTo` (host names when the relay limits callbacks, else empty) and `subscriptions` (`id`, `event`, `host`, `key` with `id`, `name` and `displayName`, `createdAt`, `pending` events waiting to be delivered). Never a callback path or secret. Needs a relay of 1.7.0 or later. |
+| `DELETE /v1/relay/events/subscriptions/{id}` | Ends one subscription. The connector stays approved and can subscribe again. |
 | `GET /v1/relay/usage` | Today's relay traffic against this device's caps: `requests`, `notifications`, `queued`, `storageBytes`, `requestsPercent`, `budgetExhausted`. |
 | `GET /v1/relay/setup` | The setup state machine: `state` (`token-needed`, `ready`, `deploying`, `connecting`, `online`, `offline`, `error`), `hasToken`, `paired`, `online`, `relayURL`, `mcpURL`, `workersDevURL`, `customURL`, `customDomainRecommended`, `bundledVersion`, `deployedVersion`, `updateAvailable`, `message`, `steps`, `usage`. Also returned as `setup` by `GET /v1/relay/status`. |
 | `GET /v1/relay/token-url` | The pre-filled Cloudflare token page `url`, the sign-up URL, the nine `permissions` (three for the deploy, six Zone ones for the custom domain) with the reason for each, and `steps` to tell the user. |

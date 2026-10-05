@@ -15,6 +15,18 @@ this Mac with it, and gives you the connector URL and ready-made instructions fo
 Claude Code / Codex (a key). No shared server, nothing listens on the Mac. See [docs/CLOUD.md](docs/CLOUD.md). An agent can do the whole setup
 through the local MCP tools ([docs/AGENT-QUICKSTART.md](docs/AGENT-QUICKSTART.md)).
 
+## What's new in 1.6 to 1.8
+
+- **Durable relay connections.** An approved cloud connector works until you revoke it in Settings > Cloud. Its tokens never expire and
+  are never rotated, and a retried sign-in or token request never undoes the approval.
+- **Reply subscriptions.** A cloud agent subscribes once to `notification.reply` (MCP Events) and your relay calls it the moment you
+  answer one of its notifications. Settings > Cloud > Reply subscriptions lists them, with End. An OpenAI dot (Dotcliffe) needs the
+  `integrations/dotcliffe-plugin` wrapper first; see [docs/CLOUD.md](docs/CLOUD.md#openai-dots-dotcliffe-as-a-subscriber).
+- **A look for every button.** In the Designer, each action row has Shows (Text, Icon and text, Icon only) and its own icon.
+- **Remove an app.** Settings > Apps > Remove deletes an app with its history, templates, manifest and icon.
+- **Clicking a banner no longer dismisses it.** Cut-short text expands; the close button dismisses.
+- **Stack badge.** Clicking the red count badge toggles the stack, like the title.
+
 ## What's new in 1.1
 
 - **Manifests.** An app declares the fields it can send (with samples), its actions and assets.
@@ -99,7 +111,9 @@ Errors: `401 {"error":"unauthorized"}`, `400 {"error":"..."}`, `404`, `405`.
 - `sound`: `default` (the app's default), a system sound name such as `Glass`, a file path, or `none`.
 - Banners stay until dismissed. `timeout` > 0 auto-dismisses after that many seconds (hover pauses it);
   `persistent: false` without a timeout uses 8 seconds.
-- Clicking the banner opens `url`, or else focuses the app with the registered `bundleId`.
+- Clicking the banner does not dismiss it. Text that is cut short (`maxBodyLines`) expands to show all of it, and a second click folds it
+  back. A banner that carries a `url` opens it on click (after expanding first when its text was cut); the open also puts the banner
+  away. A banner with nothing to open stays until its close button is pressed. A closed stack opens in place.
 - Button styles: `default`, `destructive`, `cancel`. A button has exactly one of `url`, `command`,
   `callback`. The "Add to Reminders" button appears when `reminder` is present; `snooze: true` adds the
   clock menu.

@@ -122,7 +122,7 @@ Applied in order to the resolved list.
 | `relabel` | New label for the matched actions. |
 | `style` | New style: `normal`, `prominent`, `destructive` (asks for confirmation before running), `cancel`; `default` means `normal`. An empty string clears it. |
 | `position` | Moves the matched actions to this 0-based index (clamped). |
-| `symbol` | **1.3.** Gives the matched actions an SF Symbol (a name or an object). |
+| `symbol` | **1.3.** Gives the matched actions an SF Symbol (a name or an object). With `"placement":"only"` (**1.8**) the button is the icon alone and the label is dropped. |
 | `add` | Appends a new template-owned action (at `position` when the rule has no `match`). An action with an existing id replaces that action (keeping its place unless `position` is given). |
 
 A rule needs a `match` or an `add`. `hide` makes the other change fields pointless (the validator warns). A
@@ -143,13 +143,30 @@ A rule needs a `match` or an `add`. `hide` makes the other change fields pointle
 An added action with the id of one of the issuer's own **replaces** that button; the confirmation prompt says
 so and that the issuer will not hear about the press.
 
+### The look of one action (1.8)
+
+Each action has its own look, so buttons that share a cell can have different icons. For an issuer's action, a rule sets it; for an action
+you added, `symbol` goes on the action. `placement: "only"` makes an icon-only button; the label stays the tooltip and what VoiceOver reads.
+
+```json
+{"actionRules":[
+  {"match":"markRead","symbol":{"name":"checkmark.circle","placement":"only"}},
+  {"add":{"id":"archive","label":"Archive","kind":"command","command":"/usr/local/bin/archive",
+          "symbol":{"name":"archivebox","placement":"only"}}}
+]}
+```
+
+In the Designer, every row of the Actions tab has **Shows** (Text, Icon and text, Icon only) and an icon picker with the full symbol styling.
+The reset arrow of a row also undoes an icon change. The form for adding an action has the same **Shows** choice, and an Icon only
+action needs no label. Text only is no `symbol`.
+
 ### Where actions appear
 
 - The `actions` component lists the resolved list from a `source` ([components/actions.md](components/actions.md)).
 - `button` and `iconButton` show one action by `actionRef`, or an inline action ([components/button.md](components/button.md)).
 - `rive` runs one on click ([components/rive.md](components/rive.md)).
-- The banner body, when clicked, opens the notification's `url` (http, https, mailto only), else focuses the
-  app by bundle id if one is registered.
+- The banner body, when clicked, opens the notification's `url` (http, https, mailto only). A click never dismisses a banner that has
+  no link: cut-short text expands instead, and the close button dismisses ([Clicking a banner](api.md#clicking-a-banner)).
 
 ## Confirmation gates
 

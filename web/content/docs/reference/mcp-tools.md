@@ -294,7 +294,7 @@ argument is a tool error before any request is made. Destructive tools carry `de
 | `get_settings` | none | `GET /v1/settings` | Values, `schema`, `options` (sounds, displays, voices, corners, levels). |
 | `set_settings` | `settings` (object) | `PUT /v1/settings` | Keys: `port`, `launchAtLogin`, `muteAllSounds`, `stacking`, `historyCapPerApp`, `tooltipLevel`, `voiceEngine`, `voiceDefault`, `voiceSpeed`, `voiceLang`, `voiceSystem`. All or nothing. |
 | `list_apps` | `app?` | `GET /v1/apps/settings` | Per-app settings, voice, approvals (read only) and the schema. |
-| `delete_app` | `app` | `DELETE /v1/apps/{id}` | Removes an app with ALL its History, templates, manifest and icon files (404 unknown, 409 for `herald`). For test and demo apps registered by mistake. |
+| `delete_app` | `app` | `DELETE /v1/apps/{id}` | Removes an app with ALL its History, templates, manifest and icon files, the same as Settings > Apps > Remove (404 unknown, 409 for `herald`). It does not revoke a cloud connector; use `revoke_agent_key` for that. For test and demo apps registered by mistake. |
 | `update_app_settings` | `app`, `settings` | `PUT /v1/apps/settings` | `sound`, `persistent`, `timeout`, `corner`, `display`, `muteBanners`, `stacking`, `opens`, `speak`, `voice`, `urgentBreaksQuiet`; `revokeCommands: true`, `revokeCallbackHost: true`. Granting an approval is refused (403). |
 | `register_app` | `app`, `appName?`, `icon?`, `bundleId?`, `callbackURL?`, `allowCommands?`, `defaults?` | `POST /v1/register` | `allowCommands` is only a request; the user confirms it in Settings. |
 | `voice_status` | none | `GET /v1/voice` | Engine, Kokoro installed or missing, progress, voices. |

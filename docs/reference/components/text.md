@@ -95,7 +95,8 @@ When `lines` is set, `binding` is ignored (the Designer writes a plain-text copy
   `"Project:\n{project}"` without `project` shows just `Project:`.
 - The component is empty when every line is. Blank lines at the top and bottom are trimmed; one in the middle is
   kept as spacing.
-- `maxLines` counts lines: lines beyond it are dropped, and a line that wraps may use what the others leave.
+- `maxLines` counts lines: lines beyond it are cut off, and a line that wraps may use what the others leave. Clicking a banner whose
+  text was cut shows all of it (the banner grows); a second click folds it back. See [Clicking a banner](../api.md#clicking-a-banner).
 - Each line wraps inside the column on its own. Height comes from the real layout of every line.
 
 ### In the Designer

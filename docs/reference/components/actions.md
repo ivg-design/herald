@@ -56,6 +56,8 @@ renders it through `/v1/preview` and reads the button frames back from the PNG.
 
 ## What the row contains
 
+Each button draws its own action's `symbol`; `placement: "only"` makes it an icon-only button ([actions.md](../actions.md#the-look-of-one-action-1-8)).
+
 1. The resolved actions of `source`, in order, as capsule buttons (24 pt high).
 2. A `snooze` action with no `snoozeMinutes` (what `"snooze": true` in a notification adds, or a rule's
    `{"add":{"kind":"snooze"}}`) is not a button: it is the clock menu, pinned to the trailing edge, with

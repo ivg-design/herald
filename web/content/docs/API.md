@@ -79,7 +79,7 @@ Response: `{"ok":true,"id":"bid-42"}`. Only `app` and `title` are required (a `t
 | `template` | Name of a template of this app. Resolved before anything else (see AUTHORING.md). |
 | `title`, `subtitle`, `body` | Text. `body` supports `[text](url)` Markdown links. |
 | `image` | File path, `data:` URI or https URL (downloaded once, cached under history/images). Must be a PNG, JPEG, GIF, WebP, HEIC/AVIF, TIFF or BMP by its bytes and at most 10 MB; anything else is ignored. The spec itself is at most 256 KB. |
-| `url` | Opened when the banner body is clicked; otherwise the app's `bundleId` is focused. Only `http`, `https` and `mailto` URLs are opened (this applies to button `url`s too). |
+| `url` | Opened when the banner body is clicked (a click does not dismiss a banner that has no `url`; see [Clicking a banner](reference/api.md#clicking-a-banner)). Only `http`, `https` and `mailto` URLs are opened (this applies to button `url`s too). |
 | `sound` | `default` (the app's default), a system sound name (`Glass`), a file path, or `none`. |
 | `persistent`, `timeout` | Banners stay until dismissed. `timeout` > 0 auto-dismisses after N seconds; hover pauses it. |
 | `priority` | `low`, `normal` or `high`. |
@@ -89,7 +89,7 @@ Response: `{"ok":true,"id":"bid-42"}`. Only `app` and `title` are required (a `t
 | `layout` | `imageLeft` (default), `imageRight`, `hero`, `compact`. |
 | `accentColor` | Hex colour, e.g. `#2E7D32`. |
 | `showSubtitle`, `showBody`, `showTimestamp` | Toggle parts of the banner. |
-| `maxBodyLines` | Body line limit. |
+| `maxBodyLines` | Body line limit. Text cut short by it expands when the banner is clicked. |
 | `metadata` | Arbitrary JSON, stored in history, and the source of template `{placeholders}`. |
 
 ### Limits
@@ -113,7 +113,7 @@ the first time a button is pressed, or the toggle in Settings > Apps). Redirects
 ### Stacking (1.2)
 
 Banners that share a key fold into one stacked banner: the newest notification on top, a count badge and the edges of the
-cards behind it. Clicking the badge opens the stack in place as a scrollable list (newest first, six rows before it scrolls)
+cards behind it. Clicking the badge toggles the stack open or closed, like clicking the title; open, it is a scrollable list (newest first, six rows before it scrolls)
 with Collapse and Dismiss all; a member dismissed from the list leaves the stack, the card's close button dismisses the
 group, and snoozing the card snoozes the group and brings it back as a stack. Nothing here takes focus from the app you are in.
 

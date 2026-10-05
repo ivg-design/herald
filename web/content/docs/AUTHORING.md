@@ -68,7 +68,8 @@ you want".
    empty field disappears and frees its space, or stays and keeps the banner shape. See
    [Collapse semantics](TEMPLATES.md#collapse-semantics).
 4. **Two-way actions.** Keep the issuer's buttons, hide or relabel them, and add your own: a shell command,
-   a script, an Apple Shortcut, a URL. Details in [ACTIONS.md](ACTIONS.md).
+   a script, an Apple Shortcut, a URL. Details in [ACTIONS.md](ACTIONS.md). Each action row on the Actions tab has **Shows** (Text, Icon
+   and text, Icon only) and its own icon ([the look of each button](ACTIONS.md#the-look-of-each-button)).
 
 ### Authoring with an agent (MCP)
 
