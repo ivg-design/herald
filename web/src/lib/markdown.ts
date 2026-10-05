@@ -14,6 +14,7 @@ export interface Heading {
   depth: number;
   text: string;
   id: string;
+  code?: boolean; // the heading is a single code span: an endpoint, a tool, a command
 }
 
 interface MdHeading {
@@ -114,7 +115,9 @@ function rehypeHeadings() {
     const heads: Heading[] = [];
     visit(tree, "element", (el: Element) => {
       if (/^h[2-3]$/.test(el.tagName) && el.properties?.id) {
-        heads.push({ depth: Number(el.tagName[1]), text: decodeEntities(toString(el).replace(/#$/, "").trim()), id: String(el.properties.id) });
+        const solid = el.children.filter((c) => !(c.type === "text" && !c.value.trim()));
+        const code = solid.length === 1 && solid[0].type === "element" && solid[0].tagName === "code";
+        heads.push({ depth: Number(el.tagName[1]), text: decodeEntities(toString(el).replace(/#$/, "").trim()), id: String(el.properties.id), ...(code ? { code: true } : {}) });
       }
     });
     file.data.headings = heads;

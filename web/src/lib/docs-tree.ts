@@ -114,6 +114,14 @@ export const DOC_TREE: DocGroup[] = [
     ],
   },
   {
+    id: "api",
+    title: "HTTP API",
+    items: [
+      { slug: "overview", title: "Overview", file: `${R}/api/README.md` },
+      { slug: "notifications", title: "Notifications", file: `${R}/api/notifications.md` },
+    ],
+  },
+  {
     id: "examples",
     title: "Examples",
     items: [

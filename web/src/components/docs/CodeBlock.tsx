@@ -7,9 +7,10 @@ interface Props {
   children?: ReactNode;
   "data-raw"?: string;
   "data-lang"?: string;
+  "data-title"?: string;
 }
 
-const LABELS: Record<string, string> = { sh: "shell", bash: "shell", shell: "shell", zsh: "shell", json: "JSON", js: "JavaScript", javascript: "JavaScript", ts: "TypeScript", swift: "Swift", python: "Python", py: "Python", http: "HTTP", yaml: "YAML", md: "Markdown" };
+const LABELS: Record<string, string> = { sh: "shell", bash: "shell", shell: "shell", zsh: "shell", json: "JSON", js: "JavaScript", javascript: "JavaScript", ts: "TypeScript", swift: "Swift", python: "Python", py: "Python", http: "HTTP", yaml: "YAML", md: "Markdown", toml: "TOML", text: "text", txt: "text", html: "HTML", css: "CSS", xml: "XML", ini: "INI", diff: "diff", lua: "Lua" };
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -32,7 +33,7 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export default function CodeBlock({ children, "data-raw": raw = "", "data-lang": lang }: Props) {
+export default function CodeBlock({ children, "data-raw": raw = "", "data-lang": lang, "data-title": title }: Props) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
@@ -47,8 +48,9 @@ export default function CodeBlock({ children, "data-raw": raw = "", "data-lang":
   }
 
   return (
-    <div className="code-block">
+    <div className="code-block" data-titled={title ? "" : undefined}>
       <div className="code-bar">
+        {title && <span className="code-title">{title}</span>}
         <span className="code-lang">{label}</span>
         <button type="button" className="code-copy" onClick={onCopy} data-state={state}>
           {state === "copied" ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}

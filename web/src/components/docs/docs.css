@@ -92,10 +92,17 @@ kbd {
 .docs-toc { position: sticky; top: calc(var(--docs-header) + 32px); max-height: calc(100dvh - var(--docs-header) - 64px); overflow-y: auto; }
 .docs-toc-title { margin: 0 0 12px; font-family: var(--font-mono); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: lowercase; color: var(--muted); }
 .docs-toc ul { list-style: none; margin: 0; padding: 0; }
-.docs-toc a { display: block; padding: 5px 0; font-size: 13.5px; line-height: 1.35; color: var(--muted); transition: color 140ms var(--ease-quart); }
+.docs-toc a { display: block; padding: 5px 0; font-size: 13.5px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; transition: color 140ms var(--ease-quart); }
 .docs-toc a:hover { color: var(--ink); }
 .docs-toc a[aria-current="location"] { color: var(--accent-text); }
-.docs-toc .is-sub a { padding-left: 14px; font-size: 13px; }
+.docs-toc li.has-subs > ul { margin: 0 0 4px; border-left: 1px solid var(--line); }
+.docs-toc .is-sub a { padding: 4px 0 4px 12px; margin-left: -1px; font-size: 12.5px; border-left: 1px solid transparent; }
+.docs-toc .is-sub a[aria-current="location"] { border-left-color: var(--accent-text); }
+.docs-toc li.has-subs:not([data-open]) > a::after { content: "+"; float: right; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.toc-code { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0; }
+.toc-method { display: inline-block; min-width: 3.4em; margin-right: 6px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.02em; color: var(--muted); }
+.toc-method[data-method="DELETE"] { color: var(--signal); }
+.toc-method[data-method="POST"], .toc-method[data-method="PUT"], .toc-method[data-method="PATCH"] { color: var(--bp); }
 
 /* ---------- Prose ---------- */
 .docs-prose { color: var(--ink); font-size: 16.5px; line-height: 1.7; overflow-wrap: break-word; }
@@ -104,9 +111,30 @@ kbd {
 .docs-article .docs-prose > p:first-child { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.55; color: var(--muted); }
 .docs-prose p { margin: 0 0 1em; }
 .docs-prose h2, .docs-prose h3 { position: relative; font-family: var(--font-display); font-weight: 750; font-variation-settings: "wdth" 116; color: var(--ink); line-height: 1.12; letter-spacing: -0.02em; scroll-margin-top: 88px; }
-.docs-prose h2 { font-size: clamp(23px, 2.3vw, 29px); margin: 2em 0 0.55em; }
+.docs-prose h2 { font-size: clamp(23px, 2.3vw, 29px); margin: 2.4em 0 0.6em; }
 .docs-prose h3 { font-size: clamp(19px, 1.8vw, 22px); margin: 1.7em 0 0.5em; }
 .docs-prose h4, .docs-prose h5, .docs-prose h6 { font-size: 15px; font-weight: 700; font-variation-settings: "wdth" 110; color: var(--ink); margin: 1.6em 0 0.4em; scroll-margin-top: 88px; }
+/* Reference headings: an endpoint is a method badge and a mono path over a rule; a tool or command name is mono. */
+.docs-prose :is(h2, h3, h4).ep, .docs-prose :is(h2, h3, h4).code-heading {
+  font-family: var(--font-mono); font-weight: 400; font-variation-settings: normal; letter-spacing: 0; line-height: 1.35;
+  font-size: clamp(16px, 1.5vw, 18.5px); overflow-wrap: anywhere;
+}
+.docs-prose :is(h3, h4).ep, .docs-prose h3.code-heading { margin-top: 2.6em; padding-top: 1.5em; border-top: 1px solid var(--line); }
+.docs-prose h2 + :is(h3, h4).ep, .docs-prose h2 + h3.code-heading, .docs-prose h2 + p + :is(h3, h4).ep { border-top: 0; padding-top: 0; margin-top: 1.4em; }
+.docs-prose .code-heading code { font-size: 1em; background: none; padding: 0; color: var(--ink); }
+.ep-method {
+  display: inline-block; vertical-align: 0.08em; margin-right: 10px; padding: 3px 8px 2px; border-radius: 4px;
+  font-family: var(--font-mono); font-size: 0.68em; line-height: 1.3; letter-spacing: 0.04em;
+  color: var(--blue-ink); background: var(--accent-soft); border: 1px solid transparent;
+}
+.ep-method[data-method="POST"] { color: #fff; background: var(--bp); }
+.ep-method[data-method="PUT"], .ep-method[data-method="PATCH"] { color: var(--bone); background: var(--ink-day); }
+.ep-method[data-method="DELETE"] { color: #fff; background: #c22f18; }
+.ep-path { color: var(--ink); }
+/* Part labels inside a reference block (Request, Errors, Notes ...): the Designer's mono voice. */
+.docs-prose p.docs-label { margin: 1.7em 0 0.5em; font-family: var(--font-mono); font-size: 12px; line-height: 1.4; letter-spacing: 0.02em; text-transform: lowercase; color: var(--muted); }
+.docs-prose p.docs-label + .docs-table, .docs-prose p.docs-label + ul, .docs-prose p.docs-label + ol, .docs-prose p.docs-label + p { margin-top: 0; }
+.docs-prose p.docs-label + .docs-table { border-top-color: var(--ink); }
 .docs-prose .anchor {
   margin-left: 10px; font-family: var(--font-sans); font-size: 0.6em; color: var(--muted); opacity: 0;
   transition: opacity 140ms var(--ease-quart), color 140ms var(--ease-quart);
@@ -121,9 +149,16 @@ kbd {
 .docs-prose li { margin: 0.35em 0; }
 .docs-prose li > :is(ul, ol) { margin: 0.35em 0 0; }
 .docs-prose hr { border: 0; border-top: 1px solid var(--line); margin: 2.2em 0; }
-.docs-prose blockquote { margin: 1.4em 0; padding: 14px 18px; background: transparent; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); }
-.docs-prose blockquote::before { content: "note"; display: block; margin-bottom: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.docs-prose blockquote { margin: 1.4em 0; padding: 2px 0 2px 18px; border-left: 2px solid var(--line); color: var(--muted); }
 .docs-prose blockquote > :last-child { margin-bottom: 0; }
+/* Callouts (GitHub alert syntax): a mono label in the margin of a ruled box; the rule carries the kind. */
+.callout { margin: 1.5em 0; padding: 14px 18px 14px 16px; background: var(--surface); border-left: 3px solid var(--accent-text); border-radius: 0 6px 6px 0; font-size: 15.5px; line-height: 1.6; }
+.callout-label { margin: 0 0 4px !important; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.4; letter-spacing: 0.02em; text-transform: lowercase; color: var(--accent-text); }
+.callout-body > :last-child { margin-bottom: 0; }
+.callout[data-kind="tip"] { border-left-color: var(--bp); }
+.callout[data-kind="tip"] .callout-label { color: var(--bp); }
+.callout[data-kind="warning"] { border-left-color: var(--signal); background: color-mix(in srgb, var(--signal) 7%, var(--bg)); }
+.callout[data-kind="warning"] .callout-label { color: #b02a15; }
 .docs-prose img { display: block; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); margin: 1.4em 0; }
 .docs-img-alt { color: var(--muted); font-style: italic; }
 .docs-prose :not(pre) > code {
@@ -142,6 +177,19 @@ kbd {
 .docs-table :not(pre) > code.tok { white-space: nowrap; overflow-wrap: normal; }
 .docs-table :not(pre) > code.tok-long { white-space: normal; overflow-wrap: anywhere; }
 .docs-table td:first-child { min-width: 10ch; }
+.docs-table thead th { font-family: var(--font-mono); font-size: 11.5px; font-weight: 400; letter-spacing: 0.02em; text-transform: lowercase; color: var(--muted); padding-block: 9px; }
+.docs-table td { padding-block: 12px; }
+.docs-table td.cell-type { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.docs-table td.cell-type code { font-size: 1em; background: none; padding: 0; color: inherit; }
+.docs-table td.cell-req { white-space: nowrap; }
+.docs-table .req, .docs-table .opt { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em; }
+.docs-table .req { color: #b02a15; }
+.docs-table .req::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: 0.08em; }
+.docs-table .opt { color: var(--muted); }
+/* Parameter, field and key tables: the name is the entry, set in mono like a definition term. */
+.docs-table table[data-kind] td:first-child > code:first-child { background: none; padding: 0; font-size: 13px; font-weight: 500; color: var(--ink); }
+.docs-table table[data-kind="errors"] td:first-child > code:first-child { color: #b02a15; }
+
 /* Restacked: each row is a block, each cell a labelled line. Phones for 3+ columns or long cells; up to 1100px for 5+ columns. */
 @media (max-width: 640px) {
   .docs-table table[data-stack], .docs-table table[data-stack] tbody { display: block; }
@@ -165,6 +213,14 @@ kbd {
 /* Code blocks */
 .code-block { margin: 1.4em 0; background: var(--night); color: var(--bone); border: 1px solid var(--night-hair); border-radius: 8px; overflow: hidden; }
 .code-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 0 6px 0 16px; border-bottom: 1px solid var(--night-hair); }
+.code-title { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.02em; text-transform: lowercase; color: var(--bone); }
+.code-title + .code-lang { margin-left: 12px; }
+.code-title + .code-lang::before { content: "/ "; opacity: 0.6; }
+.example-pair { margin: 1.4em 0; }
+.example-pair > .code-block { margin: 0; }
+.example-pair > .code-block + .code-block { margin-top: 0; border-top: 0; border-radius: 0 0 8px 8px; }
+.example-pair > .code-block:first-child:not(:last-child) { border-radius: 8px 8px 0 0; }
+.example-pair > .code-block + .code-block .code-title { color: #8fc4f5; }
 .code-lang { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0; text-transform: lowercase; color: #9aa8c4; }
 .code-copy {
   display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; margin-left: auto;
@@ -194,6 +250,30 @@ kbd {
 .hljs-deletion { color: #f08a7a; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* Figures: a real capture in a hairline frame on the cell ground; the caption is part of the figure. */
+.docs-figure { margin: 1.8em 0; max-width: 100%; }
+/* Captures arrive already framed (gradient ground, shadow): no second frame here, only a small radius. */
+.docs-figure-frame { border-radius: 8px; overflow: hidden; }
+.docs-figure-open { position: relative; display: block; width: 100%; margin: 0; padding: 0; border: 0; background: none; cursor: zoom-in; line-height: 0; }
+.docs-prose .docs-figure img { display: block; max-width: 100%; width: auto; height: auto; margin: 0 auto; border: 0; border-radius: 8px; }
+.docs-figure-zoom { position: absolute; right: 6px; bottom: 6px; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; background: var(--night); color: var(--bone); opacity: 0; transition: opacity 140ms var(--ease-quart); }
+.docs-figure-open:hover .docs-figure-zoom, .docs-figure-open:focus-visible .docs-figure-zoom { opacity: 1; }
+.docs-figure-spot { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--bp); color: #fff; font-family: var(--font-mono); font-size: 12px; line-height: 1; box-shadow: 0 0 0 2px #fff; }
+.docs-figure figcaption { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--muted); }
+.docs-figure-modes { flex: none; display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.docs-figure-modes button { min-height: 28px; padding: 0 10px; border: 0; background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 11.5px; cursor: pointer; }
+.docs-figure-modes button[aria-pressed="true"] { background: var(--ink-day); color: var(--bone); }
+.docs-prose ol.figure-legend { margin-top: -0.6em; font-size: 15px; }
+.docs-prose ol.figure-legend > li::marker { font-family: var(--font-mono); font-size: 12px; color: var(--bp); }
+dialog.docs-lightbox { padding: 0; border: 0; background: transparent; max-width: none; max-height: none; width: 100vw; height: 100dvh; overflow: auto; }
+dialog.docs-lightbox:not([open]) { display: none; }
+dialog.docs-lightbox::backdrop { background: rgb(11 21 48 / 0.82); }
+.docs-lightbox-in { position: relative; width: fit-content; max-width: min(1600px, calc(100vw - 32px)); margin: 5vh auto; padding: 12px; background: var(--bg); border-radius: 10px; }
+.docs-lightbox-in img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
+.docs-lightbox-in p { margin: 10px 44px 0 4px; font-size: 14px; color: var(--muted); }
+.docs-lightbox-close { position: absolute; top: -14px; right: -14px; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 50%; background: var(--bg); color: var(--ink); cursor: pointer; }
+@media (max-width: 640px) { .docs-lightbox-close { top: 6px; right: 6px; } .docs-figure figcaption { flex-direction: column; gap: 8px; } }
 
 /* Footer of an article */
 .docs-edit { margin: 56px 0 0; font-size: 14px; }
@@ -278,3 +358,23 @@ dialog.docs-search::backdrop { background: rgb(11 21 48 / 0.5); }
 }
 
 /* ---------- Changelog chrome ---------- */
+
+/* Reference tables keep the same columns from one block to the next (name / in / type / required / description). */
+@media (min-width: 641px) {
+  .docs-table table[data-kind="params"]:not([data-stack="wide"]), .docs-table table[data-kind="keys"] { table-layout: fixed; }
+  .docs-table table[data-kind="params"][data-cols="3"] th:nth-child(1), .docs-table table[data-kind="keys"][data-cols="3"] th:nth-child(1) { width: 26%; }
+  .docs-table table[data-kind="params"][data-cols="3"] th:nth-child(2), .docs-table table[data-kind="keys"][data-cols="3"] th:nth-child(2) { width: 18%; }
+  .docs-table table[data-kind="params"][data-cols="4"] th:nth-child(1), .docs-table table[data-kind="keys"][data-cols="4"] th:nth-child(1) { width: 24%; }
+  .docs-table table[data-kind="params"][data-cols="4"] th:nth-child(2), .docs-table table[data-kind="keys"][data-cols="4"] th:nth-child(2) { width: 16%; }
+  .docs-table table[data-kind="params"][data-cols="4"] th:nth-child(3), .docs-table table[data-kind="keys"][data-cols="4"] th:nth-child(3) { width: 15%; }
+  .docs-table table[data-kind="errors"] { table-layout: fixed; }
+  .docs-table table[data-kind="errors"] th:nth-child(1) { width: 14%; }
+  .docs-table table[data-kind] td.cell-type code.tok { white-space: normal; overflow-wrap: anywhere; }
+}
+@media (min-width: 1101px) {
+  .docs-table table[data-kind="params"][data-stack="wide"] { table-layout: fixed; }
+  .docs-table table[data-kind="params"][data-cols="5"] th:nth-child(1) { width: 21%; }
+  .docs-table table[data-kind="params"][data-cols="5"] th:nth-child(2) { width: 9%; }
+  .docs-table table[data-kind="params"][data-cols="5"] th:nth-child(3) { width: 14%; }
+  .docs-table table[data-kind="params"][data-cols="5"] th:nth-child(4) { width: 13%; }
+}
