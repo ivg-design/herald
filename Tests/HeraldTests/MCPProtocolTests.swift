@@ -722,7 +722,8 @@ final class MCPProtocolTests: XCTestCase {
         XCTAssertTrue(isError(again))
         let builtin = try await call("delete_template", .object(["app": .string("webwatcher.email"), "name": .string("builtin.hero")]))
         XCTAssertTrue(isError(builtin))
-        XCTAssertEqual(fake.calls("DELETE", "/v1/templates").count, 2, "the built-in was refused locally")
+        XCTAssertTrue((try? text(builtin))?.contains("built-in") == true, "a name that is no stored template is reported as the built-in layout")
+        XCTAssertEqual(fake.calls("DELETE", "/v1/templates").count, 3, "a stored template with a reserved name must stay deletable, so the app is asked")
     }
 
     // MARK: put_manifest

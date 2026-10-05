@@ -582,15 +582,13 @@ public final class ActionRunner: Sendable {
         }
     }
 
-    /// A script is named relative to the scripts folder. An absolute path, `~`, or a `..` component would
-    /// reach outside it and is refused. (A symlink the user put inside the folder is theirs to follow.)
+    /// A script is a plain file name in the scripts folder (`HeraldScriptName.isPlain`, the rule template validation
+    /// uses too): no path separator, no `..`, no absolute path or `~`. (A symlink the user put inside the folder is
+    /// theirs to follow.)
     func resolveScript(_ name: String?) -> Result<URL, ActionError> {
         let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !n.isEmpty else { return .failure(ActionError("no script name")) }
-        let parts = n.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
-        guard !n.hasPrefix("/"), !n.hasPrefix("~"), !parts.contains(".."),
-              !n.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
-        else { return .failure(ActionError("script must be a file inside the scripts folder")) }
+        guard HeraldScriptName.isPlain(n) else { return .failure(ActionError("script must be a file inside the scripts folder")) }
         let url = scriptsDirectory.appendingPathComponent(n)
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else {
@@ -610,11 +608,11 @@ public final class ActionRunner: Sendable {
         public var runnable: Bool { isExecutable || interpreter != nil }
     }
 
-    /// The files in the scripts folder (hidden files skipped), sorted, at most `limit`.
+    /// The files directly in the scripts folder (hidden files skipped; sub-folders are not scripts), sorted, at most `limit`.
     public func listScripts(limit: Int = 200) -> [ScriptEntry] {
         let fm = FileManager.default
         guard let e = fm.enumerator(at: scriptsDirectory, includingPropertiesForKeys: [.isRegularFileKey],
-                                    options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+                                    options: [.skipsHiddenFiles, .skipsPackageDescendants, .skipsSubdirectoryDescendants]) else { return [] }
         let base = scriptsDirectory.standardizedFileURL.path + "/"
         var out: [ScriptEntry] = []
         for case let url as URL in e {

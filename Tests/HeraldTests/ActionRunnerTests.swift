@@ -287,7 +287,8 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertEqual(py?.0, scripts.appendingPathComponent("tool.py").path, "an executable file is run directly")
         XCTAssertEqual(py?.1, [])
         XCTAssertEqual(run("old.scpt")?.0, "/usr/bin/osascript", "compiled AppleScript always goes through osascript")
-        XCTAssertEqual(run("sub/deep.bash")?.0, "/bin/bash")
+        XCTAssertNotNil(failure(plan(HeraldAction(id: "s", label: "S", kind: .script, script: "sub/deep.bash"))),
+                        "a script is a plain file name: no sub-folders")
         XCTAssertTrue(failure(plan(HeraldAction(id: "s", label: "S", kind: .script, script: "plain.txt")))?.contains("not executable") == true)
     }
 
@@ -301,7 +302,7 @@ final class ActionRunnerTests: XCTestCase {
 
     func testScriptNamesCannotEscapeTheFolder() {
         write("ok.sh")
-        for name in ["../x.sh", "sub/../../x.sh", "/bin/ls", "~/x.sh", "a\nb.sh", "", "  "] {
+        for name in ["../x.sh", "sub/../../x.sh", "/bin/ls", "~/x.sh", "a\nb.sh", "", "  ", "..", ".", "sub/ok.sh", "a\\b.sh", "ok.sh/..", "%2e%2e/x.sh"] {
             XCTAssertNotNil(failure(plan(HeraldAction(id: "s", label: "S", kind: .script, script: name))), name)
         }
         XCTAssertEqual(failure(plan(HeraldAction(id: "s", label: "S", kind: .script, script: "missing.sh"))), "script not found: missing.sh")
@@ -310,12 +311,29 @@ final class ActionRunnerTests: XCTestCase {
         XCTAssertEqual(failure(plan(HeraldAction(id: "s", label: "S", kind: .script))), "no script name")
     }
 
+    func testValidationAndResolutionAgreeOnScriptNames() {
+        for name in ["ok.sh", "a b.py", "file..sh", ".hidden.sh"] {
+            XCTAssertTrue(HeraldScriptName.isPlain(name), name)
+        }
+        for name in ["", " ", ".", "..", "../x", "a/b", "/abs", "~/x", "a\\b", "a\0b", "x\ny"] {
+            XCTAssertFalse(HeraldScriptName.isPlain(name), name)
+            var rule = HeraldActionRule(); rule.add = HeraldAction(id: "s", label: "S", kind: .script, script: name)
+            var t = HeraldTemplate.blank(name: "n", app: "a")
+            t.actionRules = [rule]
+            if !name.trimmingCharacters(in: .whitespaces).isEmpty {
+                XCTAssertTrue(t.validate().contains { $0.isError && $0.path.contains("script") }, "validate accepted \(name.debugDescription)")
+            }
+        }
+        write("ok.sh")
+        XCTAssertNotNil(spec(plan(HeraldAction(id: "s", label: "S", kind: .script, script: "ok.sh"))))
+    }
+
     func testListScripts() {
         write("b.sh"); write("a.py", mode: 0o755); write("c.txt"); write("sub/d.sh"); write(".hidden.sh")
         let list = runner().listScripts()
-        XCTAssertEqual(list.map(\.name), ["a.py", "b.sh", "c.txt", "sub/d.sh"])
-        XCTAssertEqual(list.map(\.isExecutable), [true, false, false, false])
-        XCTAssertEqual(list.map(\.runnable), [true, true, false, true])
+        XCTAssertEqual(list.map(\.name), ["a.py", "b.sh", "c.txt"], "sub-folders are not scripts")
+        XCTAssertEqual(list.map(\.isExecutable), [true, false, false])
+        XCTAssertEqual(list.map(\.runnable), [true, true, false])
     }
 
     // MARK: Shortcut

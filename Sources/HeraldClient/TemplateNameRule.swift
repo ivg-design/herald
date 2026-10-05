@@ -32,3 +32,16 @@ public enum HeraldTemplateName {
         return out
     }
 }
+
+/// The one rule for the name of a script action: a plain file name in Application Support/Herald/scripts. Template
+/// validation and the action runner both ask it, so a name that validates always resolves the same way.
+public enum HeraldScriptName {
+    /// True for a file name with no path separator, no `.`/`..`, no leading `~` and no control characters.
+    public static func isPlain(_ raw: String) -> Bool {
+        let n = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, n != ".", n != "..", !n.hasPrefix("~"),
+              !n.contains("/"), !n.contains("\\"), !n.contains("\0"),
+              !n.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return false }
+        return true
+    }
+}

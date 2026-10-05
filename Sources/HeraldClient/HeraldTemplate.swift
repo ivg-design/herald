@@ -655,7 +655,7 @@ public extension HeraldTemplate {
             if blank(a.command) { err("\(p).command", "a command action needs a command") }
         case .script:
             if blank(a.script) { err("\(p).script", "a script action needs the name of a file in Herald's scripts folder") }
-            else if let s = a.script, s.contains("/") || s.contains("..") {
+            else if let s = a.script, !HeraldScriptName.isPlain(s) {
                 err("\(p).script", "script must be a plain file name in Herald's scripts folder, not a path")
             }
         case .shortcut:
