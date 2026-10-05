@@ -3,7 +3,11 @@ import AppKit
 
 struct SettingsView: View {
     let controller: AppController
-    @State private var tab = 0
+    @State private var tab: Int
+    init(controller: AppController, initialTab: Int = 0) {
+        self.controller = controller
+        _tab = State(initialValue: initialTab)
+    }
     var body: some View {
         TabView(selection: $tab) {
             GeneralSettingsView(controller: controller).tabItem { Label("General", systemImage: "gearshape") }.tag(0)
@@ -83,6 +87,14 @@ struct AppsSettingsView: View {
     private var records: [AppRecord] { _ = ticker.tick; return controller.registry.all() }
 
     var body: some View {
+        content
+        #if DEBUG
+        // Documentation screenshots: select an app without a click (Debug/ScreenshotMode.swift).
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.appsSelect"))) { n in selection = n.object as? String }
+        #endif
+    }
+
+    private var content: some View {
         HStack(spacing: 0) {
             List(records, id: \.registration.app, selection: $selection) { r in
                 HStack {

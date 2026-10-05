@@ -11,7 +11,11 @@ enum HeraldMain {
         ScreenshotMode.prepare()
         #endif
         MainActor.assumeIsolated {
+            #if DEBUG
+            let app: NSApplication = ScreenshotMode.isActive ? ShotApplication.shared : NSApplication.shared
+            #else
             let app = NSApplication.shared
+            #endif
             app.delegate = delegate
             app.run()
         }
@@ -45,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.start()
         askLaunchAtLoginIfNeeded()
         #if DEBUG
+        ScreenshotMode.statusMenu = menu
+        ScreenshotMode.statusItem = statusItem
         ScreenshotMode.start(controller: controller)
         #endif
     }

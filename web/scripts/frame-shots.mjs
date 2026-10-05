@@ -2,9 +2,14 @@
 // soft drop shadow and a consistent margin. Writes <name>@2x.png and <name>.png (1x) into public/shots.
 //
 //   node scripts/frame-shots.mjs <rawDir> [--out public/shots] [--margin 40]
+//   node scripts/frame-shots.mjs <rawDir> --docs --out public/shots/docs
+//
+// --docs frames the documentation set made by `scripts/docs-screenshots.sh` (raw captures plus the shots-meta.json the capture mode
+// writes): every shot is composited with a margin of about 6.5 % of its width per side (more for small banners), written as
+// <name>@2x.png and <name>.png (1x), and manifest.json (an array) is written next to them.
 //
 // Gradients are parameterised per shot in GRADIENTS (angle in degrees, CSS-style: 135 = top-left to bottom-right).
-import { readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import { readdirSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import sharp from "sharp";
 
@@ -24,6 +29,25 @@ const PRESET = {
   "settings-quiet-hours": "sunset", "settings-voice": "ember",
 };
 const DEFAULT_PRESET = "sunset";
+// --docs: gradient per shot (varied, harmonious: cool for the designer, warm for settings, and so on); "-dark" shots get the same
+// preset darkened so a pair reads as one set.
+const DOCS_PRESET = (name) => {
+  const n = name.replace(/-dark$/, "");
+  if (n === "designer-overview") return "ocean";
+  if (n.startsWith("designer-inspector")) return "lagoon";
+  if (["designer-palette", "designer-live-preview", "designer-grid-editing"].includes(n)) return "forest";
+  if (n.startsWith("designer-action")) return "berry";
+  if (n.startsWith("designer-")) return "ocean";
+  if (n.startsWith("settings-cloud")) return "berry";
+  if (n === "settings-apps" || n === "settings-actions") return "forest";
+  if (n.startsWith("settings-")) return "sunset";
+  if (n.startsWith("history")) return "ember";
+  if (n === "menu") return "lagoon";
+  if (n.startsWith("banner-stack")) return "ocean";
+  if (n.startsWith("banner-")) return ["sunset", "ocean", "berry", "lagoon", "ember", "forest"][[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % 6];
+  return DEFAULT_PRESET;
+};
+const darken = (g) => ({ ...g, stops: g.stops.map((c) => "#" + [1, 3, 5].map((i) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.42).toString(16).padStart(2, "0")).join("")) });
 
 const args = process.argv.slice(2);
 const flag = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
@@ -50,7 +74,7 @@ async function shadowOf(win, blur, opacity) {
 }
 
 /** Frame `win` (PNG buffer, 2x) on a canvas. If `canvas` is given the window is scaled to fit inside it instead of sizing the canvas to the window. */
-export async function frame(win, preset, canvas) {
+export async function frame(win, preset, canvas, margin = MARGIN, gradient) {
   let { width: ww, height: wh } = await sharp(win).metadata();
   let W, H;
   if (canvas) {
@@ -58,12 +82,12 @@ export async function frame(win, preset, canvas) {
     const scale = Math.min((W * 0.8) / ww, (H * canvas.fill) / wh);
     ww = Math.round(ww * scale); wh = Math.round(wh * scale);
     win = await sharp(win).resize(ww, wh, { kernel: "lanczos3" }).png().toBuffer();
-  } else { W = ww + MARGIN * 2; H = wh + MARGIN * 2; }
+  } else { W = ww + margin * 2; H = wh + margin * 2; }
   const left = Math.round((W - ww) / 2), top = Math.round((H - wh) / 2);
-  const pad = 80;
+  const pad = Math.min(80, margin - 4);
   const sh1 = await shadowOf(await sharp(win).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer(), 28, 0.38);
   const sh2 = await shadowOf(await sharp(win).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer(), 6, 0.3);
-  return sharp(gradientSvg(W, H, GRADIENTS[preset] ?? GRADIENTS[DEFAULT_PRESET]))
+  return sharp(gradientSvg(W, H, gradient ?? GRADIENTS[preset] ?? GRADIENTS[DEFAULT_PRESET]))
     .composite([
       { input: sh1, left: left - pad, top: top - pad + 22 },
       { input: sh2, left: left - pad, top: top - pad + 6 },
@@ -72,6 +96,34 @@ export async function frame(win, preset, canvas) {
     .png();
 }
 
+
+const DOCS = args.includes("--docs");
+if (DOCS) {
+  const meta = JSON.parse(readFileSync(join(rawDir, "shots-meta.json"), "utf8"));
+  const order = { designer: 0, settings: 1, history: 2, menu: 3, banners: 4 };
+  meta.sort((a, b) => (order[a.section] - order[b.section]) || a.name.localeCompare(b.name));
+  const out = [];
+  for (const m of meta) {
+    const rawFile = join(rawDir, `${m.name}.png`);
+    if (!existsSync(rawFile)) continue;
+    const { width: rw } = await sharp(rawFile).metadata();
+    const small = m.section === "banners" || m.section === "menu";
+    const margin = Math.max(small ? 80 : 56, Math.round(rw * (small ? 0.11 : 0.065)));
+    const preset = DOCS_PRESET(m.name);
+    const g = m.name.endsWith("-dark") ? darken(GRADIENTS[preset]) : GRADIENTS[preset];
+    const buf = await (await frame(rawFile, preset, undefined, margin, g)).toBuffer();
+    const { width, height } = await sharp(buf).metadata();
+    mkdirSync(outDir, { recursive: true });
+    await sharp(buf).png({ compressionLevel: 9 }).toFile(join(outDir, `${m.name}@2x.png`));
+    const w1 = Math.round(width / 2), h1 = Math.round(height / 2);
+    await sharp(buf).resize(w1, h1, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toFile(join(outDir, `${m.name}.png`));
+    console.log(`${m.name}: ${w1}x${h1} (@2x ${width}x${height})`);
+    out.push({ file: `${m.name}.png`, file2x: `${m.name}@2x.png`, framed: true, width: w1, height: h1, width2x: width, height2x: height,
+               appearance: m.appearance, title: m.title, shows: m.shows, section: m.section });
+  }
+  writeFileSync(join(outDir, "manifest.json"), JSON.stringify(out, null, 2) + "\n");
+  process.exit(0);
+}
 
 const manifest = {};
 const save = async (img, name, { max = 0, dir = outDir } = {}) => {

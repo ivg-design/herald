@@ -53,7 +53,11 @@ enum SymbolBrowserPanel {
             p.hidesOnDeactivate = true
             p.worksWhenModal = false
             p.minSize = NSSize(width: 760, height: 460)
+            #if DEBUG
+            if !ScreenshotMode.isActive { p.setFrameAutosaveName("HeraldSymbolBrowser") }
+            #else
             p.setFrameAutosaveName("HeraldSymbolBrowser")
+            #endif
             panel = p
         }
         let hosting = NSHostingView(rootView: AnyView(content()))
@@ -61,7 +65,13 @@ enum SymbolBrowserPanel {
         p.contentView = hosting
         if p.parent !== parent {
             p.parent?.removeChildWindow(p)
-            if !p.setFrameUsingName("HeraldSymbolBrowser") {
+            #if DEBUG
+            let restored = ScreenshotMode.isActive ? false : p.setFrameUsingName("HeraldSymbolBrowser")
+            if ScreenshotMode.isActive { p.hidesOnDeactivate = false }
+            #else
+            let restored = p.setFrameUsingName("HeraldSymbolBrowser")
+            #endif
+            if !restored {
                 p.setContentSize(NSSize(width: 900, height: 600))
                 var f = p.frame
                 f.origin = NSPoint(x: parent.frame.maxX - f.width - 24, y: parent.frame.maxY - f.height - 60)
@@ -69,6 +79,9 @@ enum SymbolBrowserPanel {
             }
             parent.addChildWindow(p, ordered: .above)
         }
+        #if DEBUG
+        if ScreenshotMode.isActive { ScreenshotMode.present(p); return }
+        #endif
         p.orderFront(nil)
     }
 

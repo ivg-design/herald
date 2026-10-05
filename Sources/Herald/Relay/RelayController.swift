@@ -402,3 +402,31 @@ final class RelayController: RelayHost, RelayBackend {
                                 keys: keys, log: s.log, devices: isPaired ? devices : nil)
     }
 }
+
+#if DEBUG
+extension RelayController {
+    /// Documentation screenshots only (Debug/ScreenshotMode.swift, `HERALD_SCREENSHOTS`): shows Settings > Cloud as a paired, online
+    /// relay with sample keys, usage, a pending connector approval, one reply subscription and a few log items, without any network.
+    /// The relay client is switched to its offline-sample mode first, so it is never started and has no API. Absent from Release builds.
+    func debugInstallSample(url: String, keys: [RelayKeyInfo], usage: RelayUsage, events: RelayEvents,
+                            consents: [RelayConsent], log: [RelayLogEntry]) {
+        client.debugNoNetwork = true
+        _ = tokens.save("sample-token-not-real")
+        store.update { $0.relayURL = url; $0.deviceId = "dev_sample"; $0.pairedAt = Date().addingTimeInterval(-86_400 * 12); $0.lastSeenAt = Date(); $0.log = log }
+        self.keys = keys
+        self.usage = usage
+        self.events = events
+        consentBook = ConsentBook()
+        for c in consents { consentBook.receive(c) }
+        client.debugForceState(.online)
+        relaySwitch.sync()
+        controller.changed()
+    }
+
+    /// Takes the sample state away again (the sandboxed token item included).
+    func debugRemoveSample() {
+        tokens.delete()
+        store.update { $0.relayURL = ""; $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil; $0.log = [] }
+    }
+}
+#endif

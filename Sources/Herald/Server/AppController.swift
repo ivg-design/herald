@@ -367,6 +367,10 @@ final class AppController {
     /// Installed Shortcuts, by name (`GET /v1/shortcuts`). A slow or missing `shortcuts` tool is a gateway
     /// problem, not a bad request.
     func shortcutNames() async throws -> [String] {
+        #if DEBUG
+        // Documentation screenshots show sample names, never the owner's own Shortcuts.
+        if ProcessInfo.processInfo.environment["HERALD_SCREENSHOTS"]?.isEmpty == false { return ["Post build status", "Start focus session", "Log a glass of water"] }
+        #endif
         do { return try await ShortcutsCatalog.shared.names() }
         catch let e as ShortcutsError {
             if case .timedOut = e { throw BackendError(504, e.localizedDescription) }

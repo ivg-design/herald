@@ -287,6 +287,10 @@ final class BannerCenter {
         let x = right ? vf.maxX - Self.margin - width : vf.minX + Self.margin
         var y = top ? vf.maxY - Self.margin - offset - height : vf.minY + Self.margin + offset
         if keepBottomInside { y = max(y, vf.minY + Self.margin) }
+        #if DEBUG
+        // Documentation screenshots: banners are laid out as usual but far outside every display (Debug/ScreenshotMode.swift).
+        if let o = ScreenshotMode.bannerOffset { return NSPoint(x: x + o.x, y: y + o.y) }
+        #endif
         return NSPoint(x: x, y: y)
     }
 
@@ -775,5 +779,6 @@ extension BannerCenter: ConfirmationSurface {
 extension BannerCenter {
     /// For the HERALD_SCREENSHOTS launch mode (Debug/ScreenshotMode.swift).
     func debugPanel(app: String, id: String) -> NSWindow? { entries[Self.key(app, id)]?.panel }
+    func debugModel(app: String, id: String) -> BannerModel? { entries[Self.key(app, id)]?.model }
 }
 #endif

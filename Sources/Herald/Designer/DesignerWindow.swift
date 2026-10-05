@@ -135,6 +135,9 @@ enum DesignerWindow {
         if let w = window, let m = model {
             if quickSend { m.showQuickSend(app: app) }
             else { m.showDesign(app: app, template: template) }
+            #if DEBUG
+            if ScreenshotMode.isActive { ScreenshotMode.present(w); return }
+            #endif
             WindowPresence.shared.track(w)
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
@@ -149,8 +152,15 @@ enum DesignerWindow {
         if quickSend { m.showQuickSend(app: app) }
         let root = DesignerView(model: m, controller: controller,
                                 iconFor: { AppIcons.icon(in: controller.registry, app: $0) })
+        #if DEBUG
+        // Documentation screenshots: a window class that is never constrained onto a display (Debug/ScreenshotMode.swift).
+        let w: NSWindow = (ScreenshotMode.isActive ? ShotWindow.self : NSWindow.self).init(
+            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 820),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+        #else
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 820),
                          styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+        #endif
         w.title = m.mode.windowTitle
         w.isReleasedWhenClosed = false
         w.tabbingMode = .disallowed
@@ -158,12 +168,19 @@ enum DesignerWindow {
         w.contentView = NSHostingView(rootView: root)
         w.setContentSize(NSSize(width: 1100, height: 820))
         w.center()
+        #if DEBUG
+        if !ScreenshotMode.isActive { w.setFrameAutosaveName("HeraldDesigner") }
+        #else
         w.setFrameAutosaveName("HeraldDesigner")
+        #endif
         let d = WindowDelegate(model: m)
         w.delegate = d
         titleSubscription = m.$mode.removeDuplicates().sink { [weak w] mode in w?.title = mode.windowTitle }
         window = w; model = m; delegate = d
         installKeyMonitor()
+        #if DEBUG
+        if ScreenshotMode.isActive { ScreenshotMode.present(w); return }
+        #endif
         WindowPresence.shared.track(w)
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)

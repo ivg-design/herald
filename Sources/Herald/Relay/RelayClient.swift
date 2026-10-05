@@ -122,11 +122,21 @@ public final class RelayClient {
         if tokens.load() == nil { state = .unpaired }
     }
 
+    #if DEBUG
+    /// Documentation screenshots only (Debug/ScreenshotMode.swift): the sample "paired" state of `RelayController.debugInstallSample`
+    /// must never touch the network, so the client neither starts, nor reconnects, nor hands out an API.
+    var debugNoNetwork = false
+    func debugForceState(_ s: RelayConnectionState) { state = s }
+    #endif
+
     // MARK: Lifecycle
 
     public var isPaired: Bool { tokens.load() != nil && store.value.deviceId != nil }
 
     public var api: RelayAPI? {
+        #if DEBUG
+        if debugNoNetwork { return nil }
+        #endif
         guard let url = URL(string: store.value.relayURL) else { return nil }
         return httpFactory(url, tokens.load())
     }
@@ -140,6 +150,9 @@ public final class RelayClient {
 
     /// Starts (or restarts) the connection loop. No-op when not paired.
     public func start() {
+        #if DEBUG
+        if debugNoNetwork { return }
+        #endif
         stop()
         guard tokens.load() != nil else { state = .unpaired; return }
         state = .connecting
@@ -156,6 +169,9 @@ public final class RelayClient {
 
     /// After wake or a network change: drop the (probably dead) socket and connect now, without waiting out the backoff.
     public func reconnectNow() {
+        #if DEBUG
+        if debugNoNetwork { return }
+        #endif
         guard tokens.load() != nil else { return }
         attempt = 0
         if runner == nil { start(); return }

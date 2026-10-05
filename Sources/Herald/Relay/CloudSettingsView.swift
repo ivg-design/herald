@@ -83,7 +83,16 @@ struct CloudSettingsView: View {
             Button("Turn off", role: .destructive) { Task { await relay.relaySwitch.turnOff() } }
             Button("Cancel", role: .cancel) {}
         } message: { Text("This unpairs this Mac and revokes every agent key and connector. The relay itself stays in your Cloudflare account.") }
+        #if DEBUG
+        // Documentation screenshots: open Advanced without a click (Debug/ScreenshotMode.swift).
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.cloudAdvanced"))) { n in
+            advancedOpen = (n.object as? Bool) ?? true
+        }
+        #endif
         .onAppear {
+            #if DEBUG
+            if relay.client.debugNoNetwork { return }
+            #endif
             if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); await relay.refreshEvents(); await relay.refreshHealth(); _ = try? await relay.relayUsage() } }
         }
     }

@@ -37,6 +37,10 @@ public struct MCPInstaller {
     public var run: (_ exe: String, _ args: [String]) -> (Int32, String)
 
     public static func bundledServerPath(bundle: Bundle = .main) -> String {
+        #if DEBUG
+        // Documentation screenshots show the installed app's path, not a build folder.
+        if ProcessInfo.processInfo.environment["HERALD_SCREENSHOTS"]?.isEmpty == false { return "/Applications/Herald.app/Contents/Helpers/herald-mcp" }
+        #endif
         let p = bundle.bundleURL.appendingPathComponent("Contents/Helpers/herald-mcp").path
         return FileManager.default.isExecutableFile(atPath: p) ? p : "/usr/local/bin/herald-mcp"
     }

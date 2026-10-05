@@ -21,13 +21,19 @@ struct HistoryView: View {
     @StateObject private var ticker = ChangeTicker()
     /// The sidebar's selection, tagged by `HistorySelection.id`: "All Apps" (the default on open) or an app id. (Optional so the
     /// sidebar List can bind it directly.)
-    @State private var selection: String? = HistorySelection.all.id
-    @State private var search = ""
+    @State private var selection: String?
+    @State private var search: String
     @State private var picked = Set<HistoryKey>()
     @State private var confirmClearApp: String?
     /// Groups (`HistoryGrouping`) the user has opened; the rest show one row.
     @State private var openGroups = Set<String>()
     @FocusState private var searchFocused: Bool
+
+    init(controller: AppController, initialSelection: String = HistorySelection.allID, initialSearch: String = "") {
+        self.controller = controller
+        _selection = State(initialValue: initialSelection)
+        _search = State(initialValue: initialSearch)
+    }
 
     private var browser: HistoryBrowser { HistoryBrowser(selection: HistorySelection(id: selection), search: search) }
     private var appFilter: String? { browser.selection.app }
