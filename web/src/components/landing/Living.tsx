@@ -1,5 +1,6 @@
 import SectionHead from "./SectionHead";
 import { QuietMock, StackMock, VoiceMock } from "./b-living-mocks";
+import RiveBannerVideo from "./RiveBannerVideo";
 
 export default function Living() {
   return (
@@ -16,6 +17,13 @@ export default function Living() {
           <h3 className="display display-m m-0">A voice, if you want one</h3>
           <p className="body mt-4 max-w-[44ch]">Attach a spoken message to any notification. Local neural TTS, nothing leaves the Mac, and the text is logged so you can read what you missed.</p>
           <div className="mt-6"><VoiceMock /></div>
+        </div>
+        <div className="col-span-full min-w-0 lg:col-span-5 mt-12 lg:mt-14 lg:self-center">
+          <h3 className="display display-m m-0">A banner that looks back</h3>
+          <p className="body mt-4 max-w-[44ch]">Drop a <span className="nowrap">Rive</span> file into any cell. A state machine can follow the notification&rsquo;s fields and the pointer, and a character built with scripts and data binding plays by itself from the moment the banner appears.</p>
+        </div>
+        <div className="col-span-full min-w-0 lg:col-span-6 lg:col-start-7 mt-8 lg:mt-14">
+          <RiveBannerVideo />
         </div>
       </div>
     </section>
