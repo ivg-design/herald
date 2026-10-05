@@ -77,6 +77,8 @@ component to bind it, or onto an empty slot to place a component that shows it. 
 custom field name such as `customer.name`. See [Bindings and tokens](reference/bindings.md) for where each
 group comes from.
 
+![The palette from Components down to Fields, with Issuer fields and Standard fields and, below them, the Actions chips](../web/public/shots/docs/designer-palette-fields.png "Fields come from the manifest. The Actions section lists the issuer's buttons, which you can drag onto the grid.")
+
 ### 5. Select a cell
 
 Click a cell on the grid. The inspector switches to the **Cell** tab.
@@ -98,6 +100,8 @@ The **Cell** tab has these parts:
 Shift-click several slots to select them together. At the bottom of **Position and span**, the buttons
 **Split**, **Duplicate** and **Delete** act on the selected cell.
 
+![The Cell tab for a Text component with the rich-text bar above the text field, which holds a line with a bold word and an italic word](../web/public/shots/docs/designer-richtext-bar.png "A Text cell. The bar above the field sets bold, italic, code, underline, size and colour, and the line below shows the result.")
+
 ### 6. Use the inspector tabs
 
 The **Template** tab edits the whole template.
@@ -112,6 +116,8 @@ The **Template** tab edits the whole template.
 | **Text** | **Body lines**, the line limit for body text that sets none of its own. |
 | **Checks** | Problems the checker found. Click one to select the cell it names. |
 
+![The Template tab of the inspector from Name down to Checks, which lists one warning about a token that the manifest does not declare](../web/public/shots/docs/designer-inspector-template-checks.png "The Checks section at the bottom names the cell with the problem. Click the warning to select that cell.")
+
 The **Actions** tab edits the banner's buttons.
 
 ![The Actions tab of the inspector with the issuer's Open log, Deploy and Dismiss buttons, your Post to Slack button, the Add your own buttons and Extra data](../web/public/shots/docs/designer-inspector-actions.png "The Actions tab: the issuer's buttons, your own, the ways to add more, and extra data.")
@@ -121,6 +127,8 @@ The **Actions** tab edits the banner's buttons.
 | **Buttons** | Every button the issuer sends and every one you added. For an issuer button you can rename it, hide it, restyle it, move it up or down and reset it. For yours you can edit or delete it. |
 | **Add your own** | One button for each kind: **Run Apple Shortcut**, **Run script**, **Run shell command**, **Open link**, **Call back the issuer** and **Snooze**. |
 | **Extra data** | Your own key and value pairs. Every action receives them, and a binding reads one as `{extra.key}`. |
+
+![The Cell tab for an Actions cell with its Shows, Layout, Max, Align and Which settings](../web/public/shots/docs/designer-actions-cell-selected.png "An Actions cell in the grid has its own settings in the Cell tab: which actions it shows, how it lays them out and how many buttons fit.")
 
 ### 7. Edit the grid
 
@@ -164,6 +172,8 @@ Back in the **Symbol** section you can set **Weight**, **Scale**, the placement 
 label, the colour mode and an optional effect. A name Herald cannot find shows the message "Not an SF Symbol
 on this Mac" and the component keeps its normal look. The keys are in [Symbols](reference/symbols.md).
 
+![The Cell tab for a Badge cell with its Symbol section: name, weight, scale, place, mode, colour, variable and effect](../web/public/shots/docs/designer-symbol-section.png "The Symbol section of a Badge cell, with the name checkmark.circle.fill set.")
+
 ### 9. Watch the live preview
 
 The preview above the grid redraws with every edit.
@@ -177,6 +187,8 @@ The preview above the grid redraws with every edit.
   watch what collapses. The button then reads, for example, `1 absent`.
 - A red or orange badge with a number lists the problems. Click one to select the cell it concerns.
 - The zoom control scales the preview from 50% to 300%.
+
+![The Designer with a warning badge reading 1 in the preview header and its list open, naming the cell and the problem](../web/public/shots/docs/designer-problems.png "The badge next to Fields counts the problems. Its list names the cell and what is wrong.")
 
 Animations and symbol effects run in the preview.
 

@@ -243,6 +243,8 @@ In the [Designer](../AUTHORING.md), the **Assets** palette lists the app's `.riv
 - **Remove...** deletes a file after asking you to confirm.
 - Drag a file onto the canvas, or click it, to place a `rive` component in the selected slot.
 
+![The Assets section of the palette listing one animation, status-ring.riv, with its size, and the Add button below it](../../web/public/shots/docs/designer-assets.png "The Assets section. Each file is listed with its size. The preview square is empty in this capture because the Rive runtime does not draw offscreen.")
+
 A file the manifest declares is placed by `asset`, with its state machine. A file you added is placed by `path`, with its file name.
 
 Select a `rive` cell to open its inspector, which has these controls:
@@ -258,6 +260,8 @@ Select a `rive` cell to open its inspector, which has these controls:
 | **Ratio** | `aspectRatio`. The placeholder shows the artboard's own ratio. |
 | **Height** | `height`. |
 | Action | The click action: none, one from the list, or one of its own. |
+
+![The Cell tab for a Rive cell showing Asset, the summary line, Artboard, State machine, Inputs, Loop, Ratio, Height and Runs](../../web/public/shots/docs/designer-rive-inspector.png "Look at the inspector on the right: the Asset, the file summary and the controls in the table above. The animation itself does not draw in this capture, so the cell shows a placeholder.")
 
 **Import...** and **Export...** at the top of the Designer move a template with its animations as a
 [bundle](#packaging-with-a-template-heraldtemplate).

@@ -25,6 +25,8 @@ A 16:9 hero picture across the top of a banner, with the title below it.
   {"id":"text","row":1,"col":0,"padding":14,"component":{"type":"text","binding":"{title}","style":"title"}}]}
 ```
 
+![A banner with the app icon and title above a wide picture and a line of body text](../../../web/public/shots/docs/banner-image.png "A banner whose template has an image cell. The picture is rounded and fills the width of its cell.")
+
 **Properties**
 
 | Property | Type | Default | Description |

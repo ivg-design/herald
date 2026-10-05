@@ -24,6 +24,8 @@ value.
    "component":{"type":"progress","binding":"{percent}","color":"#34C759","height":6,"emptyBehavior":"collapse"}}]}
 ```
 
+![A banner with a bar filled to about two thirds under the body text](../../../web/public/shots/docs/banner-progress.png "A banner whose template has a progress cell. The bar is filled to 62 percent.")
+
 **Properties**
 
 | Property | Type | Default | Description |

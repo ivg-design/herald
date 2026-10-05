@@ -43,7 +43,7 @@ presentation fields and refuses everything else, as [Forbidden fields](#forbidde
 
 ## The receipt
 
-A receipt is a set of separate facts, each set by whoever knows it. the notify call, the receipt read and the `get_receipt` and `send_notification` MCP tools all return this
+A receipt is a set of separate facts, each set by whoever knows it. The notify call, the receipt read and the `get_receipt` and `send_notification` MCP tools all return this
 object. A reply read from the replies endpoint shares its reply fields.
 
 | Fact | Set by | Meaning |

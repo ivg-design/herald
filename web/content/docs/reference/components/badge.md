@@ -26,6 +26,8 @@ An unread count in a red pill at the top right of a banner, beside the app icon 
    "component":{"type":"badge","binding":"{count}","color":"#FF3B30"}}]}
 ```
 
+![A banner with a blue pill at the right of the title showing a check mark and the number 3](../../../web/public/shots/docs/banner-badge.png "A banner whose template has a badge cell that shows a symbol before the value.")
+
 **Properties**
 
 | Property | Type | Default | Description |

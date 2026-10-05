@@ -37,6 +37,10 @@ to it, and is drawn dimmer while sounds are muted.
 | **Settings...** | Opens the Settings window. | Comma |
 | **Quit Herald** | Quits Herald. Nothing can send notifications until you open it again. | Q |
 
+While a quiet period is on, the menu shows **Quiet until** the end time and **Resume Now** where **Quiet for 1 Hour** usually is.
+
+![The Herald menu during quiet hours, with the line Quiet until 23:59 and a Resume Now item below Mute Sounds](../web/public/shots/docs/menu-quiet.png "The menu in a quiet period. Resume Now ends it at once.")
+
 The **Stack Notifications** choice is the default for every app. An app can choose its own level under
 [Apps](#apps). [Stacking](reference/stacking.md) explains the four levels. [Quiet hours](reference/quiet-hours.md)
 explains windows and the one-hour quiet period.
@@ -145,6 +149,8 @@ Two or more notifications of one app that were sent with the same `group` fold i
 chevron. Click it to open or fold the group. Right-click it for **Dismiss N Not Dismissed**, which closes the banners
 that are still up, or **Delete Group**.
 
+![The History window with Vercel selected and one folded row named herald-web that says 3 notifications and 3 not dismissed](../web/public/shots/docs/history-group-folded.png "A folded group. The arrow at the start of the row opens it, and the line under the name counts the notifications and how many are not dismissed.")
+
 ### Working with notifications
 
 Click a row to select it. Hold Command or Shift to select several, even across apps. A click also acts like a click on
@@ -233,6 +239,8 @@ Each control has a per-app setting key, documented in [Apps API](reference/api/a
 **Templates...** opens a window titled **Templates** with the app's name. It edits the simple, form-based
 templates of one app. A template made on the Designer grid can be opened in the Designer from here.
 
+![The Templates window with the template list on the left, the Template and Content forms in the middle and a Light and Dark preview on the right](../web/public/shots/docs/template-editor.png "The Templates window for GitHub Actions. The preview stays empty until you type content or press Fill from last notification.")
+
 | Part | What it does |
 |---|---|
 | The list on the left | Shows the app's templates. **New** starts a template. |
@@ -273,6 +281,8 @@ cannot be undone. An app that sends again later is added again, as a new app. Th
 
 For a cloud connector that is still approved, the question has two buttons instead of one. A connector is an agent such as
 ChatGPT that reaches this Mac through the relay, and its app id starts with `cloud.`.
+
+![The question Remove ChatGPT from Herald? with the buttons Remove and Revoke, Remove Only and Cancel](../web/public/shots/docs/settings-apps-remove-dialog.png "The question for a cloud connector that is still approved. Read the text under the title: it says what is deleted and what happens if you do not revoke.")
 
 | Button | What happens |
 |---|---|

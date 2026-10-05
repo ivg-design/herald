@@ -110,6 +110,8 @@ Two rules protect the user:
 - A button that carries a shell `command` is refused unless `allowCommandButtons` is `true`. Anyone can send as any app id, and a command button would run under the command permission the user gave that app.
 - When the app is an agent app (its id starts with `agent.`) and the call names no buttons, Herald shows the agent's own buttons: Open, Reply and, when the notification has a `link`, Open link.
 
+![A banner from an agent app with the agent icon, a title, a message and the buttons Open and Reply](../../../web/public/shots/docs/banner-agent.png "A banner from an agent app with no buttons named in the call: Herald adds Open and Reply.")
+
 To ask a question, send with `persistent: true` and an `id`, then call [`wait_for_reply`](#wait_for_reply).
 
 **Arguments**

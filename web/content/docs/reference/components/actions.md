@@ -76,6 +76,8 @@ shows only the actions it sends.
 The resolved list has two kinds of action. The issuer's are the buttons the sending app sends. The template's are the
 ones its `actionRules` add. `source` filters them:
 
+![The Cell tab for an Actions cell with its Shows, Layout, Max, Align, Wrap, Spacing and Which settings](../../../web/public/shots/docs/designer-actions-cell-selected.png "The Cell tab of an Actions cell. Shows is the source filter and Which picks all the rest or chosen actions.")
+
 | `source` | The row may show |
 |---|---|
 | `issuer` | Only the issuer's actions, after the template's rules have hidden, relabelled or reordered them. |
@@ -202,6 +204,8 @@ button for each extra line. A kept empty row holds the height of one button.
 
 The "+N" menu lists the actions that are not shown as buttons. Its entries run their actions as the buttons would, and a
 destructive one is marked as destructive. In a static preview the menu and the snooze clock are drawn as plain labels.
+
+![A banner with the buttons Open log, Retry and Roll back and a +3 label after them](../../../web/public/shots/docs/banner-overflow.png "When the buttons do not fit, the row shows as many as it can and a +N label for the rest.")
 
 ## Empty rows
 

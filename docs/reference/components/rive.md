@@ -7,6 +7,8 @@ fields of the notification and the position of the pointer, and a click on it ca
 This page is the property reference. Preparing the file in the Rive editor, getting it into Herald, and troubleshooting
 are in [Rive in Herald](../rive.md).
 
+![The Designer with a Rive cell selected and its settings in the inspector: Asset, Artboard, State machine, Inputs, Loop, Ratio, Height and Runs](../../../web/public/shots/docs/designer-rive-inspector.png "Look at the inspector fields, which set the properties below. The animation does not draw in this capture, so the cell shows a placeholder.")
+
 **Minimal example**
 
 ```json

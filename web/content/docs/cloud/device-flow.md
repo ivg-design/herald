@@ -114,7 +114,7 @@ The code exists so that you can tell that the request on your Mac is the one you
 The user compares the code the agent printed with the code in the banner and presses **Approve** if they
 match.
 
-![A banner titled Connector request asking whether to let Claude Desktop send notifications, with Approve and Deny buttons](../../web/public/shots/docs/banner-connector-consent.png "The approval banner for a browser sign-in. It names the connector and where it returns to. For an agent without a browser the question also shows the code the agent printed.")
+![A banner titled Connector request asking to approve Codex CLI, with the code BDFG-HJKM, the warning text and the Approve and Deny buttons](../../web/public/shots/docs/banner-device-consent.png "The question for an agent with no browser. Match the code in the banner with the code the agent printed, and press Approve only if they are the same.")
 
 If the banner was missed, the request is in **Settings > Cloud > Connector approvals**, with the agent's code
 in large type and **Approve** and **Deny** beside it.
