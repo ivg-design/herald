@@ -294,7 +294,7 @@ private struct ComposerButtonRow: View {
             case .url:
                 TextField("URL", text: $button.value, prompt: Text("https://\u{2026}")).labelsHidden()
             case .command:
-                TextField("Command", text: $button.value, prompt: Text("shell command; the app must be allowed to run commands")).labelsHidden()
+                TextField("Command", text: $button.value, prompt: Text("shell command; the app must be allowed to run commands, scripts and Shortcuts")).labelsHidden()
             case .callback:
                 TextField("Callback URL", text: $button.value, prompt: Text("callback URL (optional; defaults to the app's own)")).labelsHidden()
                 TextField("Payload", text: $button.payload, prompt: Text("payload JSON (optional), e.g. {\"bid\": 42}")).labelsHidden()

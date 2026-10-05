@@ -106,6 +106,7 @@ public enum ComponentSchema {
             "cells": prop("array", "The cells, each holding one component. Cells must not overlap and must fit the grid.", items: ref("cell")),
             "collapseEmpty": prop("boolean", "Default for components without their own emptyBehavior. true: an empty component disappears and an all-empty row/column collapses to zero. false: empty components keep their space.", def: b(true)),
             "actionRules": prop("array", "Rules applied in order to the issuer's actions: hide, relabel, restyle, reorder, add.", items: ref("actionRule")),
+            "followUp": ref("followUp"),
             "onClick": prop("string", "What clicking the banner does: url (default: open the notification's link) or openApp (bring the issuing application to the front).", values: HeraldBannerClick.allCases.map(\.rawValue)),
             "extra": prop("object", "Your own key/values (strings). Every action receives them as `extra`; bindings read them as {extra.key}."),
             "accentColor": prop("string", "Hex colour (#RRGGBB) for tint and `accent`-coloured components. Optional."),
@@ -175,6 +176,7 @@ public enum ComponentSchema {
             ]),
             "symbol": symbolDefinition(),
             "action": actionDefinition(),
+            "followUp": followUpDefinition(),
             "actionRule": o([
                 "type": s("object"),
                 "description": s("Applied in order to the action list. Needs a match or an add. With match: hide removes the matched actions; otherwise relabel / style change them and position (0-based, clamped) moves them. With add: appends a template-owned action (at `position` when the rule has no match); an added action whose id already exists replaces it."),
@@ -192,6 +194,27 @@ public enum ComponentSchema {
                     jsonValue(#"{"match":"archive","relabel":"Archive it","style":"destructive","position":0}"#),
                     jsonValue(#"{"add":{"id":"shortcut-followup","label":"Follow up","kind":"shortcut","shortcut":"Create follow-up","input":"{title}\n{url}"}}"#),
                 ]),
+            ]),
+        ])
+    }
+
+    private static func followUpDefinition() -> JSONValue {
+        o([
+            "description": s("Run ONE action when a notification is left unattended: its banner has been on screen `after` and nobody pressed a button, replied, opened or dismissed it. A template's follow-up is the user's choice and replaces the notification's and the manifest's; `{\"enabled\": false}` switches theirs off. It runs at most once per notification, only while Herald is running, and the banner stays with a line \"Follow-up ran: <label>\". Origin and approval follow the action: an issuer's follow-up needs the app's permission to run commands, scripts and Shortcuts; a template's needs the template's one-time approval (an inline action is part of the template's own actions). Neither is ever granted through the API (set_follow_up reports the state)."),
+            "type": s("object"),
+            "properties": o([
+                "after": prop("number", "Seconds the banner stays unattended before the action runs, 5 to 604800 (7 days). A string such as \"90s\", \"10m\" or \"2h\" is accepted and stored as seconds. Required unless enabled is false. A banner that closes by itself sooner than this never follows up (a warning).", min: 5),
+                "actionRef": prop("string", "The id (or label) of an action the notification offers, issuer's or template's, hidden ones included. Exactly one of actionRef and action."),
+                "action": ref("action"),
+                "enabled": prop("boolean", "false switches the follow-up off (in a template: the issuer's too).", def: b(true)),
+            ]),
+            "allowedKinds": strs(HeraldFollowUp.allowedKinds.map(\.rawValue)),
+            "priority": s("template > notification > manifest."),
+            "origin": s("An inline action has the declarer's origin (issuer for a manifest or notification, template for a template). An actionRef is the issuer's when the declarer or the named action is the issuer's, else the template's."),
+            "examples": a([
+                jsonValue(#"{"after":"10m","action":{"id":"fwd","label":"Forward","kind":"shortcut","shortcut":"Forward to phone","input":"{title}"}}"#),
+                jsonValue(#"{"after":600,"actionRef":"callback"}"#),
+                jsonValue(#"{"enabled":false}"#),
             ]),
         ])
     }
@@ -236,7 +259,7 @@ public enum ComponentSchema {
 
     private static func actions() -> JSONValue {
         o([
-            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. Issuer actions can only be url, callback, command, openApp, reply or dismiss; script, shortcut and snooze come from the template (they are yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
+            "description": s("Resolved actions = the issuer's actions (payload buttons, or the manifest's actions) with the template's actionRules applied. An issuer's actions may be url, callback, command, script, shortcut, openApp, reply or dismiss (script, shortcut and command run under the app's \"Allow this app to run commands, scripts and Shortcuts\" permission, which only the user grants); snooze comes only from the template (it is yours). Components show them: `actions` lists them all; `button` / `iconButton` show one, by actionRef (an id in the resolved list) or inline."),
             "kinds": .object(Dictionary(uniqueKeysWithValues: actionKindDocs().map { ($0.0, s($0.1)) })),
             "payload": s("Every action receives {app, id, action:{id,label,kind}, fields:{token: value}, extra:{key: value}, notification:{...}} - the merged payload."),
         ])

@@ -133,15 +133,30 @@ extension JSONValue {
         }
     }
 
-    /// Does any button in `list` (an array of objects) carry a shell `command`? Returns their labels.
+    /// Does any button in `list` (an array of objects) run code: a shell `command`, a `script` or a `shortcut`? Returns their labels.
     static func commandButtonLabels(in list: JSONValue?) -> [String] {
         guard case .array(let items)? = list else { return [] }
         return items.compactMap { item in
-            guard case .object(let o) = item, let c = o["command"], !c.isNull else { return nil }
-            if case .string(let s) = c, s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return nil }
+            guard case .object(let o) = item, Self.runsCode(o) else { return nil }
             if case .string(let label)? = o["label"] { return label }
             return "(unlabelled)"
         }
+    }
+
+    /// Does this action or button object carry a non-empty command, script or shortcut?
+    static func runsCode(_ o: [String: JSONValue]) -> Bool {
+        ["command", "script", "shortcut"].contains { key in
+            guard let c = o[key], !c.isNull else { return false }
+            if case .string(let s) = c, s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+            return true
+        }
+    }
+
+    /// The label of the inline action of a `followUp` object that runs code, if it has one.
+    static func followUpCodeLabel(in value: JSONValue?) -> String? {
+        guard case .object(let f)? = value, case .object(let a)? = f["action"], runsCode(a) else { return nil }
+        if case .string(let label)? = a["label"] { return label }
+        return "(unlabelled)"
     }
 }
 

@@ -110,6 +110,12 @@ enum ShotKit {
         }
     }
 
+    /// Selected rows of lists and tables draw in the accent colour (emphasised) although the window is never key.
+    static func emphasizeRows(_ v: NSView) {
+        if let r = v as? NSTableRowView { r.isEmphasized = true }
+        for s in v.subviews { emphasizeRows(s) }
+    }
+
     static func log(_ s: String) { FileHandle.standardError.write(Data(("screenshots: " + s + "\n").utf8)) }
 
     // MARK: Capture
@@ -119,6 +125,7 @@ enum ShotKit {
     /// A correct image of `w` (all of it, frame and title bar included), or nil.
     static func grab(_ w: NSWindow, name: String) async -> Grab? {
         let order = (working.map { [$0] } ?? []) + Method.allCases.filter { $0 != working && !failedMethods.contains($0) }
+        if let root = w.contentView?.superview { emphasizeRows(root) }
         let want = CGSize(width: w.frame.width * 2, height: w.frame.height * 2)
         for m in order {
             let img: CGImage?

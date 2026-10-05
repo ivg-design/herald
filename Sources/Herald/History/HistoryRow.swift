@@ -79,7 +79,7 @@ struct HistoryStatusLine: View {
     let appName: String
 
     var body: some View {
-        Text(text).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+        Text(text).font(.caption).foregroundStyle(.tertiary).lineLimit(item.followUp == nil ? 1 : 2)
     }
 
     private var text: String {
@@ -98,6 +98,18 @@ struct HistoryStatusLine: View {
             parts.append("Dismissed")
         }
         if let note = item.actionNote { parts.append(note) }
+        if let f = item.followUp { parts.append(Self.followUpText(f)) }
         return parts.joined(separator: " \u{00B7} ")
+    }
+
+    /// "Follow-up ran: Forward, 14:05, after 10 minutes unattended", "Follow-up failed: exit 1", "Follow-up waiting for approval: Forward".
+    static func followUpText(_ f: HeraldFollowUpRecord) -> String {
+        let when = f.ranAt.formatted(date: .abbreviated, time: .shortened)
+        let unattended = f.unattendedSeconds.map { ", unattended \(HeraldFollowUp.describe(seconds: Double($0)))" } ?? ""
+        switch f.outcome {
+        case .ran: return "Follow-up ran: \(f.action) \u{00B7} \(when)\(unattended)"
+        case .failed: return "Follow-up failed: \((f.detail?.isEmpty == false) ? f.detail! : f.action) \u{00B7} \(when)\(unattended)"
+        case .waitingForApproval: return "Follow-up waiting for approval: \(f.action) \u{00B7} \(when)\(unattended)"
+        }
     }
 }

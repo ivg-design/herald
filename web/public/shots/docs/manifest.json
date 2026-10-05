@@ -26,6 +26,32 @@
     "section": "designer"
   },
   {
+    "file": "designer-actions-cell-selected.png",
+    "file2x": "designer-actions-cell-selected@2x.png",
+    "framed": true,
+    "width": 1446,
+    "height": 998,
+    "width2x": 2892,
+    "height2x": 1996,
+    "appearance": "light",
+    "title": "An Actions cell selected",
+    "shows": "The Cell tab for the selected Actions cell: its position and span, align, and the Actions component settings (Which actions, layout, how many buttons, alignment), beside the grid with the cell outlined.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-assets.png",
+    "file2x": "designer-assets@2x.png",
+    "framed": true,
+    "width": 282,
+    "height": 1397,
+    "width2x": 564,
+    "height2x": 2794,
+    "appearance": "light",
+    "title": "Assets in the palette",
+    "shows": "The palette with the Assets section listing one animation, status-ring.riv, with its size, and the Add... button below it.",
+    "section": "designer"
+  },
+  {
     "file": "designer-cell-selected.png",
     "file2x": "designer-cell-selected@2x.png",
     "framed": true,
@@ -104,6 +130,19 @@
     "section": "designer"
   },
   {
+    "file": "designer-inspector-template-checks.png",
+    "file2x": "designer-inspector-template-checks@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 1026,
+    "width2x": 792,
+    "height2x": 2051,
+    "appearance": "light",
+    "title": "Template tab, Text and Checks",
+    "shows": "The Template tab of the inspector from Name down to the Text section and the Checks section that lists the template's problems (here one warning about an undeclared token), in one picture.",
+    "section": "designer"
+  },
+  {
     "file": "designer-live-preview.png",
     "file2x": "designer-live-preview@2x.png",
     "framed": true,
@@ -156,6 +195,32 @@
     "section": "designer"
   },
   {
+    "file": "designer-palette-fields.png",
+    "file2x": "designer-palette-fields@2x.png",
+    "framed": true,
+    "width": 282,
+    "height": 1397,
+    "width2x": 564,
+    "height2x": 2794,
+    "appearance": "light",
+    "title": "Palette, Fields and Actions",
+    "shows": "The palette from Components down to the Fields section: the issuer's fields (image, progress, count) and the standard ones, and the Actions chips for the issuer's buttons that can be dragged onto the grid.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-problems.png",
+    "file2x": "designer-problems@2x.png",
+    "framed": true,
+    "width": 1446,
+    "height": 998,
+    "width2x": 2892,
+    "height2x": 1996,
+    "appearance": "light",
+    "title": "Problems badge and list",
+    "shows": "The Designer with a problems badge in the preview header (the number of issues, with a warning triangle) and its list open under it, naming the cell and what is wrong.",
+    "section": "designer"
+  },
+  {
     "file": "designer-quick-send.png",
     "file2x": "designer-quick-send@2x.png",
     "framed": true,
@@ -169,6 +234,32 @@
     "section": "designer"
   },
   {
+    "file": "designer-richtext-bar.png",
+    "file2x": "designer-richtext-bar@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 1160,
+    "width2x": 792,
+    "height2x": 2320,
+    "appearance": "light",
+    "title": "Rich-text bar",
+    "shows": "The Cell tab for a Text component with its rich-text bar (bold, italic, code, underline, strikethrough, size, colour and alignment) above a field holding a styled line with a bold word and an italic word.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-rive-inspector.png",
+    "file2x": "designer-rive-inspector@2x.png",
+    "framed": true,
+    "width": 1446,
+    "height": 1298,
+    "width2x": 2892,
+    "height2x": 2596,
+    "appearance": "light",
+    "title": "Rive cell selected",
+    "shows": "The designer with a Rive cell selected: the Rive component settings in the inspector (the animation, artboard, state machine, input bindings, loop, size and the action) next to the grid with the cell outlined. The Rive animation does not render in an offscreen capture, so the cell and the preview show the animation's placeholder area.",
+    "section": "designer"
+  },
+  {
     "file": "designer-symbol-browser.png",
     "file2x": "designer-symbol-browser@2x.png",
     "framed": true,
@@ -179,6 +270,19 @@
     "appearance": "light",
     "title": "SF Symbol browser",
     "shows": "The SF Symbols browser: the category list with counts on the left (All symbols, Recents, Favourites, then categories such as Communication and Weather), a search field with a size slider, and the grid of symbols with their names; the right pane waits for a symbol to be selected.",
+    "section": "designer"
+  },
+  {
+    "file": "designer-symbol-section.png",
+    "file2x": "designer-symbol-section@2x.png",
+    "framed": true,
+    "width": 396,
+    "height": 1113,
+    "width2x": 792,
+    "height2x": 2226,
+    "appearance": "light",
+    "title": "Symbol section",
+    "shows": "The Cell tab for a badge cell with its Symbol section: the SF Symbol name checkmark.circle.fill, weight, scale, place, rendering mode, colour, variable and effect.",
     "section": "designer"
   },
   {
@@ -208,13 +312,26 @@
     "section": "settings"
   },
   {
+    "file": "settings-apps-remove-dialog.png",
+    "file2x": "settings-apps-remove-dialog@2x.png",
+    "framed": true,
+    "width": 316,
+    "height": 406,
+    "width2x": 632,
+    "height2x": 812,
+    "appearance": "light",
+    "title": "Remove question",
+    "shows": "The question Remove makes for a cloud connector that is still approved: Remove ChatGPT from Herald?, what is deleted, and the buttons Remove and Revoke, Remove Only and Cancel. The window's title bar is omitted, as an alert has none.",
+    "section": "settings"
+  },
+  {
     "file": "settings-cloud-advanced.png",
     "file2x": "settings-cloud-advanced@2x.png",
     "framed": true,
     "width": 859,
-    "height": 3399,
+    "height": 2831,
     "width2x": 1718,
-    "height2x": 6798,
+    "height2x": 5662,
     "appearance": "light",
     "title": "Cloud settings, Advanced",
     "shows": "The Cloud tab with Advanced expanded: the custom domain, the Macs paired with the relay, the relay URL and every relay limit as an editable field.",
@@ -225,9 +342,9 @@
     "file2x": "settings-cloud-deploy@2x.png",
     "framed": true,
     "width": 588,
-    "height": 416,
+    "height": 429,
     "width2x": 1176,
-    "height2x": 832,
+    "height2x": 858,
     "appearance": "light",
     "title": "Create your relay on Cloudflare",
     "shows": "The deploy sheet opened by Enable relay: the explanation, step 1 Create a token with the Open Cloudflare button, step 2 the token field, and the Deploy button.",
@@ -251,9 +368,9 @@
     "file2x": "settings-cloud-paired@2x.png",
     "framed": true,
     "width": 859,
-    "height": 2539,
+    "height": 1971,
     "width2x": 1718,
-    "height2x": 5078,
+    "height2x": 3942,
     "appearance": "light",
     "title": "Cloud settings, paired",
     "shows": "The whole Cloud tab for a paired, online relay: relay state and Connector URL, Connect an agent, Connector approvals with one pending request and its code and Approve and Deny buttons, Reply subscriptions with one subscription and an End button, Agent keys with Design and Revoke, Usage today, and Last relay items.",
@@ -312,6 +429,19 @@
     "section": "settings"
   },
   {
+    "file": "template-editor.png",
+    "file2x": "template-editor@2x.png",
+    "framed": true,
+    "width": 1107,
+    "height": 819,
+    "width2x": 2214,
+    "height2x": 1638,
+    "appearance": "light",
+    "title": "Template editor",
+    "shows": "The classic Template editor opened from Settings > Apps > Templates...: the template list on the left, the form in the middle and the live preview with its sample-data drawer on the right.",
+    "section": "settings"
+  },
+  {
     "file": "history.png",
     "file2x": "history@2x.png",
     "framed": true,
@@ -338,6 +468,19 @@
     "section": "history"
   },
   {
+    "file": "history-group-folded.png",
+    "file2x": "history-group-folded@2x.png",
+    "framed": true,
+    "width": 1107,
+    "height": 819,
+    "width2x": 2214,
+    "height2x": 1638,
+    "appearance": "light",
+    "title": "History with a folded group",
+    "shows": "The History window with Vercel selected: three notifications sent with the same group are folded into one row, herald-web, with an arrow to open it and a line saying 3 notifications and how many were not dismissed.",
+    "section": "history"
+  },
+  {
     "file": "menu.png",
     "file2x": "menu@2x.png",
     "framed": true,
@@ -351,6 +494,32 @@
     "section": "menu"
   },
   {
+    "file": "menu-quiet.png",
+    "file2x": "menu-quiet@2x.png",
+    "framed": true,
+    "width": 354,
+    "height": 356,
+    "width2x": 708,
+    "height2x": 712,
+    "appearance": "light",
+    "title": "Menu while quiet",
+    "shows": "The Herald menu while quiet hours are on: a Quiet until line with the end time and a Resume Now item where Quiet for 1 Hour usually is.",
+    "section": "menu"
+  },
+  {
+    "file": "banner-accept-decline-reply.png",
+    "file2x": "banner-accept-decline-reply@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 180,
+    "width2x": 928,
+    "height2x": 360,
+    "appearance": "light",
+    "title": "Accept and Decline buttons",
+    "shows": "The Counter-offer from Acme banner of the callback example: the body They offer $3,900. Accept? and two buttons, Accept and a red Decline (a destructive style).",
+    "section": "banners"
+  },
+  {
     "file": "banner-actions.png",
     "file2x": "banner-actions@2x.png",
     "framed": true,
@@ -361,6 +530,58 @@
     "appearance": "light",
     "title": "Banner with buttons",
     "shows": "A banner with three buttons from the issuer's manifest: Open log with an icon and text, an icon-only Deploy button, and a Dismiss button; the template's own Post to Slack Shortcut button follows.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-agent.png",
+    "file2x": "banner-agent@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 216,
+    "width2x": 928,
+    "height2x": 432,
+    "appearance": "light",
+    "title": "Banner from the Claude Code agent app",
+    "shows": "A banner from the Claude Code agent app drawn with its default agent template: the Claude icon, a title and the message.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-badge.png",
+    "file2x": "banner-badge@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 151,
+    "width2x": 928,
+    "height2x": 302,
+    "appearance": "light",
+    "title": "Banner with a badge",
+    "shows": "A banner whose template has a badge component: a blue pill with a check mark and the number 3 at the right of the title.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-bid-accepted.png",
+    "file2x": "banner-bid-accepted@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 150,
+    "width2x": 928,
+    "height2x": 300,
+    "appearance": "light",
+    "title": "Bid accepted",
+    "shows": "The banner the Getting started example sends: title Bid accepted and the body Your bid of $4,200 was accepted., with the app icon, the time and a close button.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-command-question.png",
+    "file2x": "banner-command-question@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 280,
+    "width2x": 928,
+    "height2x": 560,
+    "appearance": "light",
+    "title": "Command question",
+    "shows": "The question that replaces the buttons when a command button is pressed: Run this command for BidBot?, the command open ~/Reports/bids.pdf in a box, and the answers Run once, Always allow BidBot and Cancel.",
     "section": "banners"
   },
   {
@@ -390,6 +611,32 @@
     "section": "banners"
   },
   {
+    "file": "banner-device-consent.png",
+    "file2x": "banner-device-consent@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 300,
+    "width2x": 928,
+    "height2x": 600,
+    "appearance": "light",
+    "title": "Device connector request",
+    "shows": "The question for an agent with no browser: Let Codex CLI send you notifications?, with the code BDFG-HJKM to match against what the agent printed, and the Approve and Deny answers.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-image.png",
+    "file2x": "banner-image@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 358,
+    "width2x": 928,
+    "height2x": 716,
+    "appearance": "light",
+    "title": "Banner with an image",
+    "shows": "A banner whose template has an image component: a 16:9 picture above the body text, with the title and app icon on top.",
+    "section": "banners"
+  },
+  {
     "file": "banner-long-collapsed.png",
     "file2x": "banner-long-collapsed@2x.png",
     "framed": true,
@@ -416,6 +663,32 @@
     "section": "banners"
   },
   {
+    "file": "banner-open-proposal.png",
+    "file2x": "banner-open-proposal@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 180,
+    "width2x": 928,
+    "height2x": 360,
+    "appearance": "light",
+    "title": "Bid accepted with a button",
+    "shows": "The same banner after the second Getting started request replaces it: an Open proposal button now sits under the body text.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-overflow.png",
+    "file2x": "banner-overflow@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 180,
+    "width2x": 928,
+    "height2x": 360,
+    "appearance": "light",
+    "title": "Actions row with a +N pill",
+    "shows": "An actions row that shows three buttons (Open log, Retry, Roll back) and a +3 pill at its end for the buttons that did not fit.",
+    "section": "banners"
+  },
+  {
     "file": "banner-plain.png",
     "file2x": "banner-plain@2x.png",
     "framed": true,
@@ -426,6 +699,19 @@
     "appearance": "light",
     "title": "Banner",
     "shows": "A plain notification banner: the issuer icon and name, a title, a subtitle, two lines of body text, the time and the close button.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-progress.png",
+    "file2x": "banner-progress@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 163,
+    "width2x": 928,
+    "height2x": 326,
+    "appearance": "light",
+    "title": "Banner with a progress bar",
+    "shows": "A banner whose template has a progress component: a bar filled to 62 percent under the body text.",
     "section": "banners"
   },
   {
@@ -452,6 +738,19 @@
     "appearance": "light",
     "title": "Inline reply",
     "shows": "The inline reply field that replaces the buttons when a Reply button is pressed, with its placeholder and the Send and Cancel controls.",
+    "section": "banners"
+  },
+  {
+    "file": "banner-reply-bidbot.png",
+    "file2x": "banner-reply-bidbot@2x.png",
+    "framed": true,
+    "width": 464,
+    "height": 191,
+    "width2x": 928,
+    "height2x": 382,
+    "appearance": "light",
+    "title": "Reply field for BidBot",
+    "shows": "The reply field of the reply example: the banner Counter-offer from Acme with a text field showing the placeholder Message to Acme, a Send button and a close button in place of the Reply button.",
     "section": "banners"
   },
   {

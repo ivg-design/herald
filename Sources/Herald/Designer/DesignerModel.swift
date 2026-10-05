@@ -953,6 +953,8 @@ struct ActionEditorRequest: Identifiable, Equatable {
         case editTemplate(String)
         /// Editing the inline action of a button, icon button or Rive cell.
         case inline(cellID: String)
+        /// The new action a follow-up runs, stored as the follow-up's own inline `action`.
+        case followUp
     }
     var id = UUID()
     var mode: Mode
@@ -2021,6 +2023,9 @@ final class DesignerModel: ObservableObject {
                 let natural = ActionResolver.resolveDetailed(issuer: src.buttons, ids: src.ids, rules: plain).map(\.id)
                 ActionRules.applyOrder(ActionRules.mergeOrder(previous: before, natural: natural), natural: natural, in: &t.actionRules)
             }
+        case .followUp:
+            if a.id.isEmpty { a.id = HeraldAction.slug(a.label) }
+            setFollowUpInlineAction(a)
         case .inline(let cellID):
             perform { t in
                 guard let i = t.cells.firstIndex(where: { $0.id == cellID }) else { return }
@@ -2033,6 +2038,131 @@ final class DesignerModel: ObservableObject {
             }
         }
         actionEditor = nil
+    }
+
+    // MARK: Follow-up (Actions tab)
+
+    /// The unit the follow-up's delay is typed in.
+    enum FollowUpUnit: String, CaseIterable, Identifiable {
+        case seconds, minutes, hours
+        var id: String { rawValue }
+        var title: String { rawValue }
+        var factor: Double { self == .seconds ? 1 : (self == .minutes ? 60 : 3600) }
+    }
+
+    /// One entry of the follow-up's "run" menu.
+    struct FollowUpChoice: Identifiable, Equatable {
+        var action: HeraldAction
+        var origin: HeraldActionOrigin
+        var id: String { action.id }
+        /// "Forward (issuer)" or "Forward (yours)".
+        var title: String { "\(action.label) (\(origin == .issuer ? "issuer" : "yours"))" }
+    }
+
+    static let defaultFollowUpSeconds: Double = 600
+
+    /// The user's own follow-up on the template: present and not switched off.
+    var ownFollowUp: HeraldFollowUp? { draft.followUp.flatMap { $0.isEnabled ? $0 : nil } }
+    var followUpIsOn: Bool { ownFollowUp != nil }
+    /// For the view to notice a change of delay (undo, redo).
+    var ownFollowUpAfter: Double? { ownFollowUp?.after }
+
+    /// Actions the follow-up may run: the issuer's (hidden included) and your own, of an allowed kind only.
+    var followUpChoices: [FollowUpChoice] {
+        FollowUpResolver.sampleCandidates(manifest: manifest, template: draft)
+            .filter { HeraldFollowUp.allowedKinds.contains($0.action.kind) }
+            .map { FollowUpChoice(action: $0.action, origin: $0.origin) }
+    }
+
+    /// The delay as typed: the largest unit that divides it evenly.
+    var followUpAfterDisplay: (value: Double, unit: FollowUpUnit) {
+        let s = ownFollowUp?.after ?? Self.defaultFollowUpSeconds
+        for u in [FollowUpUnit.hours, .minutes] where s >= u.factor && s.truncatingRemainder(dividingBy: u.factor) == 0 { return (s / u.factor, u) }
+        return (s, .seconds)
+    }
+
+    /// What the follow-up runs: the id of a menu choice, or the inline action's id.
+    var followUpRunSelection: String? { ownFollowUp?.actionRef ?? ownFollowUp?.action?.id }
+    var followUpInlineAction: HeraldAction? { ownFollowUp?.action }
+
+    /// The delay in seconds for `value` of `unit`, clamped to what a follow-up allows.
+    static func followUpSeconds(_ value: Double, _ unit: FollowUpUnit) -> Double {
+        guard value.isFinite else { return defaultFollowUpSeconds }
+        return min(HeraldFollowUp.maxSeconds, max(HeraldFollowUp.minSeconds, (value * unit.factor).rounded()))
+    }
+
+    /// Switches your own follow-up on (starting with the first action it can run, after 10 minutes) or off (removes it, so the
+    /// issuer's, when it declares one, applies again).
+    func setFollowUpOn(_ on: Bool) {
+        if !on { perform { $0.followUp = nil }; return }
+        guard !followUpIsOn else { return }
+        let first = followUpChoices.first
+        perform { $0.followUp = HeraldFollowUp(after: Self.defaultFollowUpSeconds, actionRef: first?.action.id) }
+    }
+
+    func setFollowUpAfter(_ value: Double, unit: FollowUpUnit) {
+        guard var f = ownFollowUp else { return }
+        f.after = Self.followUpSeconds(value, unit)
+        perform { $0.followUp = f }
+    }
+
+    /// Runs an action the banner already offers.
+    func setFollowUpAction(ref id: String) {
+        guard var f = ownFollowUp else { return }
+        f.actionRef = id; f.action = nil
+        perform { $0.followUp = f }
+    }
+
+    /// Runs an action that belongs to the follow-up alone (the "New Shortcut action" form): an inline `action`, not a button.
+    func setFollowUpInlineAction(_ a: HeraldAction) {
+        var f = ownFollowUp ?? HeraldFollowUp(after: Self.defaultFollowUpSeconds)
+        f.action = a; f.actionRef = nil; f.enabled = nil
+        perform { $0.followUp = f }
+    }
+
+    /// The form for the follow-up's own new action (shortcut first; script, command and callback in the kind menu).
+    func newFollowUpActionRequest() -> ActionEditorRequest {
+        let taken = Set(actionRows.map(\.id))
+        let a = HeraldAction(id: ActionRules.uniqueID("follow-up", taken: taken), label: "Follow up", kind: .shortcut)
+        return ActionEditorRequest(mode: .followUp, action: a)
+    }
+
+    func editFollowUpAction() {
+        guard let a = ownFollowUp?.action else { return }
+        actionEditor = ActionEditorRequest(mode: .followUp, action: a)
+    }
+
+    /// The issuer's follow-up as the Designer shows it: "Forward after 10 minutes", nil when the manifest declares none or the
+    /// template carries its own follow-up (which replaces it).
+    var issuerFollowUp: (label: String, after: Double)? {
+        guard ownFollowUp == nil else { return nil }
+        return Self.declaredFollowUp(manifest: manifest)
+    }
+
+    /// Whether the issuer's follow-up applies (the template has not switched it off).
+    var issuerFollowUpIsOn: Bool { draft.followUp?.enabled != false }
+
+    /// Turning it off writes `followUp: {enabled: false}` on the template; turning it on removes that override.
+    func setIssuerFollowUpOn(_ on: Bool) {
+        if on { if draft.followUp?.enabled == false { perform { $0.followUp = nil } } }
+        else { perform { $0.followUp = HeraldFollowUp(enabled: false) } }
+    }
+
+    /// The manifest's follow-up as a label and a delay: the inline action's label, or the `actionRef` resolved against the
+    /// manifest's actions (the ref itself when it names nothing known). nil when none is declared or it is switched off.
+    static func declaredFollowUp(manifest: HeraldManifest?) -> (label: String, after: Double)? {
+        guard let f = manifest?.followUp, f.isEnabled, let after = f.after else { return nil }
+        if let a = f.action { return (a.label, after) }
+        guard let ref = f.actionRef else { return nil }
+        let found = FollowUpResolver.sampleCandidates(manifest: manifest, template: nil).first {
+            $0.action.id.caseInsensitiveCompare(ref) == .orderedSame || $0.action.label.caseInsensitiveCompare(ref) == .orderedSame
+        }
+        return (found?.action.label ?? ref, after)
+    }
+
+    /// "Declares a follow-up: Forward after 10 minutes" (Settings > Apps), nil when none.
+    static func declaredFollowUpLine(manifest: HeraldManifest?) -> String? {
+        declaredFollowUp(manifest: manifest).map { "Declares a follow-up: \($0.label) after \(HeraldFollowUp.describe(seconds: $0.after))" }
     }
 
     func removeTemplateAction(_ id: String) {

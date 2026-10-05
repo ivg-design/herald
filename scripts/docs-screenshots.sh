@@ -22,10 +22,17 @@ command -v xcodegen >/dev/null && xcodegen generate >/dev/null
 xcodebuild -project Herald.xcodeproj -scheme Herald -configuration Debug -derivedDataPath "$DD" build | tail -3
 
 LOG="$RAW/capture.log"
-HERALD_SCREENSHOTS="$RAW" "$DD/Build/Products/Debug/Herald.app/Contents/MacOS/Herald" > "$LOG" 2>&1 &
-PID=$!
-for ((i = 0; i < LIMIT; i++)); do kill -0 $PID 2>/dev/null || break; sleep 1; done
-if kill -0 $PID 2>/dev/null; then echo "timed out after ${LIMIT}s, stopping pid $PID"; kill $PID; fi
+: > "$LOG"
+BIN="$DD/Build/Products/Debug/Herald.app/Contents/MacOS/Herald"
+# One launch per group of shots (a long single run can trip an AppKit layout crash in the offscreen windows); a subset asks for one launch.
+if [ -n "$HERALD_SCREENSHOTS_ONLY" ]; then SETS=("$HERALD_SCREENSHOTS_ONLY"); else SETS=("designer-" "settings-" "menu" "banner-" "history,template-editor"); fi
+for G in "${SETS[@]}"; do
+  HERALD_SCREENSHOTS_ONLY="$G" HERALD_SCREENSHOTS="$RAW" "$BIN" >> "$LOG" 2>&1 &
+  PID=$!
+  for ((i = 0; i < LIMIT; i++)); do kill -0 $PID 2>/dev/null || break; sleep 1; done
+  if kill -0 $PID 2>/dev/null; then echo "timed out after ${LIMIT}s, stopping pid $PID"; kill $PID; fi
+  wait $PID 2>/dev/null || echo "run '$G' ended abnormally (see $LOG)"
+done
 grep "^screenshots:" "$LOG"
 
 (cd web && node scripts/frame-shots.mjs "$RAW" --docs --out public/shots/docs)

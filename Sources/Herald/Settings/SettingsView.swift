@@ -216,7 +216,7 @@ struct AppDetail: View {
                 Text("Reusable banner layouts and defaults that notifications can reference with \"template\".")
             }
             Section {
-                Toggle("Allow this app to run commands", isOn: Binding(
+                Toggle("Allow this app to run commands, scripts and Shortcuts", isOn: Binding(
                     get: { record.commandsConfirmed },
                     set: { v in
                         if v { confirmCommands() } else { edit { $0.commandsConfirmed = false } }
@@ -224,8 +224,11 @@ struct AppDetail: View {
                 if record.commandsConfirmed && record.registration.allowCommands != true {
                     Text("Confirmed, but the app has not requested command access.").font(.caption).foregroundStyle(.secondary)
                 }
+                if let line = DesignerModel.declaredFollowUpLine(manifest: controller.manifests.get(app: app)) {
+                    Text(line).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
             } header: { Text("Commands") } footer: {
-                Text("Command buttons run through /bin/zsh as you. Only enable for apps you trust.")
+                Text("Command buttons run through /bin/zsh as you, and script and Shortcut buttons run as you too. A follow-up the app declares runs under this switch. Only enable for apps you trust.")
             }
             if let host = remoteCallbackHost {
                 Section {
@@ -268,8 +271,8 @@ struct AppDetail: View {
 
     private func confirmCommands() {
         let a = NSAlert()
-        a.messageText = "Allow \(record.displayName) to run commands?"
-        a.informativeText = "Buttons in its notifications will execute shell commands with your user permissions."
+        a.messageText = "Allow \(record.displayName) to run commands, scripts and Shortcuts?"
+        a.informativeText = "Buttons in its notifications, and a follow-up it declares, will run shell commands, scripts and Shortcuts with your user permissions. A follow-up runs when a banner is left unattended."
         a.alertStyle = .warning
         a.addButton(withTitle: "Allow")
         a.addButton(withTitle: "Cancel")
@@ -426,7 +429,7 @@ struct ActionsSettingsView: View {
                     .padding(.vertical, 2)
                 }
             } header: { Text("Template commands, scripts and Shortcuts") } footer: {
-                Text("A command, script or Shortcut a template carries itself asks for one confirmation per template the first time it runs. Changing the command, the script file or the Shortcut's name or input asks again. Commands an app sends in its own buttons follow the per-app switch under Apps.")
+                Text("A command, script or Shortcut a template carries itself asks for one confirmation per template the first time it runs. Changing the command, the script file or the Shortcut's name or input asks again. Commands, scripts and Shortcuts an app sends in its own buttons, or in a follow-up it declares, follow the per-app switch under Apps.")
             }
         }
         .formStyle(.grouped)

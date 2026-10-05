@@ -21,7 +21,8 @@ extension ScreenshotMode {
         _ = try? AssetStore.shared.install(ringAsset, app: showApp)
         let manifest = HeraldManifest(
             app: showApp, appName: "Acme Deploys",
-            fields: [HeraldField(key: "image", type: .image), HeraldField(key: "progress", type: .number, sample: .number(0.62)),
+            fields: [HeraldField(key: "title", type: .text, sample: .text("Health check")), HeraldField(key: "body", type: .text, sample: .text("All services are responding.")),
+                     HeraldField(key: "image", type: .image), HeraldField(key: "progress", type: .number, sample: .number(0.62)),
                      HeraldField(key: "count", type: .number, sample: .number(3))],
             actions: [HeraldButton(label: "Open log", url: "https://ci.example.com/runs/4821"), HeraldButton(label: "Retry", callback: HeraldCallback(payload: .object(["do": .string("retry")]))),
                       HeraldButton(label: "Roll back", style: "destructive", callback: HeraldCallback(payload: .object(["do": .string("rollback")]))),
@@ -118,8 +119,7 @@ extension Runner {
         _ = await banner("banner-overflow", Opts(title: "Actions row with a +N pill", shows: "An actions row that shows three buttons (Open log, Retry, Roll back) and a +3 pill at its end for the buttons that did not fit.", section: "banners"),
             HeraldNotification(app: sa, id: UUID().uuidString, title: "Deploy failed", body: "Step 'migrate' exited with code 2.", sound: "none", persistent: true, template: st,
                                actionIds: ["open-log", "retry", "roll-back", "mute", "dashboard", "dismiss"]))
-        _ = await banner("banner-rive", Opts(title: "Banner with a Rive animation", shows: "A banner whose template has a Rive component playing the status-ring animation beside the title and body.", section: "banners"),
-            HeraldNotification(app: sa, id: UUID().uuidString, title: "Health check", body: "All services are responding.", sound: "none", persistent: true, template: ScreenshotMode.riveTemplate), settle: 2.0)
+        // banner-rive: a Rive view does not render in an offscreen capture (the cell stays blank), so it is not taken.
         let agentActions = (c.manifests.get(app: "agent.claude-code")?.actionIDs) ?? []
         _ = await banner("banner-agent", Opts(title: "Banner from the Claude Code agent app", shows: "A banner from the Claude Code agent app drawn with its default agent template: the Claude icon, a title and the message.", section: "banners"),
             HeraldNotification(app: "agent.claude-code", id: UUID().uuidString, title: "Tests pass", body: "All 412 tests passed after the banner refactor. Ready for review.", sound: "none", persistent: true, actionIds: agentActions))
@@ -142,23 +142,23 @@ extension Runner {
             await shot("designer-actions-cell-selected", w, Opts(title: "An Actions cell selected", shows: "The Cell tab for the selected Actions cell: its position and span, align, and the Actions component settings (Which actions, layout, how many buttons, alignment), beside the grid with the cell outlined.", section: "designer")) { _ in
                 m.tab = .cell; m.select(cell: "actions")
             }
-            if wants("designer-problems") {
+            if wants("designer-problems") || wants("designer-inspector-template-checks") {
                 m.tab = .cell; m.select(cell: "body")
                 m.updateCell("body") { c in if case .text(var t) = c.component { t.binding = "{details} and {title}"; c.component = .text(t) } }
                 await pause(0.6)
-                await shot("designer-problems", w, Opts(title: "Problems badge and list", shows: "The Designer with a problems badge in the preview header (the number of issues, with a warning triangle) and its list open under it, naming the cell and what is wrong.", section: "designer")) { _ in
+                if wants("designer-problems") { await shot("designer-problems", w, Opts(title: "Problems badge and list", shows: "The Designer with a problems badge in the preview header (the number of issues, with a warning triangle) and its list open under it, naming the cell and what is wrong.", section: "designer")) { _ in
                     NotificationCenter.default.post(name: Notification.Name("herald.debug.issuesOpen"), object: true)
-                }
+                } }
                 NotificationCenter.default.post(name: Notification.Name("herald.debug.issuesOpen"), object: false)
-                m.undo()
             }
             w.setContentSize(NSSize(width: 1280, height: 1900)); ShotKit.keepOffscreen(w); await pause(1.0)
             let top = titleBarOf(w) + 34, h = w.frame.height - top
             let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
-            await shot("designer-inspector-template-checks", w, Opts(title: "Template tab, Text and Checks", shows: "The Template tab of the inspector from Name down to the Text and Checks sections at its end, in one picture.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
+            await shot("designer-inspector-template-checks", w, Opts(title: "Template tab, Text and Checks", shows: "The Template tab of the inspector from Name down to the Text section and the Checks section that lists the template's problems (here one warning about an undeclared token), in one picture.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
                 m.clearSelection(); m.tab = .template
             }
-            w.close(); await pause(0.4)
+            m.undo()
+            w.close(); await pause(1.2)
         }
         // The showcase issuer: palette, symbol, rich text, Rive, assets.
         if let (w, m) = await tallDesigner(app: ScreenshotMode.showApp, template: ScreenshotMode.showTemplate) {
@@ -171,7 +171,7 @@ extension Runner {
             await shot("designer-symbol-section", w, Opts(title: "Symbol section", shows: "The Cell tab for a badge cell with its Symbol section: the SF Symbol name checkmark.circle.fill, weight, scale, place, rendering mode, colour, variable and effect.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
                 m.tab = .cell; m.select(cell: "badge")
             }
-            m.updateCell("body") { c in if case .text(var t) = c.component { t.binding = "Release **{title}** is live on *production*"; t.markdown = true; c.component = .text(t) } }
+            m.updateCell("body") { c in if case .text(var t) = c.component { t.lines = [HeraldTextLine(runs: [HeraldTextRun(text: "Release "), HeraldTextRun(token: "title", weight: .bold), HeraldTextRun(text: " is live on "), HeraldTextRun(text: "production", italic: true)])]; c.component = .text(t) } }
             await shot("designer-richtext-bar", w, Opts(title: "Rich-text bar", shows: "The Cell tab for a Text component with its rich-text bar (bold, italic, code, underline, strikethrough, size, colour and alignment) above a field holding a styled line with a bold word and an italic word.", section: "designer", crop: inspector, trim: true, round: 12)) { _ in
                 m.tab = .cell; m.select(cell: "body")
             }
@@ -179,16 +179,16 @@ extension Runner {
             await shot("designer-assets", w, Opts(title: "Assets in the palette", shows: "The palette with the Assets section listing one animation, status-ring.riv, with its size, and the Add... button below it.", section: "designer", crop: palette, trim: true, round: 12)) { _ in
                 m.clearSelection(); m.reloadAssets()
             }
-            w.close(); await pause(0.4)
+            w.close(); await pause(1.2)
         }
         if wants("designer-rive-inspector") {
             DesignerWindow.show(controller: c, app: ScreenshotMode.showApp, template: ScreenshotMode.riveTemplate)
             if let w = DesignerWindow.debugWindow, let m = DesignerWindow.debugModel, ShotKit.place(w, size: NSSize(width: 1280, height: 1100)) {
                 await pause(1.5)
-                await shot("designer-rive-inspector", w, Opts(title: "Rive cell selected", shows: "The designer with a Rive cell selected: the Rive component settings in the inspector (the animation, artboard, state machine, input bindings, loop, size and the action) next to the grid with the cell outlined. The cell draws the animation's placeholder if it cannot play offscreen.", section: "designer")) { _ in
+                await shot("designer-rive-inspector", w, Opts(title: "Rive cell selected", shows: "The designer with a Rive cell selected: the Rive component settings in the inspector (the animation, artboard, state machine, input bindings, loop, size and the action) next to the grid with the cell outlined. The Rive animation does not render in an offscreen capture, so the cell and the preview show the animation's placeholder area.", section: "designer")) { _ in
                     m.tab = .cell; m.select(cell: "rive")
                 }
-                w.close(); await pause(0.4)
+                w.close(); await pause(1.2)
             }
         }
     }
@@ -223,6 +223,14 @@ extension Runner {
         a.layout()
         let win = a.window
         win.isReleasedWhenClosed = false
+        // The alert's material is vibrancy over nothing offscreen: draw it as the plain window colour instead.
+        func flatten(_ v: NSView) { for sub in v.subviews { if let ve = sub as? NSVisualEffectView { ve.isHidden = true }; flatten(sub) } }
+        if let frame = win.contentView?.superview { flatten(frame) }
+        win.appearance = NSAppearance(named: .aqua)
+        win.isOpaque = false; win.backgroundColor = .clear
+        win.contentView?.wantsLayer = true
+        win.contentView?.layer?.backgroundColor = NSColor(srgbRed: 0.93, green: 0.93, blue: 0.93, alpha: 1).cgColor
+        win.contentView?.layer?.cornerRadius = 14; win.contentView?.layer?.masksToBounds = true
         guard ShotKit.place(win) else { return }
         await pause(1.0)
         await shot("settings-apps-remove-dialog", win, Opts(title: "Remove question", shows: "The question Remove makes for a cloud connector that is still approved: Remove ChatGPT from Herald?, what is deleted, and the buttons Remove and Revoke, Remove Only and Cancel. The window's title bar is omitted, as an alert has none.", section: "settings", round: 14))

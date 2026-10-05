@@ -29,7 +29,7 @@ enum MCPToolCatalog {
     /// The sections of the component schema document `component_schema` can narrow to.
     static let schemaSections = ["definitions", "components", "bindings", "actions", "examples", "workflow"]
 
-    static let templateObject = "A template object: {name, app, layoutVersion: 2, grid, cells, collapseEmpty?, actionRules?, extra?, accentColor?, sound?, ...}. Call component_schema for the format."
+    static let templateObject = "A template object: {name, app, layoutVersion: 2, grid, cells, collapseEmpty?, actionRules?, followUp?: {after, actionRef|action, enabled?}, extra?, accentColor?, sound?, ...}. Call component_schema for the format."
 
     /// Every tool, in the order DESIGN 7.6 lists them.
     static let all: [MCPToolDefinition] = [
@@ -72,11 +72,11 @@ enum MCPToolCatalog {
             marker that get_manifest wrote for a long string is swapped back for the stored value; one that matches nothing \
             stored is refused (use get_manifest with full: true). Issuing apps \
             normally register their own; use this to describe an app that does not, to add sample values for the designer, or \
-            to set defaultTemplate. Issuer actions are url, callback, command, openApp (bring an app to the front; optional bundleId or path, else the app \
-            named by appBundleId / appPath) or dismiss; shortcut and script actions are authored in templates (add_action_rule). Invalid manifests are rejected with the field path.
+            to set defaultTemplate. Issuer actions are url, callback, command, script (a plain file name in Herald's scripts folder), shortcut (an installed Apple Shortcut, optional `input` text with {tokens}), openApp (bring an app to the front; optional bundleId or path, else the app \
+            named by appBundleId / appPath) or dismiss; snooze is template-only. Script, shortcut and command actions run under the app's \"Allow this app to run commands, scripts and Shortcuts\" permission, which only the user grants. A manifest may declare a `followUp` {after, actionRef|action, enabled?}. Invalid manifests are rejected with the field path.
             """,
             inputSchema: Schema.input(["manifest": Schema.object(
-                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], appBundleId?, appPath?, actions: [{id?, label, kind: url|callback|command|openApp|dismiss, style?, url?, command?, callback?, bundleId?, path?}], assets?, defaultTemplate?, family?: the product family byApp stacking groups issuers by, e.g. \"webwatcher\"}")],
+                "{app, appName?, icon?, version?, fields: [{key, type: text|number|date|url|image|bool|list, required?, sample?}], appBundleId?, appPath?, actions: [{id?, label, kind: url|callback|command|script|shortcut|openApp|dismiss, style?, url?, command?, script?, shortcut?, input?, callback?, bundleId?, path?}], followUp?: {after: seconds or \"10m\", actionRef|action, enabled?}, assets?, defaultTemplate?, family?: the product family byApp stacking groups issuers by, e.g. \"webwatcher\"}")],
                                       required: ["manifest"]),
             destructive: true, idempotent: true),
 
@@ -108,7 +108,8 @@ enum MCPToolCatalog {
             id of the offending cell, and nothing is saved until there are none (overlapping cells, a cell outside the grid, \
             an unknown component type or a property of the wrong type, a bad colour...). Warnings (a {token} the manifest does \
             not declare, an unknown key that is probably a typo) are returned but do not block. Names starting with \
-            "builtin." are reserved. Set setAsDefault to make it the app's default template. Then check it with \
+            "builtin." are reserved. A template may carry a `followUp` {after, actionRef|action, enabled?} (see set_follow_up: it is the \
+            user's choice and replaces the issuer's; enabled: false switches the issuer's off). Set setAsDefault to make it the app's default template. Then check it with \
             render_preview.
             """,
             inputSchema: Schema.input([
@@ -130,7 +131,7 @@ enum MCPToolCatalog {
             description: """
             Check a template without saving it: give a draft as `template`, or a saved one as `app` + `name`. Returns valid, \
             errors and warnings (each with a path and the cell id) and, with the app's manifest sample data, which cells \
-            would be empty and which rows and columns would collapse, plus the resulting action list. Works without Herald \
+            would be empty and which rows and columns would collapse, plus the resulting action list. A template's `followUp` is checked too (its kind, `after`, a missing actionRef). Works without Herald \
             running (the manifest check is then skipped).
             """,
             inputSchema: Schema.input([
@@ -161,7 +162,7 @@ enum MCPToolCatalog {
             the path of the saved PNG. Preview a saved template with `name` (or builtin.*), an unsaved draft with \
             `template` (validated first; errors name the cell), or, with neither, the app's default template. Data is the manifest's sample values by default, or the app's \
             last real notification with source "last"; `data` overrides individual fields. Sample data stands in for an \
-            issuer that names every action its manifest declares, so the buttons are those; a real notification shows only \
+            issuer that names every action its manifest declares, so the buttons are those (a follow-up is not run by a preview); a real notification shows only \
             the actions it sends. Render light and dark to check both. Requires Herald running.
             """,
             inputSchema: Schema.input([
@@ -181,11 +182,11 @@ enum MCPToolCatalog {
             description: """
             Deliver a real notification: a banner appears on the user's screen and it is recorded in history. Same payload as \
             POST /v1/notify: app and title, optional subtitle, body (Markdown links), image, url, sound, id (the same id \
-            replaces the visible banner), template, buttons [{label, url|command|callback}], snooze, reminder, metadata. \
+            replaces the visible banner), template, buttons [{label, url|command|callback|script|shortcut(+input)}], followUp {after, actionRef|action}, snooze, reminder, metadata. \
             Manifest fields go in `fields` (or at the top level) and are what the template binds. `actionIds` names actions \
             the manifest declares (or send `buttons`/`actions` in full); the manifest's actions are not shown unless the \
             payload names them (an agent app's own default is Open, Reply and, when it has a `link`, Open link; Reply opens a text \
-            field in the banner: send with persistent: true and read the answer with wait_for_reply or get_replies). Buttons with a shell `command` are refused unless allowCommandButtons is true: you can send \
+            field in the banner: send with persistent: true and read the answer with wait_for_reply or get_replies). Buttons (and a follow-up action) that run a shell `command`, a `script` or a `shortcut` are refused unless allowCommandButtons is true: you can send \
             as any app id, so a command button would run under that app's command permission. Prefer send_test while \
             iterating on a template.
             """,
@@ -197,11 +198,12 @@ enum MCPToolCatalog {
                 "id": Schema.string("Notification id; sending the same id again replaces the banner in place."),
                 "template": Schema.string("Name of a saved template of this app."),
                 "fields": Schema.object("Manifest field values, e.g. {\"count\": 2, \"sender\": \"Acme Billing\"}; sent as top-level keys."),
-                "buttons": .object(["type": .string("array"), "description": .string("Issuer buttons: [{label, style?, url?|command?|callback?}]. `actions` is accepted as an alias."),
+                "buttons": .object(["type": .string("array"), "description": .string("Issuer buttons: [{label, style?, url?|command?|callback?|script?|shortcut?, input?}]. `actions` is accepted as an alias."),
                                     "items": .object(["type": .string("object")])]),
                 "actionIds": .object(["type": .string("array"), "description": .string("Ids of actions the app's manifest declares, instead of repeating the buttons."),
                                       "items": .object(["type": .string("string")])]),
-                "allowCommandButtons": Schema.boolean("Allow buttons that carry a shell `command` (refused by default)."),
+                "allowCommandButtons": Schema.boolean("Allow buttons and a follow-up that run a command, script or Shortcut (refused by default)."),
+                "followUp": Schema.object("Run one action when this notification is left unattended: {after: seconds or \"10m\", actionRef: an offered action's id | action: {id, label, kind: shortcut|script|command|callback, ...}, enabled?}. Needs the app's permission to run commands, scripts and Shortcuts, which only the user grants."),
                 "metadata": Schema.object("Free-form metadata; readable as {key} in templates too."),
                 "speak": .object(["description": .string("Say it aloud on the user's Mac (local voice): true speaks the title then the body, or {text?, voice?, speed?, lang?}.")]),
                 "audio": Schema.string("Play a voice message: a WAV/MP3/M4A path, https URL or data: URI (at most 20 MB)."),

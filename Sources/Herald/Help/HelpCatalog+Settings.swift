@@ -14,7 +14,7 @@ extension HelpEntry {
     static let stayUntilDismissed = HelpEntry("settings.stayUntilDismissed", "Stay until dismissed", "Keeps this app's banners on screen until you dismiss them")
     static let autoDismiss = HelpEntry("settings.autoDismiss", "Auto-dismiss timeout", "Seconds before a banner removes itself; 0 means it never does")
     static let openTemplates = HelpEntry("settings.openTemplates", "Templates", "The template editor for this app's banners")
-    static let allowCommands = HelpEntry("settings.allowCommands", "Allow commands", "Whether this app's notification buttons may run shell commands as you")
+    static let allowCommands = HelpEntry("settings.allowCommands", "Allow this app to run commands, scripts and Shortcuts", "Whether this app's buttons, and a follow-up it declares, may run shell commands, scripts and Apple Shortcuts as you")
     static let allowCallbacks = HelpEntry("settings.allowCallbacks", "Allow callbacks", "Whether this app's callback buttons may post to this remote host")
     static let revealScripts = HelpEntry("settings.revealScripts", "Reveal scripts folder", "The folder of scripts that action buttons can run, shown in Finder")
     static let refreshScripts = HelpEntry("settings.refreshScripts", "Refresh scripts", "Rescans the scripts folder for added or removed scripts")

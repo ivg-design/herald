@@ -349,7 +349,7 @@ enum ParityTools {
 
         ParityTool(definition: MCPToolDefinition(
             name: "list_approvals", title: "List template command approvals",
-            description: "The commands, scripts and Shortcuts the user approved for templates (Settings > Actions): app, template, the exact commands and when. Approvals are granted by the user when a banner asks; they cannot be granted here.",
+            description: "The commands, scripts and Shortcuts the user approved for templates (Settings > Actions): app, template, the exact commands and when. `followUps` lists every follow-up that runs code (per template and per manifest) with its action, kind, origin and `approval` state (approved, needs-approval, app-permission-needed, app-not-allowed). Approvals are granted by the user when a banner asks; they cannot be granted here.",
             inputSchema: Schema.input(), readOnly: true, idempotent: true),
             route: { _ in RouteCall(method: "GET", path: "/v1/actions/approvals") }),
 
@@ -384,6 +384,37 @@ enum ParityTools {
             inputSchema: Schema.input(["app": Schema.string("The app id."), "name": Schema.string("Template name (saved or builtin.*); omit to clear.")], required: ["app"]),
             idempotent: true),
             route: { a in RouteCall(method: "PUT", path: "/v1/templates/default", body: body(a, ["app", "name"])) }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "set_follow_up", title: "Set a follow-up",
+            description: """
+            Give a template a follow-up: run one action when a notification is still unattended `after` a while (its banner is up and \
+            nobody pressed a button, replied or dismissed it). It edits the named template, or the app's default template; an app with \
+            none gets a stored copy of the layout it uses (named "default", made the manifest's defaultTemplate; createdTemplate: true). \
+            It works for cloud.* connector apps too. Choose the action with exactly one of shortcut (an installed Apple Shortcut: \
+            list_shortcuts names them, pick a real one), script (a plain file name in Herald's scripts folder), command (shell) or \
+            actionRef (the id of an action the banner offers: kinds shortcut, script, command, callback). Pass enabled: false alone \
+            to switch the follow-up off. The reply gives the saved follow-up, its origin and `approval`: approved, needs-approval \
+            (the user is asked once at the Mac), app-permission-needed, app-not-allowed or none. This tool NEVER approves code: \
+            approval stays with the person at the Mac (the banner asks the first time it would run; Always allow lets later \
+            follow-ups run unattended).
+            """,
+            inputSchema: Schema.input([
+                "app": Schema.string("The app id; a cloud connector's app is cloud.<name>."),
+                "template": Schema.string("A saved template of the app; default: the app's default template (created when it has none)."),
+                "after": .object(["type": .array([.string("number"), .string("string")]),
+                                  "description": .string("How long the banner stays unattended before it runs: seconds (5 to 604800) or a string such as \"90s\", \"10m\", \"2h\". Required unless enabled is false.")]),
+                "shortcut": Schema.string("Name of an installed Apple Shortcut to run (see list_shortcuts)."),
+                "script": Schema.string("A plain file name in Herald's scripts folder."),
+                "command": Schema.string("A shell command."),
+                "actionRef": Schema.string("The id (or label) of an action the banner offers, instead of an inline action."),
+                "input": Schema.string("Text with {tokens} given to the Shortcut or script as input; omitted: the notification JSON."),
+                "label": Schema.string("The action's label, shown in History and on the banner line (default: the Shortcut, script or command name)."),
+                "enabled": Schema.boolean("false switches the template's follow-up off (and the issuer's, for this template); with nothing else."),
+            ], required: ["app"]),
+            destructive: true, idempotent: true),
+            route: { a in RouteCall(method: "PUT", path: "/v1/templates/follow-up",
+                                    body: body(a, ["app", "template", "after", "shortcut", "script", "command", "actionRef", "input", "label", "enabled"])) }),
 
         ParityTool(definition: MCPToolDefinition(
             name: "export_template_bundle", title: "Export a template bundle",

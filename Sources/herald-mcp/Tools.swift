@@ -595,8 +595,9 @@ final class MCPTools: @unchecked Sendable {
         // "Always Allow" the user may have given the real app). So it has to say it means it.
         if try args.bool("allowCommandButtons") != true {
             let labels = JSONValue.commandButtonLabels(in: payload["buttons"]) + JSONValue.commandButtonLabels(in: payload["actions"])
+                + (JSONValue.followUpCodeLabel(in: payload["followUp"]).map { ["follow-up: \($0)"] } ?? [])
             if !labels.isEmpty {
-                throw ToolFailure("Not sent: button(s) \(labels.map { "'\($0)'" }.joined(separator: ", ")) carry a shell `command`. A command button runs on the user's Mac under '\(app)' command permission, and anyone can send as any app id. Use a url or callback button, or pass allowCommandButtons: true if the user asked for it.")
+                throw ToolFailure("Not sent: \(labels.map { "'\($0)'" }.joined(separator: ", ")) run a shell command, a script or a Shortcut. That runs on the user's Mac under '\(app)' permission to run commands, scripts and Shortcuts, and anyone can send as any app id. Use a url or callback button (or an actionRef follow-up), or pass allowCommandButtons: true if the user asked for it.")
             }
         }
         payload["allowCommandButtons"] = nil
@@ -644,7 +645,7 @@ final class MCPTools: @unchecked Sendable {
             let source = ActionResolver.issuerSource(for: named, manifest: m)
             var buttons: [HeraldButton] = []
             for (b, id) in zip(source.buttons, source.ids) {
-                if b.command != nil && !allowCommands { leftOut.append(id); continue }
+                if (b.command != nil || b.script != nil || b.shortcut != nil) && !allowCommands { leftOut.append(id); continue }
                 buttons.append(b); issuerActions.append(id)
             }
             if !buttons.isEmpty { payload["buttons"] = try JSONValue(encoding: buttons) }

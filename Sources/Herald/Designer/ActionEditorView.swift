@@ -81,6 +81,8 @@ struct ActionEditorView: View {
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
 
+            FollowUpBlock(model: model)
+
             ExtraRowsEditor(model: model)
         }
     }
@@ -285,6 +287,7 @@ struct ActionFormView: View {
         case .addToTemplate: return "Add action"
         case .editTemplate: return "Edit action"
         case .inline: return "Button action"
+        case .followUp: return "Follow-up action"
         }
     }
 
@@ -304,7 +307,7 @@ struct ActionFormView: View {
                     .pickerStyle(.segmented)
                     .heraldHelp(name: "Button shows", detail: "text, an icon with text, or an icon only; pick the icon under Symbol below")
                     Picker("Does this", selection: kindBinding) {
-                        ForEach(HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
+                        ForEach(request.mode == .followUp ? HeraldFollowUp.allowedKinds : HeraldActionKind.allCases, id: \.self) { Label($0.designerTitle, systemImage: $0.designerSymbol).tag($0) }
                     }.heraldHelp(.designerEditorKind)
                     Picker("Button style", selection: Binding(get: { HeraldActionStyle.parse(request.action.style).rawValue },
                                                        set: { request.action.style = $0 == "normal" ? nil : $0 })) {

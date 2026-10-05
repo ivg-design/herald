@@ -263,6 +263,18 @@ struct DesignerView: View {
             }
         }
         .frame(minWidth: 1020, minHeight: 720)
+        #if DEBUG
+        // Documentation screenshots: the problems list drawn inline (a popover is vibrancy over nothing offscreen).
+        .overlay(alignment: .topLeading) {
+            if debugIssuesOpen {
+                IssuesPopover(model: model)
+                    .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
+                    .shadow(radius: 10, y: 4).offset(x: 560, y: 110)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.issuesOpen"))) { n in debugIssuesOpen = (n.object as? Bool) ?? true }
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: .heraldChanged)) { _ in model.refreshFromDisk() }
         .sheet(item: $model.actionEditor) { req in ActionFormView(model: model, request: req) }
         .task(id: model.status) {
@@ -281,6 +293,9 @@ struct DesignerView: View {
         }
     }
 
+    #if DEBUG
+    @State private var debugIssuesOpen = false
+    #endif
     @State private var previewFraction = DesignerSplit.load()
     @State private var panes = DesignerPanes.load()
     /// The surface the pointer is over: the one the zoom shortcuts act on.
@@ -547,15 +562,7 @@ private struct DesignerPreviewBar: View {
     @State private var showFields = false
     @State private var showIssues = false
 
-    var body: some View {
-        VStack(spacing: 6) {
-            if let s = model.status {
-                Text(s.text).font(.caption).foregroundStyle(s.kind == .error ? Color.red : Color.secondary)
-                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack(spacing: 8) {
-                Text("Live preview").font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                    .layoutPriority(-1)
+    @ViewBuilder private var controls: some View {
                 Picker("", selection: $model.previewSource) {
                     ForEach(DesignerPreviewSource.allCases) { Text($0.title).tag($0) }
                 }
@@ -588,25 +595,25 @@ private struct DesignerPreviewBar: View {
                 .heraldHelp(.designerSendTest)
                 Button { model.save() } label: { Text("Save") }
                     .keyboardShortcut("s", modifiers: .command).disabled(!model.canSave).buttonStyle(.borderedProminent).controlSize(.small) .heraldHelp(.designerSave)
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            if let s = model.status {
+                Text(s.text).font(.caption).foregroundStyle(s.kind == .error ? Color.red : Color.secondary)
+                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            // The title gives way first: when the badges leave no room for it, the controls keep the whole row.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Text("Live preview").font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    controls
+                }
+                HStack(spacing: 8) { controls }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-        #if DEBUG
-        // Documentation screenshots: the problems list drawn inline (a popover is vibrancy over nothing offscreen).
-        .overlay(alignment: .topLeading) {
-            if debugIssuesOpen {
-                IssuesPopover(model: model)
-                    .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.15)))
-                    .shadow(radius: 10, y: 4).offset(x: 330, y: 52)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.issuesOpen"))) { n in debugIssuesOpen = (n.object as? Bool) ?? true }
-        #endif
     }
-    #if DEBUG
-    @State private var debugIssuesOpen = false
-    #endif
 }
 
 private struct FieldsPopover: View {

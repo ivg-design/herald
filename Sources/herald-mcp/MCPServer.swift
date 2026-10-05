@@ -17,7 +17,7 @@ final class MCPServer: @unchecked Sendable {
     are the {tokens} a template binds, and the actions it offers); component_schema (what a template may contain); \
     put_template (validated; errors name the cell); render_preview (look at the picture, light and dark, with long and \
     missing values via `data`); add_action_rule and list_shortcuts (hide or relabel the issuer's buttons, add your own: \
-    Apple Shortcut, shell command, script, URL); send_test (shows the real banner). This server never presses a banner \
+    Apple Shortcut, shell command, script, URL); set_follow_up (run one action when a banner is left unattended; it never approves code, the person approves at the Mac); send_test (shows the real banner). This server never presses a banner \
     button and never runs an action itself.
     """
 

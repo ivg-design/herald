@@ -393,6 +393,7 @@ final class Runner {
         ScreenshotMode.seedHistory(c)
         for (name, app, search, o) in [
             ("history", HistorySelection.allID, "", Opts(title: "History", shows: "The History window with All Apps selected: the apps sidebar with counts, the search field, and the newest-first list of past notifications as banner-style rows.", section: "history", settle: 1.0)),
+            ("history-group-folded", "vercel", "", Opts(title: "History with a folded group", shows: "The History window with Vercel selected: three notifications sent with the same group are folded into one row, herald-web, with an arrow to open it and a line saying 3 notifications and how many were not dismissed.", section: "history", settle: 1.0)),
             ("history-filtered", ScreenshotMode.ciApp, "build", Opts(title: "History filtered", shows: "The History window with GitHub Actions selected in the sidebar and the text \"build\" in the search field, so only matching rows are listed.", section: "history", settle: 1.0))] {
             guard wants(name) else { continue }
             let w = ShotWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 640), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
