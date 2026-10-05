@@ -22,11 +22,16 @@ Herald does these things for every `rive` component:
    the mouse (`hover` and `pressed`).
 4. It optionally runs an action when the animation is clicked.
 
+A file that is built on data binding plays by itself. When the artboard has a view model and the component has no
+`inputBindings`, Herald attaches the file's own default view model instance before the animation starts, so scripts
+and bound properties run as they do in the Rive editor. A character that blinks and looks around from a script needs
+nothing set in the component.
+
 Rive's own features go further than this. Herald does not use these, so design the animation without them:
 
 | Rive feature | What to do instead |
 |---|---|
-| Data binding (view models and their properties). | Drive the animation with state machine inputs. |
+| Setting view model properties from a notification's fields. | Drive the animation with state machine inputs. |
 | Text runs set from a field. | Put the text in a [`text` component](components/text.md) beside the animation. |
 | Rive events. | Run an action when the animation is clicked. |
 | Audio. | Use Herald's own [voice and sounds](voice.md). |

@@ -30,6 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        #if DEBUG
+        if RiveProbe.runIfAsked() { return }
+        #endif
         let controller = self.controller
         SettingsWindowController.shared.makeContent = { NSHostingView(rootView: SettingsView(controller: controller)) }
         NSApp.mainMenu = HeraldMainMenu.make()

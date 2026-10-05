@@ -15,6 +15,10 @@ import RiveRuntime
 ///    or `component.path`, through `AssetStore` (so the extension and the 10 MB cap are checked first).
 ///  * Plays the state machine `component.stateMachine` (else the manifest asset's, else the file's default, else its
 ///    first; a file with only linear animations plays the first one, and `component.loop` picks loop or one shot).
+///  * A file that carries a view model (data binding, usually with scripts that drive it: a character that blinks and
+///    looks around by itself) and has no `inputBindings` is played by the runtime's data-binding player, which
+///    attaches the file's own default view model instances before its scripts start, as the Rive editor does. Such a
+///    file needs nothing set: it starts when the banner appears.
 ///  * Binds `component.inputBindings` (`inputName` -> `{token}`, a literal, or `hover` / `pressed`). Number, boolean and
 ///    trigger inputs are told apart by the state machine itself: a number takes the token's number (a list its length,
 ///    a boolean 1/0), a boolean its truthiness, a trigger fires when the bound value changes to something truthy
@@ -142,6 +146,26 @@ final class RiveHostView: NSView {
     private var loadKey: LoadKey?
     private(set) var viewModel: RiveViewModel?
     private var riveView: RiveView?
+    /// The data-binding player's view, for a file that carries a view model (see `startDataBound`).
+    private var dataBoundView: RiveUIView?
+    private var dataBoundTask: Task<Void, Never>?
+    /// The view model instance attached to a data-bound animation.
+    private(set) var dataBoundInstance: ViewModelInstance?
+    /// True from the moment a data-bound file is accepted (its view arrives a moment later).
+    private(set) var playsDataBound = false
+    /// Whether an animation is loaded (or loading) rather than the placeholder.
+    var isLoaded: Bool { viewModel != nil || playsDataBound }
+    /// One Rive worker (its render thread) for every data-bound animation in the app.
+    private static var sharedWorker: Worker?
+    private static func worker() async throws -> Worker {
+        if let w = sharedWorker { return w }
+        let w = try await Worker()
+        if let existing = sharedWorker { return existing }
+        sharedWorker = w
+        return w
+    }
+    /// The view model instance bound to the playing artboard (kept alive here; nil for a file without one).
+    private(set) var boundInstance: RiveDataBindingViewModel.Instance?
     private var placeholder: RiveLoadFailureView?
     /// The state machine's inputs by name, as found in the file (empty while the placeholder shows).
     private(set) var inputKinds: [String: InputKind] = [:]
@@ -188,7 +212,7 @@ final class RiveHostView: NSView {
     /// Whether this view has to receive mouse buttons (a click action, or a `pressed` input); a view that only
     /// tracks hover is invisible to hit testing so the banner body keeps its own click.
     private var isInteractive: Bool {
-        guard viewModel != nil else { return false }
+        guard isLoaded else { return false }
         if clickActionID != nil { return true }
         return config?.component.inputBindings.values.contains { RiveInputBinding.pointerKeyword($0) == "pressed" } ?? false
     }
@@ -230,7 +254,22 @@ final class RiveHostView: NSView {
                 throw LoadError.nothingToPlay
             }
 
+            // A file with a view model and nothing for Herald to drive goes to the data-binding player: the old
+            // player starts the file's scripts before a view model can be attached, and they give up.
+            if machine != nil, cfg.component.inputBindings.isEmpty, file.defaultViewModel(for: artboard) != nil {
+                artboardSize = CGSize(width: artboard.width(), height: artboard.height())
+                startDataBound(data: data, artboard: artboardName, machine: wanted)
+                needsLayout = true
+                return
+            }
+
             let model = RiveModel(riveFile: file)
+            // A file built on data binding (a view model its scripts and state machine read and write, such as a
+            // character that blinks from a script) does nothing until an instance of that view model is bound. Bind
+            // the artboard's default instance; a file without a view model is left as it is.
+            // Asked for before the artboard is set, so the instance is bound the moment the artboard exists and the
+            // file's scripts find it when they start.
+            model.enableAutoBind { [weak self] instance in self?.boundInstance = instance }
             let vm: RiveViewModel
             if let machine {
                 vm = RiveViewModel(model, stateMachineName: machine, fit: .contain, alignment: .center,
@@ -260,6 +299,39 @@ final class RiveHostView: NSView {
         needsLayout = true
     }
 
+    /// Plays `data` with the runtime's data-binding player: the state machine is created with the file's authored
+    /// default view model instances already attached, so scripts and bound properties work as in the editor.
+    private func startDataBound(data: Data, artboard: String?, machine: String?) {
+        playsDataBound = true
+        let key = loadKey
+        dataBoundTask = Task { @MainActor [weak self] in
+            do {
+                let worker = try await Self.worker()
+                let file = try await RiveRuntime.File(source: .data(data), worker: worker)
+                let board = try await file.createArtboard(artboard)
+                // The artboard's own default instance, kept here so its values can be read; when the file names none
+                // the runtime attaches its authored default by itself.
+                let info = try? await file.getDefaultViewModelInfo(for: board)
+                var instance: ViewModelInstance?
+                if let info { instance = try? await file.createViewModelInstance(.name(info.instanceName, from: .name(info.viewModelName))) }
+                let stateMachine = try await board.createStateMachine(machine, binding: instance)
+                let rive = try await Rive(file: file, artboard: board, stateMachine: stateMachine)
+                guard let self, !Task.isCancelled, self.loadKey == key, self.playsDataBound else { return }
+                let view = RiveUIView(rive: rive)
+                view.frame = self.bounds
+                view.autoresizingMask = [.width, .height]
+                self.addSubview(view)
+                self.dataBoundView = view
+                self.dataBoundInstance = instance
+            } catch {
+                guard let self, !Task.isCancelled, self.loadKey == key else { return }
+                self.playsDataBound = false
+                self.loadError = error.localizedDescription
+                self.showPlaceholder(error.localizedDescription)
+            }
+        }
+    }
+
     private static func inputKinds(of machine: RiveStateMachineInstance) -> [String: InputKind] {
         var out: [String: InputKind] = [:]
         for name in machine.inputNames() {
@@ -277,8 +349,14 @@ final class RiveHostView: NSView {
         viewModel?.pause()
         viewModel?.deregisterView()
         riveView?.removeFromSuperview()
+        dataBoundTask?.cancel(); dataBoundTask = nil
+        dataBoundView?.removeFromSuperview(); dataBoundView = nil
+        dataBoundInstance = nil
+        playsDataBound = false
         placeholder?.removeFromSuperview()
+        viewModel?.riveModel?.disableAutoBind()
         viewModel = nil; riveView = nil; placeholder = nil
+        boundInstance = nil
         inputKinds = [:]; applied = [:]; artboardSize = nil
     }
 
@@ -390,14 +468,17 @@ final class RiveHostView: NSView {
         pressing = true
         setPointer("pressed", active: true)
         riveView?.mouseDown(with: event)
+        dataBoundView?.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
         riveView?.mouseDragged(with: event)
+        dataBoundView?.mouseDragged(with: event)
     }
 
     override func mouseUp(with event: NSEvent) {
         riveView?.mouseUp(with: event)
+        dataBoundView?.mouseUp(with: event)
         let wasPressing = pressing
         pressing = false
         setPointer("pressed", active: false)
@@ -459,6 +540,7 @@ final class RiveHostView: NSView {
     override func layout() {
         super.layout()
         riveView?.frame = bounds
+        dataBoundView?.frame = bounds
         placeholder?.frame = bounds
     }
 }

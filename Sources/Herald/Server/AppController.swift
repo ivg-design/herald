@@ -460,7 +460,7 @@ final class AppController {
                       animations: a.animations)
             }
         }
-        return RiveCheckReply(loaded: host.loadError == nil && host.viewModel != nil, error: host.loadError,
+        return RiveCheckReply(loaded: host.loadError == nil && host.isLoaded, error: host.loadError,
                               inputs: host.inputKinds.mapValues(\.rawValue), applied: host.applied.mapValues(text),
                               artboards: artboards, takesClicks: host.takesClicks, pointerWrites: host.pointerWrites,
                               clickedActions: clicked)

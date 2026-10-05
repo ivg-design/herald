@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.9.1"
-    CURRENT_PROJECT_VERSION: "23"
+    MARKETING_VERSION: "1.9.2"
+    CURRENT_PROJECT_VERSION: "24"
 packages:
   # Rive Apple runtime (a binary xcframework, macOS 13.1+). Only the Herald app target links it;
   # HeraldClient stays dependency-free. Pinned: Rive's Swift API still moves between minor releases.
@@ -61,8 +61,8 @@ targets:
         INFOPLIST_KEY_NSRemindersUsageDescription: "Herald adds a reminder when you press Add to Reminders on a notification."
         CODE_SIGN_ENTITLEMENTS: Resources/Herald.entitlements
         ENABLE_APP_SANDBOX: NO
-        MARKETING_VERSION: "1.9.1"
-        CURRENT_PROJECT_VERSION: "23"
+        MARKETING_VERSION: "1.9.2"
+        CURRENT_PROJECT_VERSION: "24"
         # Signing / notarization (see ~/github/NOTARIZATION.md)
         DEVELOPMENT_TEAM: 7S422NVLUK
         CODE_SIGN_IDENTITY: "Developer ID Application"
@@ -82,8 +82,8 @@ targets:
       base: &toolsettings
         PRODUCT_NAME: herald-mcp
         PRODUCT_BUNDLE_IDENTIFIER: com.ivg.herald.mcp
-        MARKETING_VERSION: "1.9.1"
-        CURRENT_PROJECT_VERSION: "23"
+        MARKETING_VERSION: "1.9.2"
+        CURRENT_PROJECT_VERSION: "24"
         DEVELOPMENT_TEAM: 7S422NVLUK
         CODE_SIGN_IDENTITY: "Developer ID Application"
         CODE_SIGN_STYLE: Manual
