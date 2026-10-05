@@ -11,6 +11,8 @@ MAX_DEVICES = "5"
 # override any of them here: DEVICE_NOTIFICATIONS_PER_DAY, DEVICE_QUEUE_MAX, DEVICE_REQUESTS_PER_DAY, DEVICE_AUDIO_UPLOADS_PER_DAY,
 # DEVICE_AUDIO_BYTES_PER_DAY, DEVICE_POLL_SECONDS_PER_DAY.
 PAIR_STARTS_PER_HOUR = "6"
+# Optional: limit where MCP Events callbacks may go (comma-separated host names). Empty or unset = any public https host.
+# EVENT_CALLBACK_HOSTS = ""
 
 # Secrets (set once, never committed):
 #   wrangler secret put RELAY_SECRET      required. Signs device ids so strangers cannot spawn mailboxes.

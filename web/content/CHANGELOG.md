@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.7.0 (Build 17) - 2026-10-04
+
+### Added
+
+- Reply subscriptions (MCP Events): a cloud agent subscribes once to `notification.reply` and your relay calls its webhook the
+  moment you answer one of its notifications, so it no longer has to poll. The connector's approval is the only
+  authorisation: nothing to copy, no code, no second question. A subscription is durable like the connection itself; it
+  ends when the agent unsubscribes, when you end it, or when you revoke the connector. The callback carries ids only,
+  signed (Standard Webhooks); the agent reads your answer with `get_receipt`.
+- The relay's `/mcp` is dual-era: protocol 2026-07-28 clients get `server/discover`, `events/list`, `events/subscribe` and
+  `events/unsubscribe`; legacy clients are unchanged.
+- Settings > Cloud > Reply subscriptions lists who is subscribed, with End. `relay_events` and
+  `relay_remove_event_subscription` on the local MCP (`GET /v1/relay/events`, `DELETE /v1/relay/events/subscriptions/{id}`).
+
+### Changed
+
+- The agent instructions (device flow) no longer tell agents to refresh tokens: the connection is durable.
+- Upgrade the relay from Settings > Cloud to get this; pairing, approvals and tokens are kept.
+
+Relay: 169 tests.
+
 ## 1.6.6 (Build 16) - 2026-10-04
 
 ### Changed

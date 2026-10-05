@@ -391,6 +391,39 @@ adds those two buttons (banners stay until dismissed anyway; the notification is
   `durationSeconds` and `audioUrl`, a signed link valid for one hour (HMAC over key and expiry; no other credential). History keeps the
   local m4a and the transcript. The banner never takes focus except while you click into the Reply field.
 
+### Being told about a reply (event subscription)
+
+Instead of polling `wait_for_reply`, a cloud agent can subscribe once and be called the moment the user answers. This is MCP Events
+(protocol `2026-07-28`), the same mechanism the bidbot relay uses to wake Dotcliffe.
+
+**Nothing to set up on the Mac.** The connector's approval is what authorises its subscriptions: no code, no password, no second
+question. A subscription is as durable as the connection: it does not expire and needs no refreshing. It ends when the agent
+unsubscribes, when you end it in Settings > Cloud > **Reply subscriptions**, or when you revoke the connector.
+
+- **Discovery**: a modern client (header `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, and `_meta` with
+  `io.modelcontextprotocol/protocolVersion` and `clientCapabilities` on every request) gets `server/discover` (capabilities `tools` and
+  `events`), `events/list`, `events/subscribe` and `events/unsubscribe`. Legacy clients (`initialize`) keep working with tools only.
+- **The event**: `notification.reply`, no arguments. It fires once per notification, when the user first answers (typed or recorded)
+  a notification **that same connector** sent. `data` is `{notificationId, id, kind: "text" | "voice"}`: ids only, never the answer.
+  The agent reads the answer with `get_receipt` or `wait_for_reply`.
+- **Subscribe**: `delivery` is `{mode: "webhook", url, secret}`. `url` is https on the default port, a public host, no credentials,
+  at most 2048 characters. `secret` is `whsec_` + base64 of 24 to 64 bytes, made by the agent. The relay first POSTs a signed
+  `{type: "verification", challenge}`; the callback must answer 2xx with the same `challenge`, otherwise `-32015` with
+  `data.reason` (`unreachable`, `bad_status`, `challenge_mismatch`). Subscribing again with the same URL keeps the id and does not
+  verify again. At most 5 subscriptions per connector. `refreshBefore` is reported ten years ahead for clients that expect the field;
+  `ttlMs` is accepted and ignored.
+- **Delivery**: queued in the same step as the reply, sent at once. Each POST carries `webhook-id` (stable across retries),
+  `webhook-timestamp`, `webhook-signature: v1,<HMAC-SHA256>` (Standard Webhooks) and `X-MCP-Subscription-Id`. Network errors, 5xx,
+  408 and 429 are retried with backoff from 1 minute (8 attempts, at most a day; `Retry-After` is honoured), in order per
+  subscription. 410 ends the subscription; any other 4xx drops that one event.
+- **Cursor**: each event's cursor is its sequence number. Subscribing with a cursor replays up to 100 later replies of that
+  connector; `truncated` is true if older history (30 days) is gone.
+- **Where callbacks may go**: any public https host the approved connector names. Local, private and reserved addresses are always
+  refused. To narrow it on your own relay, set the Worker var `EVENT_CALLBACK_HOSTS` (comma-separated host names).
+- **On the Mac**: Settings > Cloud > Reply subscriptions lists each subscription (connector, host, anything waiting) with **End**;
+  `relay_events` and `relay_remove_event_subscription` do the same over the local MCP (`GET /v1/relay/events`,
+  `DELETE /v1/relay/events/subscriptions/{id}`). The path of the callback and its secret are never shown.
+
 ## Security model
 
 - **Outbound only.** Herald opens the WebSocket; the Mac has no listener for the relay and the loopback API stays on 127.0.0.1.

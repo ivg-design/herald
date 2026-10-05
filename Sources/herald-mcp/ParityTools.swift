@@ -229,6 +229,22 @@ enum ParityTools {
             route: { _ in RouteCall(method: "GET", path: "/v1/relay/connectors") }),
 
         ParityTool(definition: MCPToolDefinition(
+            name: "relay_events", title: "Cloud relay event subscriptions",
+            description: "Event subscriptions on the relay (MCP Events): a cloud agent subscribes to notification.reply with a webhook and the relay calls it when the user answers one of that agent's notifications. A connector's approval is all a subscription needs. Returns the live subscriptions with their connector, host and pending count. Never a URL path or secret.",
+            inputSchema: Schema.input(), readOnly: true, idempotent: true),
+            route: { _ in RouteCall(method: "GET", path: "/v1/relay/events") }),
+
+        ParityTool(definition: MCPToolDefinition(
+            name: "relay_remove_event_subscription", title: "End a relay event subscription",
+            description: "End one event subscription by its id (from relay_events). The connector stays approved and can subscribe again.",
+            inputSchema: Schema.input(["id": Schema.string("The subscription id (sub_ and 20 hex characters) from relay_events.")], required: ["id"]),
+            destructive: true, idempotent: true),
+            route: { a in
+                guard let id = try text(a, "id") else { throw ToolFailure("id is required") }
+                return RouteCall(method: "DELETE", path: "/v1/relay/events/subscriptions/\(id)")
+            }),
+
+        ParityTool(definition: MCPToolDefinition(
             name: "create_agent_key", title: "Create a cloud agent key",
             description: """
             Mint a notify-only key for a cloud agent (Settings > Cloud > Agent keys). The reply holds the key ONCE (the relay keeps only a hash)             and a connector block with the MCP URL and Bearer for Claude, Codex and any remote MCP client. The key can send notifications and             read their receipts and replies; it cannot run commands, set callbacks or change anything on this Mac. Its notifications arrive as             the app cloud.<name>. Requires the Mac to be paired (relay_status).

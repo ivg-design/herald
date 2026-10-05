@@ -1052,3 +1052,61 @@ final class DeviceFlowInstructionsTests: XCTestCase {
         XCTAssertTrue(RelayInstructions.oauth(mcpURL: "https://r.example.com/mcp").contains("device flow"))
     }
 }
+
+final class RelayEventsRouteTests: XCTestCase {
+    final class Backend: RelayBackend, @unchecked Sendable {
+        var removed: [String] = []
+        func relayStatus() async -> RelayStatusReply {
+            RelayStatusReply(paired: true, state: "Online", online: true, relayURL: "https://r", mcpURL: "https://r/mcp", deviceId: "d", lastSeenAt: nil, keys: [], log: [])
+        }
+        func relayConnectors() async -> RelayConnectorsReply { RelayConnectorsReply() }
+        func relayPair() async throws -> (code: String, deviceId: String) { ("ABCD-EFGH", "d") }
+        func relayUnpair() async throws {}
+        func relayCreateKey(name: String, client: String) async throws -> RelayKeyCreated { throw RelayError.notPaired }
+        func relayRevokeKey(id: String) async throws {}
+        func relayUsage() async throws -> RelayUsage { throw RelayError.notPaired }
+        func relayEvents() async throws -> RelayEvents {
+            RelayEvents(restrictedTo: [], subscriptions: [.init(id: "sub_0123456789abcdef0123", event: "notification.reply", host: "hooks.example.com",
+                                                                 key: .init(id: "2ed25251", name: "dot-cloud", displayName: "Dot cloud computer"), createdAt: nil, pending: 0)])
+        }
+        func relayRemoveEventSubscription(id: String) async throws { removed.append(id) }
+    }
+
+    private func call(_ method: String, _ path: String, _ b: RelayBackend, auth: Bool = true) async -> HTTPResponse? {
+        await RelayRoutes.handle(HTTPRequest(method: method, path: path, headers: auth ? ["authorization": "Bearer tok"] : [:], body: Data()), token: "tok", backend: b)
+    }
+
+    func testTheEventsRouteListsSubscriptionsWithoutPathsOrSecrets() async throws {
+        let b = Backend()
+        let denied = await call("GET", "/v1/relay/events", b, auth: false)
+        XCTAssertEqual(denied?.status, 401)
+        let ok = await call("GET", "/v1/relay/events", b)
+        XCTAssertEqual(ok?.status, 200)
+        let text = String(decoding: ok!.body, as: UTF8.self)
+        XCTAssertTrue(text.contains("hooks.example.com"))
+        XCTAssertTrue(text.contains("Dot cloud computer"))
+        XCTAssertFalse(text.contains("whsec_"))
+        XCTAssertFalse(text.contains("https://"))
+    }
+
+    func testEndingASubscriptionChecksTheIdShape() async {
+        let b = Backend()
+        let bad = await call("DELETE", "/v1/relay/events/subscriptions/nope", b)
+        XCTAssertEqual(bad?.status, 400)
+        let ok = await call("DELETE", "/v1/relay/events/subscriptions/sub_0123456789abcdef0123", b)
+        XCTAssertEqual(ok?.status, 200)
+        XCTAssertEqual(b.removed, ["sub_0123456789abcdef0123"])
+    }
+
+    func testABackendWithoutEventsAnswersNotPaired() async {
+        let r = await call("GET", "/v1/relay/events", RelayRoutesTests.FakeBackend())
+        XCTAssertEqual(r?.status, 409)
+    }
+
+    func testTheRelaysEventsAnswerDecodes() throws {
+        let json = #"{"restrictedTo":[],"subscriptions":[{"id":"sub_0123456789abcdef0123","event":"notification.reply","host":"h.example.com","key":{"id":"2ed25251","name":"dot"},"createdAt":"2026-10-04T10:00:00.000Z","pending":2}]}"#
+        let e = try HeraldJSONCoding.decoder.decode(RelayEvents.self, from: Data(json.utf8))
+        XCTAssertEqual(e.subscriptions.first?.pending, 2)
+        XCTAssertEqual(e.subscriptions.first?.key.title, "dot")
+    }
+}

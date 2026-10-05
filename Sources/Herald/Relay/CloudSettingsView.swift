@@ -43,6 +43,7 @@ struct CloudSettingsView: View {
             if relay.isPaired { instructionsSection }
             if relay.isPaired {
                 connectorSection
+                eventsSection
                 Section("Agent keys") {
                     ForEach(relay.keys.filter(\.isActive)) { k in keyRow(k) }
                     if relay.keys.allSatisfy({ !$0.isActive }) { Text("No keys yet.").font(.caption).foregroundStyle(.secondary) }
@@ -83,7 +84,7 @@ struct CloudSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: { Text("This unpairs this Mac and revokes every agent key and connector. The relay itself stays in your Cloudflare account.") }
         .onAppear {
-            if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); await relay.refreshHealth(); _ = try? await relay.relayUsage() } }
+            if relay.isPaired { Task { await relay.refreshKeys(); await relay.refreshConsents(); await relay.refreshEvents(); await relay.refreshHealth(); _ = try? await relay.relayUsage() } }
         }
     }
 
@@ -215,6 +216,31 @@ struct CloudSettingsView: View {
                     Spacer()
                     Button("Revoke", role: .destructive) { run { try await relay.relayRevokeKey(id: k.id) } } .heraldHelp(.cloudRevoke)
                 }
+            }
+        }
+    }
+
+    /// MCP Events: the cloud agents that are told the moment you reply. Nothing to set up: an approved connector subscribes by itself.
+    @ViewBuilder private var eventsSection: some View {
+        let _ = ticker.tick
+        Section("Reply subscriptions") {
+            Text("A connected agent can ask to be told the moment you reply to one of its notifications, instead of checking again and again. Its approval covers this, so there is nothing to set up. Your relay sends a signed note (ids only, never your text) to the agent\u{2019}s address. A subscription lasts until you end it here or revoke the connector.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let e = relay.events {
+                ForEach(e.subscriptions) { sub in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(sub.key.title) \u{2192} \(sub.host)")
+                            Text(sub.pending == 0 ? "told about replies \u{00B7} up to date" : "told about replies \u{00B7} \(sub.pending) waiting to be delivered").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("End", role: .destructive) { run { try await relay.removeEventSubscription(id: sub.id) } }
+                            .heraldHelp(name: "End subscription", detail: "stops telling this agent about replies; it stays connected and can subscribe again")
+                    }
+                }
+                if e.subscriptions.isEmpty { Text("No agent is subscribed yet.").font(.caption).foregroundStyle(.secondary) }
+            } else {
+                Text("This relay does not support reply subscriptions yet. Upgrade it below to turn them on.").font(.caption).foregroundStyle(.secondary)
             }
         }
     }

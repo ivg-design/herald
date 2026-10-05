@@ -56,6 +56,14 @@ public protocol RelayBackend: Sendable {
     func relayCreateKey(name: String, client: String) async throws -> RelayKeyCreated
     func relayRevokeKey(id: String) async throws
     func relayUsage() async throws -> RelayUsage
+    /// Event subscriptions on the relay (never a path or secret).
+    func relayEvents() async throws -> RelayEvents
+    func relayRemoveEventSubscription(id: String) async throws
+}
+
+public extension RelayBackend {
+    func relayEvents() async throws -> RelayEvents { throw RelayError.notPaired }
+    func relayRemoveEventSubscription(id: String) async throws { throw RelayError.notPaired }
 }
 
 /// `/v1/relay/*` on Herald's loopback API, answered ahead of the router like the snooze routes. Same bearer token as the rest.
@@ -68,7 +76,10 @@ public protocol RelayBackend: Sendable {
 ///   DELETE /v1/relay/keys/{id}     revokes a key
 ///   GET  /v1/relay/usage           what today has cost of the free plan
 ///   GET  /v1/relay/connectors      connectors approved through OAuth (kind oauth) and requests waiting for approval (no codes)
+///   GET  /v1/relay/events          the live event subscriptions (which connector is told about replies, and at which host)
+///   DELETE /v1/relay/events/subscriptions/{id}   ends one subscription
 struct RevokedReply: Encodable { var revoked: Bool; var id: String }
+struct RemovedReply: Encodable { var removed: Bool; var id: String }
 struct KeysReply: Encodable { var keys: [RelayKeyInfo] }
 struct PairReply: Encodable { var paired: Bool; var code: String; var deviceId: String }
 
@@ -117,7 +128,14 @@ public enum RelayRoutes {
                 return HTTPResponse.json(201, try await backend.relayCreateKey(name: name, client: b.client ?? "other"))
             case ("GET", "connectors"): return HTTPResponse.json(200, await backend.relayConnectors())
             case ("GET", "usage"): return HTTPResponse.json(200, try await backend.relayUsage())
+            case ("GET", "events"): return HTTPResponse.json(200, try await backend.relayEvents())
             default:
+                if req.method == "DELETE", sub.hasPrefix("events/subscriptions/") {
+                    let id = String(sub.dropFirst("events/subscriptions/".count))
+                    guard id.range(of: "^sub_[0-9a-f]{20}$", options: .regularExpression) != nil else { throw BackendError(400, "bad subscription id") }
+                    try await backend.relayRemoveEventSubscription(id: id)
+                    return HTTPResponse.json(200, RemovedReply(removed: true, id: id))
+                }
                 if req.method == "DELETE", sub.hasPrefix("keys/") {
                     let id = String(sub.dropFirst("keys/".count))
                     guard id.range(of: "^[0-9a-f]{8}$", options: .regularExpression) != nil else { throw BackendError(400, "bad key id") }

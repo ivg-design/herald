@@ -19,6 +19,8 @@ final class RelayController: RelayHost, RelayBackend {
     /// Connector requests the relay has pushed (the OAuth flow): pending ones show a banner and a code in Settings > Cloud.
     private(set) var consentBook = ConsentBook()
     private var consentExpiry: Task<Void, Never>?
+    /// Event subscriptions on the relay (RelayController+Events.swift); nil until the relay was asked, or when it predates them.
+    var events: RelayEvents?
     static let consentApp = HeraldIdentity.app
     // Relay setup (Cloudflare deploy): see RelayController+Setup.swift.
     let cloudConfig: RelayCloudConfigStore
@@ -329,7 +331,7 @@ final class RelayController: RelayHost, RelayBackend {
         client.stop()
         tokens.delete()
         store.update { $0.deviceId = nil; $0.pairedAt = nil; $0.lastSeenAt = nil }
-        keys = []; usage = nil; issuerKeys = []; consentBook = ConsentBook(); devices = []
+        keys = []; usage = nil; issuerKeys = []; consentBook = ConsentBook(); devices = []; events = nil
         client.start()
         controller.changed()
     }

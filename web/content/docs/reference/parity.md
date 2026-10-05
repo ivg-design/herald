@@ -131,6 +131,7 @@ The Designer's editing verbs are helpers that rewrite the template; the saved re
 | Test connection | `POST /v1/relay/test` | `relay_test` |
 | ChatGPT / Claude / Codex instruction blocks | `GET /v1/relay/instructions` | `relay_instructions` |
 | Connected agents, revoke; create a key | `GET /v1/relay/connectors`, `GET /v1/relay/keys`, `DELETE`, `POST /v1/relay/keys` | `list_connectors`, `revoke_agent_key`, `create_agent_key` |
+| Reply subscriptions: list, end | `GET /v1/relay/events`, `DELETE /v1/relay/events/subscriptions/{id}` | `relay_events`, `relay_remove_event_subscription` |
 | Usage today | `GET /v1/relay/usage` | `relay_usage` |
 | Read the Cloudflare token back | none | none (by design) |
 | Approve a connector request | none | none (by design: only on the Mac) |

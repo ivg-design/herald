@@ -385,7 +385,7 @@ final class MCPProtocolTests: XCTestCase {
         "list_shortcuts", "add_action_rule", "list_history", "dismiss", "list_stacks", "speak", "get_quiet_hours", "set_quiet_hours",
         // Parity with the editor and Settings (docs/reference/parity.md).
         "get_settings", "set_settings", "list_apps", "update_app_settings", "register_app", "delete_app", "voice_status", "install_voice",
-        "install_mcp", "get_replies", "wait_for_reply", "relay_status", "relay_usage", "list_connectors", "create_agent_key", "revoke_agent_key",
+        "install_mcp", "get_replies", "wait_for_reply", "relay_status", "relay_usage", "list_connectors", "relay_events", "relay_remove_event_subscription", "create_agent_key", "revoke_agent_key",
         "relay_token_url", "relay_set_cloudflare_token", "relay_deploy", "relay_pair", "relay_unpair", "relay_settings", "relay_zones", "relay_delete", "relay_instructions", "relay_test",
         "list_approvals", "revoke_approval", "duplicate_template", "rename_template", "set_default_template",
         "export_template_bundle", "import_template_bundle", "delete_manifest", "list_assets", "upload_asset", "delete_asset",

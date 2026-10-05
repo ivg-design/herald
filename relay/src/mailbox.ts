@@ -3,6 +3,8 @@ import { agentKey, oauthToken, parseOAuthSecret, parseToken, type Principal } fr
 import { DAY_MS, bearer, err, hmacHex, json, randomHex, safeEqual, sha256Hex } from "./util";
 import { limitsFor } from "./limits";
 import { ICON_BODY_ALLOWANCE, validateNotification } from "./validate";
+import { DELIVERY_TIMEOUT_MS, EVENT_HISTORY_MS, HEAD, HOUR_MS, MAX_ATTEMPTS, MAX_REPLAY, MAX_SUBS_PER_KEY, REFRESH_AHEAD_MS, REPLY_EVENT, RETRY_BASE_MS,
+  cleanHost, hmacB64, publicHost, retryAfterMs, signingKey, type EventRow, type Outbox, type RpcOut, type Sub } from "./events";
 
 export const RATE_WINDOW_MS = 10 * 60 * 1000;
 export const MAX_LONG_POLL_S = 60;
@@ -82,6 +84,11 @@ export class Mailbox extends DurableObject<Env> {
         suppressed_reason TEXT, suppressed_scope TEXT);
       CREATE UNIQUE INDEX IF NOT EXISTS notes_key_nid ON notes (key_id, nid);
       CREATE TABLE IF NOT EXISTS rate (key_id TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, rid TEXT NOT NULL, nid TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS event_subs (id TEXT PRIMARY KEY, key_id TEXT NOT NULL, name TEXT NOT NULL, args TEXT NOT NULL, url TEXT NOT NULL,
+        secret TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE (key_id, name, args, url));
+      CREATE TABLE IF NOT EXISTS event_outbox (id TEXT PRIMARY KEY, sub_id TEXT NOT NULL, seq INTEGER NOT NULL, payload TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_name TEXT NOT NULL, redirect_uri TEXT NOT NULL,
         challenge TEXT NOT NULL, state TEXT, scope TEXT NOT NULL, resource TEXT NOT NULL, user_code TEXT NOT NULL, status TEXT NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, code TEXT, code_hash TEXT, key_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
@@ -156,7 +163,26 @@ export class Mailbox extends DurableObject<Env> {
 
   // ---------- routing
 
+  /** Set when a write queued an event delivery; the alarm is pulled forward once the request is answered. */
+  private kick = false;
+  /** Outbound HTTP for event deliveries. Replaceable in tests. */
+  outbound: (url: string, init: RequestInit) => Promise<Response> = (url, init) => fetch(url, init);
+
   async fetch(req: Request): Promise<Response> {
+    this.kick = false;
+    const res = await this.route(req);
+    await this.kickAlarm();
+    return res;
+  }
+
+  private async kickAlarm() {
+    if (!this.kick) return;
+    this.kick = false;
+    const at = Date.now(), cur = await this.ctx.storage.getAlarm();
+    if (cur == null || cur > at) await this.ctx.storage.setAlarm(at);
+  }
+
+  private async route(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
     const m = req.method;
@@ -180,6 +206,9 @@ export class Mailbox extends DurableObject<Env> {
         if (am && m === "PUT") return this.putAudio(req, am[1]);
         if (path === "/v1/device/consents" && m === "GET") return json(200, { consents: this.consentList() });
         if (path === "/v1/device/consent" && m === "POST") return this.deviceConsent(req);
+        if (path === "/v1/device/events" && m === "GET") return json(200, this.eventsView());
+        const sm = /^\/v1\/device\/events\/subscriptions\/(sub_[0-9a-f]{20})$/.exec(path);
+        if (sm && m === "DELETE") { this.dropSubs("id = ?", sm[1]); return json(200, { removed: true, id: sm[1] }); }
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a.p as Extract<Principal, { kind: "device" }>);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
@@ -204,6 +233,8 @@ export class Mailbox extends DurableObject<Env> {
         const limited = this.readLimit(key, path === "/v1/notify");
         if (limited) return limited;
       }
+      if (path === "/v1/events/subscribe" && m === "POST") return json(200, await this.subscribe(key, await this.rpcParams(req)));
+      if (path === "/v1/events/unsubscribe" && m === "POST") return json(200, this.unsubscribe(key, await this.rpcParams(req)));
       if (path === "/v1/notify" && m === "POST") return this.notify(req, key);
       if (path === "/v1/status" && m === "GET") return json(200, this.agentStatus());
       let r = /^\/v1\/receipts\/([^/]+)$/.exec(path);
@@ -275,11 +306,14 @@ export class Mailbox extends DurableObject<Env> {
     if (purge) {
       this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
       this.sql("DELETE FROM notes WHERE key_id = ?", id);
+      this.sql("DELETE FROM events WHERE key_id = ?", id);
+      this.dropSubs("key_id = ?", id);
       this.sql("DELETE FROM keys WHERE id = ?", id);
       return json(200, { revoked: true, purged: true, id });
     }
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id); // a revoked connector's tokens die with its key
+    this.dropSubs("key_id = ?", id);                          // and so do its event subscriptions
     return json(200, { revoked: true, id });
   }
 
@@ -575,6 +609,7 @@ export class Mailbox extends DurableObject<Env> {
         break;
       case "receipt":
         this.applyReceipt(m);
+        await this.kickAlarm();
         break;
     }
   }
@@ -1001,6 +1036,7 @@ export class Mailbox extends DurableObject<Env> {
         const transcript = typeof m.transcript === "string" ? m.transcript.trim().slice(0, 4000) : "";
         const secs = typeof m.durationSeconds === "number" && m.durationSeconds >= 0 && m.durationSeconds <= 600 ? m.durationSeconds : null;
         if (!text && !transcript && !n.audio_key) return "invalid";
+        if (n.replied_at == null) this.emitReply(n, text ? "text" : "voice", now);
         this.sql(
           "UPDATE notes SET replied_at = COALESCE(replied_at, ?), reply = COALESCE(reply, ?), transcript = COALESCE(transcript, ?), audio_seconds = COALESCE(?, audio_seconds), acked_at = COALESCE(acked_at, ?) WHERE rid = ?",
           now, text || null, transcript || null, secs, now, id);
@@ -1147,8 +1183,199 @@ export class Mailbox extends DurableObject<Env> {
     this.sql("DELETE FROM rate WHERE at < ?", now - RATE_WINDOW_MS);
     this.sql("DELETE FROM meta WHERE k LIKE 'usage:%' AND k < ?", "usage:" + new Date(now - 7 * DAY_MS).toISOString().slice(0, 10));
     this.expireConsents(now);
-    const left = this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM notes")[0].n;
-    if (left > 0) await this.ctx.storage.setAlarm(now + 60 * 60 * 1000);
-    await this.scheduleConsentAlarm();
+    this.sql("DELETE FROM events WHERE at < ?", now - EVENT_HISTORY_MS);
+    this.sql("DELETE FROM event_outbox WHERE created_at < ? OR sub_id NOT IN (SELECT id FROM event_subs)", now - DAY_MS);
+    try { await this.deliverDue(now); } finally {
+      const left = this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM notes")[0].n;
+      if (left > 0) await this.ctx.storage.setAlarm(now + 60 * 60 * 1000);
+      await this.scheduleConsentAlarm();
+      // The oldest undelivered event of any subscription decides when to wake next.
+      const nextOut = this.sql<{ n: number | null }>(`SELECT MIN(next_at) AS n FROM event_outbox o WHERE ${HEAD}`)[0].n;
+      if (nextOut != null) {
+        const at = Math.max(nextOut, Date.now() + 1000), cur = await this.ctx.storage.getAlarm();
+        if (cur == null || cur > at) await this.ctx.storage.setAlarm(at);
+      }
+    }
+  }
+
+  // ---------- MCP Events: a reply on the Mac wakes the agent that asked (events.ts)
+
+  private async rpcParams(req: Request): Promise<Record<string, unknown>> {
+    const b = await req.json().catch(() => null);
+    return b && typeof b === "object" && !Array.isArray(b) ? (b as Record<string, unknown>) : {};
+  }
+
+  /** Subscriptions whose connector is still approved. They do not lapse with time. */
+  private liveSubs(where = "1 = 1", ...args: unknown[]): Sub[] {
+    return this.sql<Sub>(`SELECT s.* FROM event_subs s WHERE ${where} AND EXISTS (SELECT 1 FROM keys k WHERE k.id = s.key_id AND k.revoked_at IS NULL)`, ...args);
+  }
+
+  private dropSubs(where: string, ...args: unknown[]) {
+    for (const { id } of this.sql<{ id: string }>(`SELECT id FROM event_subs WHERE ${where}`, ...args)) {
+      this.sql("DELETE FROM event_outbox WHERE sub_id = ?", id);
+      this.sql("DELETE FROM event_subs WHERE id = ?", id);
+    }
+  }
+
+  /** Recorded in the same step as the reply, so an event exists only for a stored reply. Only the sender's own subscriptions get it. */
+  private emitReply(n: NoteRow, kind: "text" | "voice", now: number) {
+    this.sql("INSERT INTO events (key_id, rid, nid, kind, at) VALUES (?, ?, ?, ?, ?)", n.key_id, n.rid, n.nid, kind, now);
+    const seq = this.sql<{ s: number }>("SELECT MAX(seq) AS s FROM events")[0].s;
+    for (const sub of this.liveSubs("s.key_id = ? AND s.name = ?", n.key_id, REPLY_EVENT)) this.enqueue(sub, { seq, key_id: n.key_id, rid: n.rid, nid: n.nid, kind, at: now }, now);
+  }
+
+  private enqueue(sub: Sub, e: EventRow, now: number) {
+    const id = `evt_${e.seq}_${sub.id.slice(4)}`;
+    const payload = JSON.stringify({ eventId: id, name: REPLY_EVENT, timestamp: new Date(e.at).toISOString(),
+      data: { notificationId: e.nid, id: e.rid, kind: e.kind }, cursor: String(e.seq) });
+    this.sql("INSERT OR IGNORE INTO event_outbox (id, sub_id, seq, payload, next_at, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, sub.id, e.seq, payload, now, now);
+    this.kick = true;
+  }
+
+  /**
+   * The connector's approval in Herald is what authorises its subscriptions: there is no second step for the user. A relay owner who
+   * wants to narrow where callbacks may go can list hosts in the Worker var EVENT_CALLBACK_HOSTS; empty (the default) means any public host.
+   */
+  private restrictedHosts(): string[] {
+    return String(this.env.EVENT_CALLBACK_HOSTS ?? "").split(",").map((h) => cleanHost(h)).filter((h): h is string => !!h);
+  }
+
+  /** HTTPS on the default port to a public host (never a local or private address), within the optional restriction. */
+  private allowedCallback(url: URL): boolean {
+    const only = this.restrictedHosts();
+    return url.protocol === "https:" && url.port === "" && publicHost(url.hostname) && (only.length === 0 || only.includes(url.hostname.toLowerCase()));
+  }
+
+  private subParams(p: Record<string, unknown>): { name: string; args: string; url: string; secret: string } | RpcOut {
+    const bad = (message: string, data?: unknown): RpcOut => ({ error: { code: -32602, message, ...(data === undefined ? {} : { data }) } });
+    if (p.name !== REPLY_EVENT) return bad(`unknown event: ${String(p.name)}`);
+    const a = p.arguments ?? {};
+    if (typeof a !== "object" || a === null || Array.isArray(a) || Object.keys(a).length) return bad(`${REPLY_EVENT} takes no arguments`);
+    const d = (p.delivery ?? {}) as Record<string, unknown>;
+    if (d.mode !== "webhook") return bad("delivery.mode must be webhook");
+    let url: URL;
+    try { url = new URL(String(d.url)); } catch { return bad("delivery.url must be an https URL"); }
+    if (url.protocol !== "https:" || url.username || url.password || String(d.url).length > 2048) return bad("delivery.url must be an https URL without credentials");
+    if (url.port !== "") return bad("delivery.url must use the default https port");
+    if (!publicHost(url.hostname)) return bad("delivery.url must be a public address");
+    if (!this.allowedCallback(url)) return bad("delivery.url host is not on this relay's EVENT_CALLBACK_HOSTS list", { reason: "host_not_allowed", host: url.hostname.toLowerCase() });
+    return { name: REPLY_EVENT, args: "{}", url: url.toString(), secret: typeof d.secret === "string" ? d.secret : "" };
+  }
+
+  private async subscribe(key: KeyRow, p: Record<string, unknown>): Promise<RpcOut> {
+    const sp = this.subParams(p);
+    if ("error" in sp || "result" in sp) return sp as RpcOut;
+    if (!signingKey(sp.secret)) return { error: { code: -32602, message: "delivery.secret must be whsec_ followed by base64 of 24-64 bytes" } };
+    // ttlMs is accepted for compatibility and ignored: a subscription lasts until unsubscribed or the connector is revoked.
+    if (p.ttlMs !== undefined && p.ttlMs !== null && !(Number.isSafeInteger(p.ttlMs) && (p.ttlMs as number) > 0))
+      return { error: { code: -32602, message: "ttlMs must be a positive integer number of milliseconds" } };
+    const now = Date.now();
+    const find = () => this.sql<Sub>("SELECT * FROM event_subs WHERE key_id = ? AND name = ? AND args = ? AND url = ?", key.id, sp.name, sp.args, sp.url)[0];
+    let sub = find();
+    if (sub) {
+      this.sql("UPDATE event_subs SET secret = ? WHERE id = ?", sp.secret, sub.id); // same id, already verified
+    } else {
+      if (this.sql("SELECT id FROM event_subs WHERE key_id = ?", key.id).length >= MAX_SUBS_PER_KEY)
+        return { error: { code: -32602, message: `at most ${MAX_SUBS_PER_KEY} subscriptions per connector` } };
+      const id = "sub_" + randomHex(10);
+      const reason = await this.verifyCallback(id, sp.url, sp.secret);
+      if (reason) return { error: { code: -32015, message: "Callback endpoint verification failed", data: { reason } } };
+      this.sql("INSERT OR IGNORE INTO event_subs (id, key_id, name, args, url, secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", id, key.id, sp.name, sp.args, sp.url, sp.secret, now);
+    }
+    sub = find();
+    // Replay this connector's replies after the client's cursor; history older than we keep is reported as truncated.
+    let truncated = false, replayEnd: number | null = null;
+    if (typeof p.cursor === "string" && /^\d{1,15}$/.test(p.cursor)) {
+      const after = Number(p.cursor);
+      const oldest = this.sql<{ s: number | null }>("SELECT MIN(seq) AS s FROM events")[0].s;
+      truncated = oldest !== null && after + 1 < oldest;
+      const rows = this.sql<EventRow>("SELECT * FROM events WHERE key_id = ? AND seq > ? ORDER BY seq LIMIT ?", key.id, after, MAX_REPLAY);
+      for (const e of rows) this.enqueue(sub, e, now);
+      if (rows.length === MAX_REPLAY) replayEnd = rows[rows.length - 1].seq;
+    }
+    // The cursor never passes an event this subscription has not been sent yet.
+    const latest = this.sql<{ s: number | null }>("SELECT MAX(seq) AS s FROM events WHERE key_id = ?", key.id)[0].s ?? 0;
+    const pending = this.sql<{ s: number | null }>("SELECT MIN(seq) AS s FROM event_outbox WHERE sub_id = ?", sub.id)[0].s;
+    const cursor = Math.min(latest, replayEnd ?? latest, pending === null ? latest : pending - 1);
+    return { result: { id: sub.id, refreshBefore: new Date(now + REFRESH_AHEAD_MS).toISOString(), cursor: String(cursor), truncated } };
+  }
+
+  private unsubscribe(key: KeyRow, p: Record<string, unknown>): RpcOut {
+    // Only the shape is checked, so unsubscribing works whatever the host rules are now.
+    const d = (p.delivery ?? {}) as Record<string, unknown>;
+    let url: string;
+    try { url = new URL(String(d.url)).toString(); } catch { return { error: { code: -32602, message: "delivery.url must be an https URL" } }; }
+    if (p.name !== REPLY_EVENT) return { error: { code: -32602, message: `unknown event: ${String(p.name)}` } };
+    this.dropSubs("key_id = ? AND name = ? AND url = ?", key.id, REPLY_EVENT, url);
+    return { result: {} };
+  }
+
+  /** Standard Webhooks signed POST. */
+  private async post(subId: string, url: string, secret: string, msgId: string, body: string): Promise<Response> {
+    if (!this.allowedCallback(new URL(url))) throw new Error("callback host is not allowed");
+    const ts = String(Math.floor(Date.now() / 1000));
+    const sig = await hmacB64(signingKey(secret)!, `${msgId}.${ts}.${body}`);
+    return this.outbound(url, { method: "POST", body, redirect: "manual", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS), headers: {
+      "content-type": "application/json", "user-agent": "Herald-Relay/1.0", "webhook-id": msgId, "webhook-timestamp": ts, "webhook-signature": "v1," + sig, "x-mcp-subscription-id": subId } });
+  }
+
+  /** The callback must echo a single-use challenge before the subscription is active. Returns a failure reason or null. */
+  private async verifyCallback(subId: string, url: string, secret: string): Promise<string | null> {
+    const challenge = randomHex(16);
+    let r: Response;
+    try { r = await this.post(subId, url, secret, "ver_" + randomHex(8), JSON.stringify({ type: "verification", challenge })); }
+    catch { return "unreachable"; }
+    if (r.status < 200 || r.status >= 300) return "bad_status";
+    try {
+      const b = (await r.json()) as { challenge?: unknown };
+      return b && b.challenge === challenge ? null : "challenge_mismatch";
+    } catch { return "challenge_mismatch"; }
+  }
+
+  /**
+   * Delivers due events in order per subscription: only the oldest pending event of each subscription is sent, so a delivered
+   * cursor never passes an undelivered one. Transient failures are retried with backoff; 410 ends the subscription.
+   */
+  async deliverDue(now: number) {
+    for (let budget = 25; budget > 0;) {
+      const rows = this.sql<Outbox>(`SELECT * FROM event_outbox o WHERE next_at <= ? AND ${HEAD} ORDER BY seq LIMIT ?`, now, budget);
+      if (!rows.length) return;
+      budget -= rows.length;
+      for (const row of rows) await this.deliverOne(row, now);
+    }
+  }
+
+  private async deliverOne(row: Outbox, now: number) {
+    const sub = this.liveSubs("s.id = ?", row.sub_id)[0];
+    if (!sub) { this.sql("DELETE FROM event_outbox WHERE id = ?", row.id); return; }
+    let status = 0, retryAfter = 0;
+    try {
+      const r = await this.post(sub.id, sub.url, sub.secret, row.id, row.payload);
+      status = r.status;
+      retryAfter = retryAfterMs(r.headers.get("retry-after"), Math.max(now, Date.now()));
+    } catch { status = 0; }
+    const done = Math.max(now, Date.now()); // delays count from when the attempt finished
+    if (status >= 200 && status < 300) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+    else if (status === 410) this.dropSubs("id = ?", sub.id);
+    else if (status >= 400 && status < 500 && status !== 408 && status !== 429) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+    else {
+      const attempts = row.attempts + 1;
+      const next = done + Math.max(retryAfter, Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), HOUR_MS));
+      if (attempts >= MAX_ATTEMPTS || now - row.created_at > DAY_MS || next > row.created_at + DAY_MS) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+      else this.sql("UPDATE event_outbox SET attempts = ?, next_at = ? WHERE id = ?", attempts, next, row.id);
+    }
+  }
+
+  // ----- what Herald sees and controls (device token only)
+
+  private eventsView() {
+    return {
+      restrictedTo: this.restrictedHosts(),
+      subscriptions: this.sql<Sub>("SELECT * FROM event_subs ORDER BY created_at").map((s) => {
+        const k = this.sql<KeyRow>("SELECT * FROM keys WHERE id = ?", s.key_id)[0];
+        return { id: s.id, event: s.name, host: new URL(s.url).hostname, key: { id: s.key_id, name: k?.name ?? "unknown", ...(k?.client_name ? { displayName: k.client_name } : {}) },
+          createdAt: iso(s.created_at), pending: this.sql<{ n: number }>("SELECT COUNT(*) AS n FROM event_outbox WHERE sub_id = ?", s.id)[0].n };
+      }),
+    };
   }
 }

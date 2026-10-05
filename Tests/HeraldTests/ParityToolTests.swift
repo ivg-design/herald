@@ -82,6 +82,8 @@ final class ParityToolTests: XCTestCase {
             Case(tool: "relay_status", args: [:], method: "GET", path: "/v1/relay/status"),
             Case(tool: "relay_usage", args: [:], method: "GET", path: "/v1/relay/usage"),
             Case(tool: "list_connectors", args: [:], method: "GET", path: "/v1/relay/connectors"),
+            Case(tool: "relay_events", args: [:], method: "GET", path: "/v1/relay/events"),
+            Case(tool: "relay_remove_event_subscription", args: ["id": s("sub_0123456789abcdef0123")], method: "DELETE", path: "/v1/relay/events/subscriptions/sub_0123456789abcdef0123"),
             Case(tool: "create_agent_key", args: ["name": s("build-bot"), "client": s("claude")], method: "POST", path: "/v1/relay/keys", body: ["name": s("build-bot"), "client": s("claude")]),
             Case(tool: "revoke_agent_key", args: ["id": s("a1b2c3d4")], method: "DELETE", path: "/v1/relay/keys/a1b2c3d4"),
             Case(tool: "relay_token_url", args: [:], method: "GET", path: "/v1/relay/token-url"),

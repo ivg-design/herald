@@ -146,6 +146,13 @@ public struct RelayAPI: Sendable {
         try await perform(try request("POST", "/v1/device/consent", body: body))
     }
 
+    // MARK: Event subscriptions (MCP Events)
+
+    /// An older relay answers 404.
+    public func events() async throws -> RelayEvents { try await run(try request("GET", "/v1/device/events"), as: RelayEvents.self) }
+
+    public func removeEventSubscription(id: String) async throws { try await perform(try request("DELETE", "/v1/device/events/subscriptions/\(id)")) }
+
     // MARK: Receipts and voice replies
 
     public func sendReceipt(_ receipt: RelayReceipt) async throws {

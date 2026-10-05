@@ -293,3 +293,31 @@ public struct ConsentBook: Sendable, Equatable {
     /// When the next request runs out (to schedule its removal).
     public var nextExpiry: Date? { consents.compactMap(\.expiresDate).min() }
 }
+
+/// MCP Events on the relay, as `GET /v1/device/events` reports them: the live subscriptions (a cloud agent is called when the user
+/// replies to one of its notifications). A connector's approval is what authorises its subscriptions; there is no second step.
+/// No URL path and no secret is ever included.
+public struct RelayEvents: Codable, Equatable, Sendable {
+    public struct KeyRef: Codable, Equatable, Sendable {
+        public var id: String
+        public var name: String
+        public var displayName: String?
+        public var title: String { displayName ?? name }
+    }
+    public struct Subscription: Codable, Equatable, Sendable, Identifiable {
+        public var id: String
+        public var event: String
+        public var host: String
+        public var key: KeyRef
+        public var createdAt: String?
+        /// Events queued for this subscription that its callback has not accepted yet.
+        public var pending: Int
+    }
+    /// Hosts the relay's owner limited callbacks to (the Worker var EVENT_CALLBACK_HOSTS); empty means any public host.
+    public var restrictedTo: [String]?
+    public var subscriptions: [Subscription]
+
+    public init(restrictedTo: [String]? = nil, subscriptions: [Subscription] = []) {
+        self.restrictedTo = restrictedTo; self.subscriptions = subscriptions
+    }
+}

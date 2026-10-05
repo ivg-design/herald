@@ -29,8 +29,16 @@ public enum RelayInstructions {
         4. Poll every `interval` seconds:
            POST \(o)/token  grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=<client_id>&device_code=<device_code>
            authorization_pending: keep polling. slow_down: add 5 seconds to your interval. access_denied: the user said no, stop.
-           expired_token: 10 minutes passed, start again at step 2. Success returns access_token (1 hour) and refresh_token.
-        5. Call \(o)/mcp with  Authorization: Bearer <access_token>  (refresh with grant_type=refresh_token before it expires).
+           expired_token: 10 minutes passed, start again at step 2. Success returns access_token and refresh_token.
+        5. Call \(o)/mcp with  Authorization: Bearer <access_token>. Keep it: the connection is durable. The token does not expire and is
+           never replaced; it works until the user revokes you in Herald. You never need to refresh, and nothing is lost if you do.
+
+        To be told when the user replies, instead of polling: subscribe once to the notification.reply event (MCP Events, protocol 2026-07-28).
+        Your approval already covers it; the user does nothing. POST \(o)/mcp  events/subscribe
+          {"name":"notification.reply","arguments":{},"delivery":{"mode":"webhook","url":"<your https callback>","secret":"whsec_<base64 of 24-64 random bytes>"}}
+        The relay first POSTs {"type":"verification","challenge":...} to the callback: answer 2xx with the same challenge. After that each reply to one
+        of your notifications arrives as a signed POST (Standard Webhooks headers) with data {notificationId, id, kind}; read the answer with get_receipt.
+        The subscription does not expire: it lasts until you unsubscribe or the user revokes you.
         """
     }
 

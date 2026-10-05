@@ -368,6 +368,76 @@ function validateNotification(input) {
 }
 __name(validateNotification, "validateNotification");
 
+// src/events.ts
+var REPLY_EVENT = "notification.reply";
+var EVENTS = [{
+  name: REPLY_EVENT,
+  description: "The user answered (typed or recorded) a notification you sent with expectReply. Call get_receipt or wait_for_reply with data.notificationId to read the answer. The payload holds ids only, never the text. A subscription lasts until you unsubscribe or the user revokes this connector in Herald.",
+  delivery: ["webhook"],
+  inputSchema: { type: "object", additionalProperties: false, properties: {} },
+  payloadSchema: { type: "object", additionalProperties: false, required: ["notificationId", "id", "kind"], properties: {
+    notificationId: { type: "string", description: "The id you sent (or the relay's id when you sent none)." },
+    id: { type: "string", description: "The relay's own id for the notification." },
+    kind: { type: "string", enum: ["text", "voice"] }
+  } }
+}];
+var MAX_SUBS_PER_KEY = 5;
+var DELIVERY_TIMEOUT_MS = 1e4;
+var RETRY_BASE_MS = 6e4;
+var HOUR_MS = 36e5;
+var MAX_ATTEMPTS = 8;
+var MAX_REPLAY = 100;
+var EVENT_HISTORY_MS = 30 * DAY_MS;
+var REFRESH_AHEAD_MS = 10 * 365 * DAY_MS;
+var HEAD = "o.seq = (SELECT MIN(seq) FROM event_outbox h WHERE h.sub_id = o.sub_id)";
+function signingKey(secret) {
+  if (!/^whsec_[A-Za-z0-9+/]+={0,2}$/.test(secret)) return null;
+  try {
+    const k = Uint8Array.from(atob(secret.slice(6)), (c) => c.charCodeAt(0));
+    return k.length >= 24 && k.length <= 64 ? k : null;
+  } catch {
+    return null;
+  }
+}
+__name(signingKey, "signingKey");
+function publicHost(hostname) {
+  const h = hostname.toLowerCase().replace(/\.$/, "");
+  if (h.startsWith("[")) {
+    const [head, tail] = h.slice(1, -1).split("::");
+    const part = /* @__PURE__ */ __name((x) => x ? x.split(":").map((g2) => parseInt(g2, 16)) : [], "part");
+    const a = part(head), b = part(tail);
+    const g = tail === void 0 ? a : [...a, ...Array(8 - a.length - b.length).fill(0), ...b];
+    if (g.length !== 8 || g.some((x) => !(x >= 0 && x <= 65535))) return false;
+    return !(g[0] === 0 || (g[0] & 65024) === 64512 || (g[0] & 65472) === 65152 || (g[0] & 65472) === 65216 || (g[0] & 65280) === 65280 || g[0] === 100 && g[1] === 65435 || g[0] === 8193 && g[1] === 3512 || g[0] === 8194);
+  }
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (v4) {
+    const [a, b, c] = v4.slice(1).map(Number);
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 || a === 100 && b >= 64 && b <= 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 192 && b === 0 && (c === 0 || c === 2) || a === 198 && (b === 18 || b === 19) || a === 198 && b === 51 && c === 100 || a === 203 && b === 0 && c === 113);
+  }
+  return h.includes(".") && !/(^|\.)(localhost|local|internal|home\.arpa)$/.test(h);
+}
+__name(publicHost, "publicHost");
+function cleanHost(v) {
+  if (typeof v !== "string") return null;
+  const h = v.trim().toLowerCase().replace(/\.$/, "");
+  if (!/^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?)+$/.test(h) || h.length > 253) return null;
+  return publicHost(h) ? h : null;
+}
+__name(cleanHost, "cleanHost");
+function retryAfterMs(v, now) {
+  if (!v) return 0;
+  if (/^\d+$/.test(v.trim())) return Number(v.trim()) * 1e3;
+  const at = Date.parse(v);
+  return Number.isFinite(at) ? Math.max(at - now, 0) : 0;
+}
+__name(retryAfterMs, "retryAfterMs");
+async function hmacB64(key, text) {
+  const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(text)))));
+}
+__name(hmacB64, "hmacB64");
+
 // src/mailbox.ts
 var RATE_WINDOW_MS = 10 * 60 * 1e3;
 var MAX_LONG_POLL_S = 60;
@@ -417,6 +487,11 @@ var Mailbox = class extends DurableObject {
         suppressed_reason TEXT, suppressed_scope TEXT);
       CREATE UNIQUE INDEX IF NOT EXISTS notes_key_nid ON notes (key_id, nid);
       CREATE TABLE IF NOT EXISTS rate (key_id TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, rid TEXT NOT NULL, nid TEXT NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS event_subs (id TEXT PRIMARY KEY, key_id TEXT NOT NULL, name TEXT NOT NULL, args TEXT NOT NULL, url TEXT NOT NULL,
+        secret TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE (key_id, name, args, url));
+      CREATE TABLE IF NOT EXISTS event_outbox (id TEXT PRIMARY KEY, sub_id TEXT NOT NULL, seq INTEGER NOT NULL, payload TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0, next_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, client_name TEXT NOT NULL, redirect_uri TEXT NOT NULL,
         challenge TEXT NOT NULL, state TEXT, scope TEXT NOT NULL, resource TEXT NOT NULL, user_code TEXT NOT NULL, status TEXT NOT NULL,
         attempts INTEGER NOT NULL DEFAULT 0, code TEXT, code_hash TEXT, key_id TEXT, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
@@ -486,7 +561,23 @@ var Mailbox = class extends DurableObject {
     return { p, key: row };
   }
   // ---------- routing
+  /** Set when a write queued an event delivery; the alarm is pulled forward once the request is answered. */
+  kick = false;
+  /** Outbound HTTP for event deliveries. Replaceable in tests. */
+  outbound = /* @__PURE__ */ __name((url, init) => fetch(url, init), "outbound");
   async fetch(req) {
+    this.kick = false;
+    const res = await this.route(req);
+    await this.kickAlarm();
+    return res;
+  }
+  async kickAlarm() {
+    if (!this.kick) return;
+    this.kick = false;
+    const at = Date.now(), cur = await this.ctx.storage.getAlarm();
+    if (cur == null || cur > at) await this.ctx.storage.setAlarm(at);
+  }
+  async route(req) {
     const url = new URL(req.url);
     const path = url.pathname;
     const m = req.method;
@@ -509,6 +600,12 @@ var Mailbox = class extends DurableObject {
         if (am && m === "PUT") return this.putAudio(req, am[1]);
         if (path === "/v1/device/consents" && m === "GET") return json(200, { consents: this.consentList() });
         if (path === "/v1/device/consent" && m === "POST") return this.deviceConsent(req);
+        if (path === "/v1/device/events" && m === "GET") return json(200, this.eventsView());
+        const sm = /^\/v1\/device\/events\/subscriptions\/(sub_[0-9a-f]{20})$/.exec(path);
+        if (sm && m === "DELETE") {
+          this.dropSubs("id = ?", sm[1]);
+          return json(200, { removed: true, id: sm[1] });
+        }
         if (path === "/v1/device/keys" && m === "GET") return json(200, { keys: this.listKeys() });
         if (path === "/v1/device/keys" && m === "POST") return this.createKey(req, a2.p);
         const km = /^\/v1\/device\/keys\/([0-9a-f]{8})$/.exec(path);
@@ -530,6 +627,8 @@ var Mailbox = class extends DurableObject {
         const limited = this.readLimit(key, path === "/v1/notify");
         if (limited) return limited;
       }
+      if (path === "/v1/events/subscribe" && m === "POST") return json(200, await this.subscribe(key, await this.rpcParams(req)));
+      if (path === "/v1/events/unsubscribe" && m === "POST") return json(200, this.unsubscribe(key, await this.rpcParams(req)));
       if (path === "/v1/notify" && m === "POST") return this.notify(req, key);
       if (path === "/v1/status" && m === "GET") return json(200, this.agentStatus());
       let r = /^\/v1\/receipts\/([^/]+)$/.exec(path);
@@ -610,11 +709,14 @@ var Mailbox = class extends DurableObject {
     if (purge) {
       this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
       this.sql("DELETE FROM notes WHERE key_id = ?", id);
+      this.sql("DELETE FROM events WHERE key_id = ?", id);
+      this.dropSubs("key_id = ?", id);
       this.sql("DELETE FROM keys WHERE id = ?", id);
       return json(200, { revoked: true, purged: true, id });
     }
     if (!row.revoked_at) this.sql("UPDATE keys SET revoked_at = ? WHERE id = ?", Date.now(), id);
     this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", id);
+    this.dropSubs("key_id = ?", id);
     return json(200, { revoked: true, id });
   }
   registryCall(path, body) {
@@ -922,6 +1024,7 @@ var Mailbox = class extends DurableObject {
         break;
       case "receipt":
         this.applyReceipt(m);
+        await this.kickAlarm();
         break;
     }
   }
@@ -1428,6 +1531,7 @@ var Mailbox = class extends DurableObject {
         const transcript = typeof m.transcript === "string" ? m.transcript.trim().slice(0, 4e3) : "";
         const secs = typeof m.durationSeconds === "number" && m.durationSeconds >= 0 && m.durationSeconds <= 600 ? m.durationSeconds : null;
         if (!text && !transcript && !n.audio_key) return "invalid";
+        if (n.replied_at == null) this.emitReply(n, text ? "text" : "voice", now);
         this.sql(
           "UPDATE notes SET replied_at = COALESCE(replied_at, ?), reply = COALESCE(reply, ?), transcript = COALESCE(transcript, ?), audio_seconds = COALESCE(?, audio_seconds), acked_at = COALESCE(acked_at, ?) WHERE rid = ?",
           now,
@@ -1573,15 +1677,225 @@ var Mailbox = class extends DurableObject {
     this.sql("DELETE FROM rate WHERE at < ?", now - RATE_WINDOW_MS);
     this.sql("DELETE FROM meta WHERE k LIKE 'usage:%' AND k < ?", "usage:" + new Date(now - 7 * DAY_MS).toISOString().slice(0, 10));
     this.expireConsents(now);
-    const left = this.sql("SELECT COUNT(*) AS n FROM notes")[0].n;
-    if (left > 0) await this.ctx.storage.setAlarm(now + 60 * 60 * 1e3);
-    await this.scheduleConsentAlarm();
+    this.sql("DELETE FROM events WHERE at < ?", now - EVENT_HISTORY_MS);
+    this.sql("DELETE FROM event_outbox WHERE created_at < ? OR sub_id NOT IN (SELECT id FROM event_subs)", now - DAY_MS);
+    try {
+      await this.deliverDue(now);
+    } finally {
+      const left = this.sql("SELECT COUNT(*) AS n FROM notes")[0].n;
+      if (left > 0) await this.ctx.storage.setAlarm(now + 60 * 60 * 1e3);
+      await this.scheduleConsentAlarm();
+      const nextOut = this.sql(`SELECT MIN(next_at) AS n FROM event_outbox o WHERE ${HEAD}`)[0].n;
+      if (nextOut != null) {
+        const at = Math.max(nextOut, Date.now() + 1e3), cur = await this.ctx.storage.getAlarm();
+        if (cur == null || cur > at) await this.ctx.storage.setAlarm(at);
+      }
+    }
+  }
+  // ---------- MCP Events: a reply on the Mac wakes the agent that asked (events.ts)
+  async rpcParams(req) {
+    const b = await req.json().catch(() => null);
+    return b && typeof b === "object" && !Array.isArray(b) ? b : {};
+  }
+  /** Subscriptions whose connector is still approved. They do not lapse with time. */
+  liveSubs(where = "1 = 1", ...args) {
+    return this.sql(`SELECT s.* FROM event_subs s WHERE ${where} AND EXISTS (SELECT 1 FROM keys k WHERE k.id = s.key_id AND k.revoked_at IS NULL)`, ...args);
+  }
+  dropSubs(where, ...args) {
+    for (const { id } of this.sql(`SELECT id FROM event_subs WHERE ${where}`, ...args)) {
+      this.sql("DELETE FROM event_outbox WHERE sub_id = ?", id);
+      this.sql("DELETE FROM event_subs WHERE id = ?", id);
+    }
+  }
+  /** Recorded in the same step as the reply, so an event exists only for a stored reply. Only the sender's own subscriptions get it. */
+  emitReply(n, kind, now) {
+    this.sql("INSERT INTO events (key_id, rid, nid, kind, at) VALUES (?, ?, ?, ?, ?)", n.key_id, n.rid, n.nid, kind, now);
+    const seq = this.sql("SELECT MAX(seq) AS s FROM events")[0].s;
+    for (const sub of this.liveSubs("s.key_id = ? AND s.name = ?", n.key_id, REPLY_EVENT)) this.enqueue(sub, { seq, key_id: n.key_id, rid: n.rid, nid: n.nid, kind, at: now }, now);
+  }
+  enqueue(sub, e, now) {
+    const id = `evt_${e.seq}_${sub.id.slice(4)}`;
+    const payload = JSON.stringify({
+      eventId: id,
+      name: REPLY_EVENT,
+      timestamp: new Date(e.at).toISOString(),
+      data: { notificationId: e.nid, id: e.rid, kind: e.kind },
+      cursor: String(e.seq)
+    });
+    this.sql("INSERT OR IGNORE INTO event_outbox (id, sub_id, seq, payload, next_at, created_at) VALUES (?, ?, ?, ?, ?, ?)", id, sub.id, e.seq, payload, now, now);
+    this.kick = true;
+  }
+  /**
+   * The connector's approval in Herald is what authorises its subscriptions: there is no second step for the user. A relay owner who
+   * wants to narrow where callbacks may go can list hosts in the Worker var EVENT_CALLBACK_HOSTS; empty (the default) means any public host.
+   */
+  restrictedHosts() {
+    return String(this.env.EVENT_CALLBACK_HOSTS ?? "").split(",").map((h) => cleanHost(h)).filter((h) => !!h);
+  }
+  /** HTTPS on the default port to a public host (never a local or private address), within the optional restriction. */
+  allowedCallback(url) {
+    const only = this.restrictedHosts();
+    return url.protocol === "https:" && url.port === "" && publicHost(url.hostname) && (only.length === 0 || only.includes(url.hostname.toLowerCase()));
+  }
+  subParams(p) {
+    const bad2 = /* @__PURE__ */ __name((message, data) => ({ error: { code: -32602, message, ...data === void 0 ? {} : { data } } }), "bad");
+    if (p.name !== REPLY_EVENT) return bad2(`unknown event: ${String(p.name)}`);
+    const a = p.arguments ?? {};
+    if (typeof a !== "object" || a === null || Array.isArray(a) || Object.keys(a).length) return bad2(`${REPLY_EVENT} takes no arguments`);
+    const d = p.delivery ?? {};
+    if (d.mode !== "webhook") return bad2("delivery.mode must be webhook");
+    let url;
+    try {
+      url = new URL(String(d.url));
+    } catch {
+      return bad2("delivery.url must be an https URL");
+    }
+    if (url.protocol !== "https:" || url.username || url.password || String(d.url).length > 2048) return bad2("delivery.url must be an https URL without credentials");
+    if (url.port !== "") return bad2("delivery.url must use the default https port");
+    if (!publicHost(url.hostname)) return bad2("delivery.url must be a public address");
+    if (!this.allowedCallback(url)) return bad2("delivery.url host is not on this relay's EVENT_CALLBACK_HOSTS list", { reason: "host_not_allowed", host: url.hostname.toLowerCase() });
+    return { name: REPLY_EVENT, args: "{}", url: url.toString(), secret: typeof d.secret === "string" ? d.secret : "" };
+  }
+  async subscribe(key, p) {
+    const sp = this.subParams(p);
+    if ("error" in sp || "result" in sp) return sp;
+    if (!signingKey(sp.secret)) return { error: { code: -32602, message: "delivery.secret must be whsec_ followed by base64 of 24-64 bytes" } };
+    if (p.ttlMs !== void 0 && p.ttlMs !== null && !(Number.isSafeInteger(p.ttlMs) && p.ttlMs > 0))
+      return { error: { code: -32602, message: "ttlMs must be a positive integer number of milliseconds" } };
+    const now = Date.now();
+    const find = /* @__PURE__ */ __name(() => this.sql("SELECT * FROM event_subs WHERE key_id = ? AND name = ? AND args = ? AND url = ?", key.id, sp.name, sp.args, sp.url)[0], "find");
+    let sub = find();
+    if (sub) {
+      this.sql("UPDATE event_subs SET secret = ? WHERE id = ?", sp.secret, sub.id);
+    } else {
+      if (this.sql("SELECT id FROM event_subs WHERE key_id = ?", key.id).length >= MAX_SUBS_PER_KEY)
+        return { error: { code: -32602, message: `at most ${MAX_SUBS_PER_KEY} subscriptions per connector` } };
+      const id = "sub_" + randomHex(10);
+      const reason = await this.verifyCallback(id, sp.url, sp.secret);
+      if (reason) return { error: { code: -32015, message: "Callback endpoint verification failed", data: { reason } } };
+      this.sql("INSERT OR IGNORE INTO event_subs (id, key_id, name, args, url, secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)", id, key.id, sp.name, sp.args, sp.url, sp.secret, now);
+    }
+    sub = find();
+    let truncated = false, replayEnd = null;
+    if (typeof p.cursor === "string" && /^\d{1,15}$/.test(p.cursor)) {
+      const after = Number(p.cursor);
+      const oldest = this.sql("SELECT MIN(seq) AS s FROM events")[0].s;
+      truncated = oldest !== null && after + 1 < oldest;
+      const rows = this.sql("SELECT * FROM events WHERE key_id = ? AND seq > ? ORDER BY seq LIMIT ?", key.id, after, MAX_REPLAY);
+      for (const e of rows) this.enqueue(sub, e, now);
+      if (rows.length === MAX_REPLAY) replayEnd = rows[rows.length - 1].seq;
+    }
+    const latest = this.sql("SELECT MAX(seq) AS s FROM events WHERE key_id = ?", key.id)[0].s ?? 0;
+    const pending = this.sql("SELECT MIN(seq) AS s FROM event_outbox WHERE sub_id = ?", sub.id)[0].s;
+    const cursor = Math.min(latest, replayEnd ?? latest, pending === null ? latest : pending - 1);
+    return { result: { id: sub.id, refreshBefore: new Date(now + REFRESH_AHEAD_MS).toISOString(), cursor: String(cursor), truncated } };
+  }
+  unsubscribe(key, p) {
+    const d = p.delivery ?? {};
+    let url;
+    try {
+      url = new URL(String(d.url)).toString();
+    } catch {
+      return { error: { code: -32602, message: "delivery.url must be an https URL" } };
+    }
+    if (p.name !== REPLY_EVENT) return { error: { code: -32602, message: `unknown event: ${String(p.name)}` } };
+    this.dropSubs("key_id = ? AND name = ? AND url = ?", key.id, REPLY_EVENT, url);
+    return { result: {} };
+  }
+  /** Standard Webhooks signed POST. */
+  async post(subId, url, secret, msgId, body) {
+    if (!this.allowedCallback(new URL(url))) throw new Error("callback host is not allowed");
+    const ts = String(Math.floor(Date.now() / 1e3));
+    const sig = await hmacB64(signingKey(secret), `${msgId}.${ts}.${body}`);
+    return this.outbound(url, { method: "POST", body, redirect: "manual", signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS), headers: {
+      "content-type": "application/json",
+      "user-agent": "Herald-Relay/1.0",
+      "webhook-id": msgId,
+      "webhook-timestamp": ts,
+      "webhook-signature": "v1," + sig,
+      "x-mcp-subscription-id": subId
+    } });
+  }
+  /** The callback must echo a single-use challenge before the subscription is active. Returns a failure reason or null. */
+  async verifyCallback(subId, url, secret) {
+    const challenge2 = randomHex(16);
+    let r;
+    try {
+      r = await this.post(subId, url, secret, "ver_" + randomHex(8), JSON.stringify({ type: "verification", challenge: challenge2 }));
+    } catch {
+      return "unreachable";
+    }
+    if (r.status < 200 || r.status >= 300) return "bad_status";
+    try {
+      const b = await r.json();
+      return b && b.challenge === challenge2 ? null : "challenge_mismatch";
+    } catch {
+      return "challenge_mismatch";
+    }
+  }
+  /**
+   * Delivers due events in order per subscription: only the oldest pending event of each subscription is sent, so a delivered
+   * cursor never passes an undelivered one. Transient failures are retried with backoff; 410 ends the subscription.
+   */
+  async deliverDue(now) {
+    for (let budget = 25; budget > 0; ) {
+      const rows = this.sql(`SELECT * FROM event_outbox o WHERE next_at <= ? AND ${HEAD} ORDER BY seq LIMIT ?`, now, budget);
+      if (!rows.length) return;
+      budget -= rows.length;
+      for (const row of rows) await this.deliverOne(row, now);
+    }
+  }
+  async deliverOne(row, now) {
+    const sub = this.liveSubs("s.id = ?", row.sub_id)[0];
+    if (!sub) {
+      this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+      return;
+    }
+    let status = 0, retryAfter = 0;
+    try {
+      const r = await this.post(sub.id, sub.url, sub.secret, row.id, row.payload);
+      status = r.status;
+      retryAfter = retryAfterMs(r.headers.get("retry-after"), Math.max(now, Date.now()));
+    } catch {
+      status = 0;
+    }
+    const done = Math.max(now, Date.now());
+    if (status >= 200 && status < 300) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+    else if (status === 410) this.dropSubs("id = ?", sub.id);
+    else if (status >= 400 && status < 500 && status !== 408 && status !== 429) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+    else {
+      const attempts = row.attempts + 1;
+      const next = done + Math.max(retryAfter, Math.min(RETRY_BASE_MS * 2 ** (attempts - 1), HOUR_MS));
+      if (attempts >= MAX_ATTEMPTS || now - row.created_at > DAY_MS || next > row.created_at + DAY_MS) this.sql("DELETE FROM event_outbox WHERE id = ?", row.id);
+      else this.sql("UPDATE event_outbox SET attempts = ?, next_at = ? WHERE id = ?", attempts, next, row.id);
+    }
+  }
+  // ----- what Herald sees and controls (device token only)
+  eventsView() {
+    return {
+      restrictedTo: this.restrictedHosts(),
+      subscriptions: this.sql("SELECT * FROM event_subs ORDER BY created_at").map((s) => {
+        const k = this.sql("SELECT * FROM keys WHERE id = ?", s.key_id)[0];
+        return {
+          id: s.id,
+          event: s.name,
+          host: new URL(s.url).hostname,
+          key: { id: s.key_id, name: k?.name ?? "unknown", ...k?.client_name ? { displayName: k.client_name } : {} },
+          createdAt: iso(s.created_at),
+          pending: this.sql("SELECT COUNT(*) AS n FROM event_outbox WHERE sub_id = ?", s.id)[0].n
+        };
+      })
+    };
   }
 };
 
 // src/mcp.ts
 var PROTOCOL = "2025-06-18";
 var SUPPORTED = /* @__PURE__ */ new Set(["2025-06-18", "2025-03-26", "2024-11-05"]);
+var MODERN = "2026-07-28";
+var PV = "io.modelcontextprotocol/protocolVersion";
+var CAPS = "io.modelcontextprotocol/clientCapabilities";
+var SERVER_INFO = { name: "herald-relay", title: "Herald cloud relay", version: "1.1.0" };
 var NOTIFY_PROPS = {
   title: { type: "string", maxLength: 200, description: "Headline of the notification." },
   body: { type: "string", maxLength: 8e3, description: "Message text." },
@@ -1646,8 +1960,19 @@ var TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false }
   }
 ];
+var INSTRUCTIONS = 'Send notifications to the user\'s Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text and presentation fields only (persistent, timeoutSeconds, sound, speak, presentation...). Nothing else is exposed. No browser to sign in with? Use the OAuth device flow instead of a key: POST /register (client_name, grant_types ["urn:ietf:params:oauth:grant-type:device_code"]), POST /device_authorization (client_id), tell the user the user_code, poll POST /token (grant_type urn:ietf:params:oauth:grant-type:device_code) every `interval` seconds. To be told when the user answers instead of polling, a client on protocol 2026-07-28 can subscribe to the notification.reply event (events/list, events/subscribe with a webhook).';
 var ok = /* @__PURE__ */ __name((id, result) => ({ jsonrpc: "2.0", id, result }), "ok");
-var fail = /* @__PURE__ */ __name((id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } }), "fail");
+var fail = /* @__PURE__ */ __name((id, code, message, data) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message, ...data === void 0 ? {} : { data } } }), "fail");
+function headerValue(v) {
+  const m = /^=\?base64\?(.*)\?=$/.exec(v);
+  if (!m) return v;
+  try {
+    return new TextDecoder().decode(Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0)));
+  } catch {
+    return "\0";
+  }
+}
+__name(headerValue, "headerValue");
 async function handleMcp(req, forward) {
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
   if (req.method === "GET" || req.method === "DELETE") {
@@ -1666,6 +1991,50 @@ async function handleMcp(req, forward) {
   if (msg.method === void 0) return reply(fail(msg.id, -32600, "not a request"), 202);
   const probe = await forward("/v1/status");
   if (probe.status === 401 || probe.status === 403) return probe;
+  const hv = req.headers.get("mcp-protocol-version");
+  const meta = msg.params?._meta ?? null;
+  const bodyVersion = meta && typeof meta === "object" ? meta[PV] : void 0;
+  const supported = [MODERN, ...SUPPORTED];
+  if (hv !== null && hv !== MODERN && !SUPPORTED.has(hv)) return reply(fail(msg.id, -32022, "Unsupported protocol version", { supported, requested: hv }), 400);
+  if (hv === MODERN || bodyVersion !== void 0) {
+    if (typeof bodyVersion !== "string" || !meta || typeof meta[CAPS] !== "object" || meta[CAPS] === null)
+      return reply(fail(msg.id, -32602, `_meta must carry ${PV} and ${CAPS}`), 400);
+    if (bodyVersion !== hv) return reply(fail(msg.id, -32020, `Header mismatch: MCP-Protocol-Version ${hv ?? "(missing)"} does not match _meta ${bodyVersion}`), 400);
+    if (bodyVersion !== MODERN) return reply(fail(msg.id, -32022, "Unsupported protocol version", { supported, requested: bodyVersion }), 400);
+    const hm = req.headers.get("mcp-method");
+    if (hm !== msg.method) return reply(fail(msg.id, -32020, `Header mismatch: Mcp-Method ${hm ?? "(missing)"} does not match body ${String(msg.method)}`), 400);
+    const hn = req.headers.get("mcp-name");
+    if (msg.method === "tools/call" && (hn === null || headerValue(hn) !== String(msg.params?.name))) return reply(fail(msg.id, -32020, `Header mismatch: Mcp-Name ${hn === null ? "(missing)" : "does not match params.name"}`), 400);
+    if (msg.id === void 0) return new Response(null, { status: 202 });
+    const done = /* @__PURE__ */ __name((result) => reply(ok(msg.id, { resultType: "complete", ...result, _meta: { "io.modelcontextprotocol/serverInfo": SERVER_INFO } })), "done");
+    const p = { ...msg.params ?? {} };
+    delete p._meta;
+    switch (msg.method) {
+      case "server/discover":
+        return done({ supportedVersions: supported, capabilities: { tools: {}, events: {} }, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS });
+      case "ping":
+        return done({});
+      case "tools/list":
+        return done({ tools: TOOLS });
+      case "tools/call": {
+        const r = await callTool(p, forward);
+        if (r instanceof Response) return r;
+        return typeof r.rpcError === "string" ? reply(fail(msg.id, -32602, r.rpcError)) : done(r);
+      }
+      case "events/list":
+        return done({ events: EVENTS });
+      case "events/subscribe":
+      case "events/unsubscribe": {
+        const r = await forward(msg.method === "events/subscribe" ? "/v1/events/subscribe" : "/v1/events/unsubscribe", { method: "POST", body: JSON.stringify(p) });
+        if (r.status === 401 || r.status === 403) return r;
+        if (!r.ok) return reply(fail(msg.id, -32603, "the relay could not handle the subscription right now"), r.status === 429 || r.status === 503 ? r.status : 200);
+        const out = await r.json();
+        return "error" in out ? reply(fail(msg.id, out.error.code, out.error.message, out.error.data)) : done(out.result);
+      }
+      default:
+        return reply(fail(msg.id, -32601, `method not found: ${msg.method}`), 404);
+    }
+  }
   if (msg.id === void 0) return new Response(null, { status: 202 });
   switch (msg.method) {
     case "initialize": {
@@ -1673,8 +2042,8 @@ async function handleMcp(req, forward) {
       return reply(ok(msg.id, {
         protocolVersion: SUPPORTED.has(asked) ? asked : PROTOCOL,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "herald-relay", title: "Herald cloud relay", version: "1.0.0" },
-        instructions: 'Send notifications to the user\'s Mac with send_notification; read receipts with get_receipt; wait for an answer with wait_for_reply. Text and presentation fields only (persistent, timeoutSeconds, sound, speak, presentation...). Nothing else is exposed. No browser to sign in with? Use the OAuth device flow instead of a key: POST /register (client_name, grant_types ["urn:ietf:params:oauth:grant-type:device_code"]), POST /device_authorization (client_id), tell the user the user_code, poll POST /token (grant_type urn:ietf:params:oauth:grant-type:device_code) every `interval` seconds.'
+        serverInfo: SERVER_INFO,
+        instructions: INSTRUCTIONS
       }));
     }
     case "ping":
@@ -1682,39 +2051,43 @@ async function handleMcp(req, forward) {
     case "tools/list":
       return reply(ok(msg.id, { tools: TOOLS }));
     case "tools/call": {
-      const p = msg.params ?? {};
-      const a = p.arguments ?? {};
-      let r;
-      switch (p.name) {
-        case "send_notification":
-          r = await forward("/v1/notify", { method: "POST", body: JSON.stringify(a) });
-          break;
-        case "get_receipt":
-          if (typeof a.notificationId !== "string") return reply(ok(msg.id, toolError("notificationId is required")));
-          r = await forward(`/v1/receipts/${encodeURIComponent(a.notificationId)}`);
-          break;
-        case "wait_for_reply": {
-          if (typeof a.notificationId !== "string") return reply(ok(msg.id, toolError("notificationId is required")));
-          const t = Math.min(MAX_LONG_POLL_S - 5, Math.max(0, Number(a.timeoutSeconds ?? 30) || 0));
-          r = await forward(`/v1/replies/${encodeURIComponent(a.notificationId)}?wait=${t}`);
-          break;
-        }
-        case "herald_status":
-          r = await forward("/v1/status");
-          break;
-        default:
-          return reply(fail(msg.id, -32602, `unknown tool: ${String(p.name)}`));
-      }
-      if (r.status === 401 || r.status === 403) return r;
-      const data = await r.json().catch(() => ({}));
-      const result = { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data, ...r.ok ? {} : { isError: true } };
-      return reply(ok(msg.id, result));
+      const r = await callTool(msg.params ?? {}, forward);
+      if (r instanceof Response) return r;
+      return typeof r.rpcError === "string" ? reply(fail(msg.id, -32602, r.rpcError)) : reply(ok(msg.id, r));
     }
     default:
       return reply(fail(msg.id, -32601, `method not found: ${msg.method}`));
   }
 }
 __name(handleMcp, "handleMcp");
+async function callTool(p, forward) {
+  const a = p.arguments ?? {};
+  let r;
+  switch (p.name) {
+    case "send_notification":
+      r = await forward("/v1/notify", { method: "POST", body: JSON.stringify(a) });
+      break;
+    case "get_receipt":
+      if (typeof a.notificationId !== "string") return toolError("notificationId is required");
+      r = await forward(`/v1/receipts/${encodeURIComponent(a.notificationId)}`);
+      break;
+    case "wait_for_reply": {
+      if (typeof a.notificationId !== "string") return toolError("notificationId is required");
+      const t = Math.min(MAX_LONG_POLL_S - 5, Math.max(0, Number(a.timeoutSeconds ?? 30) || 0));
+      r = await forward(`/v1/replies/${encodeURIComponent(a.notificationId)}?wait=${t}`);
+      break;
+    }
+    case "herald_status":
+      r = await forward("/v1/status");
+      break;
+    default:
+      return { rpcError: `unknown tool: ${String(p.name)}` };
+  }
+  if (r.status === 401 || r.status === 403) return r;
+  const data = await r.json().catch(() => ({}));
+  return { content: [{ type: "text", text: JSON.stringify(data) }], structuredContent: data, ...r.ok ? {} : { isError: true } };
+}
+__name(callTool, "callTool");
 function toolError(message) {
   return { content: [{ type: "text", text: message }], isError: true };
 }
