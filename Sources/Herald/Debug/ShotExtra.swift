@@ -36,6 +36,9 @@ extension ScreenshotMode {
         let sample = c.actionRunner.scriptsDirectory.appendingPathComponent("post-summary.sh")
         try? "#!/bin/zsh\nexit 0\n".write(to: sample, atomically: true, encoding: .utf8)
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sample.path)
+        let bad = c.actionRunner.scriptsDirectory.appendingPathComponent("sync-report.sh")
+        try? "#!/bin/zsh\necho \"report server unreachable\" >&2\nexit 3\n".write(to: bad, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: bad.path)
         c.registry.register(HeraldAppRegistration(app: showApp, appName: "Acme Deploys", allowCommands: true))
         c.registry.update(showApp) { $0.commandsConfirmed = true }
 
@@ -264,13 +267,19 @@ extension Runner {
 
     func followUpBanners() async {
         let fu = HeraldFollowUp(after: 5, action: sampleFollowUpAction)
+        let failing = HeraldFollowUp(after: 5, action: HeraldAction(id: "sync-report", label: "Sync report", kind: .script, script: "sync-report.sh"))
         c.registry.register(HeraldAppRegistration(app: "example.bidbot", appName: "BidBot", allowCommands: true))
-        _ = await banner("banner-followup-approval", Opts(title: "Follow-up waiting for approval", shows: "A banner whose follow-up fired after being left up, but whose action is not approved yet: the question under the text asks whether to run the script Post summary, with Run once, Always allow and Cancel.", section: "banners"),
-            HeraldNotification(app: "example.bidbot", id: UUID().uuidString, title: "Report ready", body: "The weekly bid report is ready to send.", sound: "none", persistent: true, followUp: fu),
-            settle: 8.0)
-        _ = await banner("banner-followup-ran", Opts(title: "Follow-up ran", shows: "A banner after its follow-up ran: the quiet line Follow-up ran: Post summary with the time sits under the text, and the banner stays on screen.", section: "banners"),
-            HeraldNotification(app: ScreenshotMode.showApp, id: UUID().uuidString, title: "Deploy needs approval", body: "Step 'migrate' is waiting for a decision.", sound: "none", persistent: true, followUp: fu),
-            settle: 8.0)
+        func n(_ app: String, _ title: String, _ body: String, _ f: HeraldFollowUp) -> HeraldNotification {
+            HeraldNotification(app: app, id: UUID().uuidString, title: title, body: body, sound: "none", persistent: true, followUp: f)
+        }
+        _ = await banner("banner-followup-approval", Opts(title: "Follow-up waiting for approval", shows: "A banner whose follow-up fired after the banner was left up, but whose action is not approved yet: the question Run this follow-up for BidBot?, how long the banner was left up, the script and its hash, and Run once, Always allow and Cancel.", section: "banners"),
+            n("example.bidbot", "Report ready", "The weekly bid report is ready to send.", fu), settle: 8.0)
+        _ = await banner("banner-followup-ran", Opts(title: "Follow-up ran", shows: "A banner after its follow-up ran: the quiet line Follow-up ran: Post summary at the time sits under the text, and the banner stays on screen.", section: "banners"),
+            n(ScreenshotMode.showApp, "Deploy needs approval", "Step 'migrate' is waiting for a decision.", fu), settle: 8.0)
+        _ = await banner("banner-followup-not-allowed", Opts(title: "Follow-up not allowed", shows: "A banner whose follow-up could not run because the app may not run commands: an underlined line, Follow-up did not run: allow GitHub Actions to run commands in Settings > Apps. Pressing it opens Settings > Apps.", section: "banners"),
+            n(ScreenshotMode.ciApp, "Deploy needs approval", "Step 'migrate' is waiting for a decision.", fu), settle: 8.0)
+        _ = await banner("banner-followup-failed", Opts(title: "Follow-up failed", shows: "A banner whose follow-up script ran and exited with an error: the orange line Follow-up failed: Sync report with the reason, under the text.", section: "banners"),
+            n(ScreenshotMode.showApp, "Deploy needs approval", "Step 'migrate' is waiting for a decision.", failing), settle: 8.0)
     }
 
     func followUpDesigner() async {
@@ -287,7 +296,11 @@ extension Runner {
         if let (w, m) = await tallDesigner(app: ScreenshotMode.showApp, template: ScreenshotMode.showTemplate) {
             let top = w.frame.height - w.contentLayoutRect.height + 34, h = w.frame.height - top
             let inspector = CGRect(x: w.frame.width - 340, y: top, width: 340, height: h)
-            await shot("designer-followup-issuer", w, Opts(title: "Issuer follow-up", shows: "The Follow-up block for an app whose manifest declares one: a switch reading From the issuer: Retry after 15 minutes (on), the If not dismissed switch for your own follow-up (off), and the note under them.", section: "designer", crop: inspector, trim: true, tail: 430, round: 12)) { _ in m.tab = .actions }
+            await shot("designer-followup-issuer", w, Opts(title: "Follow-up, the issuer's", shows: "The Follow-up block for an app whose manifest declares one, with the single Follow-up picker set to The issuer's: Retry after 15 minutes, and the line under it saying the issuer's Retry runs once if the banner is still up after 15 minutes.", section: "designer", crop: inspector, trim: true, tail: 380, round: 12)) { _ in m.tab = .actions }
+            m.setFollowUpMode(.own)
+            if let c = m.followUpChoices.first(where: { $0.title.contains("Open log") }) { m.setFollowUpAction(ref: c.id) }
+            await pause(0.6)
+            await shot("designer-followup-own", w, Opts(title: "Follow-up, my own", shows: "The same block with the picker set to My own: the After 10 minutes row, the Run picker, and the line saying it replaces the issuer's and that the action needs one approval.", section: "designer", crop: inspector, trim: true, tail: 440, round: 12)) { _ in m.tab = .actions }
             w.close(); await pause(1.2)
         }
     }
