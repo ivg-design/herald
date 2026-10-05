@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.1 (Build 18) - 2026-10-04
+
+### Fixed
+
+- Cloud relay: connecting a connector no longer fails when the client retries the sign-in exchange. The relay used to treat a
+  code presented twice as stolen and wiped the tokens it had just issued, so ChatGPT reported "The authorization is invalid or
+  has expired" right after Approve. A retry (same code, same PKCE verifier, or a repeated device-flow poll) now simply gets
+  tokens again and never undoes the approval; a wrong verifier is refused without touching the connection.
+
+### Added
+
+- `integrations/dotcliffe-plugin`: the Herald Connection plugin wrapper that registers the relay with Dotcliffe's host as an
+  app, which is what lets the host subscribe to reply events.
+
+Upgrade the relay from Settings > Cloud to get the fix. Relay: 169 tests.
+
 ## 1.7.0 (Build 17) - 2026-10-04
 
 ### Added

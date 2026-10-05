@@ -1299,10 +1299,6 @@ var Mailbox = class extends DurableObject {
     const r = this.sql("SELECT * FROM oauth_requests WHERE device_hash = ?", await sha256Hex(dc))[0];
     if (!r) return this.oerr("expired_token", "unknown or expired device_code; start again with /device_authorization");
     if (r.client_id !== (b.client_id ?? "")) return this.oerr("invalid_grant", "device_code was issued to another client");
-    if (r.redeemed_at) {
-      if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id);
-      return this.oerr("invalid_grant", "device_code already used");
-    }
     if (r.status === "denied") return this.oerr("access_denied", "the user denied the request");
     if (r.status === "pending") {
       if (r.expires_at <= now) return this.oerr("expired_token", "the user code expired; start again");
@@ -1315,9 +1311,9 @@ var Mailbox = class extends DurableObject {
       }
       return this.oerr("authorization_pending", "waiting for the user to approve in Herald");
     }
-    if (r.status !== "approved" || r.expires_at <= now) return this.oerr("expired_token", "the approval expired; start again");
+    if (r.status !== "approved" || !r.redeemed_at && r.expires_at <= now) return this.oerr("expired_token", "the approval expired; start again");
     if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
-    this.sql("UPDATE oauth_requests SET redeemed_at = ? WHERE id = ?", now, r.id);
+    if (!r.redeemed_at) this.sql("UPDATE oauth_requests SET redeemed_at = ? WHERE id = ?", now, r.id);
     const key = this.sql("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
     if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
     return this.issueTokens(key.id, r.client_id, r.resource, randomHex(8), now);
@@ -1460,18 +1456,14 @@ var Mailbox = class extends DurableObject {
       if (!parseOAuthSecret(code, "hrc")) return this.oerr("invalid_grant", "malformed authorization code");
       const r = this.sql("SELECT * FROM oauth_requests WHERE code_hash = ?", await sha256Hex(code))[0];
       if (!r) return this.oerr("invalid_grant", "unknown or already used authorization code");
-      if (r.redeemed_at) {
-        if (r.key_id) this.sql("DELETE FROM oauth_tokens WHERE key_id = ?", r.key_id);
-        return this.oerr("invalid_grant", "authorization code already used");
-      }
-      if (r.status !== "approved" || r.expires_at <= now) return this.oerr("invalid_grant", "authorization code expired");
+      if (r.status !== "approved" || !r.redeemed_at && r.expires_at <= now) return this.oerr("invalid_grant", "authorization code expired");
       if (r.client_id !== clientId) return this.oerr("invalid_grant", "code was issued to another client");
       if (r.redirect_uri !== (b.redirect_uri ?? "")) return this.oerr("invalid_grant", "redirect_uri does not match the authorization request");
       const v = b.code_verifier ?? "";
       if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(v)) return this.oerr("invalid_grant", "code_verifier is missing or malformed");
       if (!safeEqual(await s256(v), r.challenge)) return this.oerr("invalid_grant", "PKCE verification failed");
       if (b.resource && !sameResource(b.resource, r.resource)) return this.oerr("invalid_target", "resource does not match the authorization request");
-      this.sql("UPDATE oauth_requests SET redeemed_at = ?, code = NULL WHERE id = ?", now, r.id);
+      if (!r.redeemed_at) this.sql("UPDATE oauth_requests SET redeemed_at = ?, code = NULL WHERE id = ?", now, r.id);
       const key = this.sql("SELECT * FROM keys WHERE id = ?", r.key_id ?? "")[0];
       if (!key || key.revoked_at) return this.oerr("invalid_grant", "the connector was revoked");
       return this.issueTokens(key.id, clientId, r.resource, randomHex(8), now);

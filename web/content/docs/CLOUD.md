@@ -234,7 +234,7 @@ revoke itself (`POST /revoke`, RFC 7009).
   that refresh by habit: it returns a new access token and the same refresh token, earlier access tokens stay valid, and a refresh may
   be repeated safely (a lost response costs nothing). `expires_in` is reported as ten years for clients that require the field.
   Authorization codes live 5 minutes after approval, work
-  once, require PKCE (S256), and a code used twice revokes what it produced. Tokens are bound to the `/mcp` resource (RFC 8707) and to
+  once, and require PKCE (S256). A client that retries the exchange with the same code and verifier gets tokens again; a retry never undoes the approval. Tokens are bound to the `/mcp` resource (RFC 8707) and to
   their client. Re-authorizing the same connector replaces its earlier key.
 - Setting up your own relay changes nothing: the URLs above come from the host the connector was added with.
 

@@ -115,12 +115,12 @@ describe("device authorization grant (RFC 8628)", () => {
     expect(call.result.isError).toBeUndefined();
     expect((await ws.next("notify")).payload.title).toBe("via device flow");
 
-    // a second redemption is refused, and it takes what the first produced with it
+    // a repeated poll after success (a lost response) gets tokens again; nothing the agent holds is invalidated
     await rewindPoll(dev.deviceId);
-    const again = await poll(client_id, d.device_code);
-    expect((await j(again)).error).toBe("invalid_grant");
-    const dead = await rpc(tokens.access_token, { jsonrpc: "2.0", id: 2, method: "tools/list" });
-    expect(dead.status).toBe(401);
+    const again = await j(await poll(client_id, d.device_code));
+    expect(again.access_token).toMatch(/^hra_/);
+    const alive = await rpc(tokens.access_token, { jsonrpc: "2.0", id: 2, method: "tools/list" });
+    expect(alive.status).toBe(200);
   });
 
   it("a refresh token from the device flow works, and revoking the key kills the tokens", async () => {

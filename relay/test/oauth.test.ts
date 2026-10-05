@@ -337,11 +337,17 @@ describe("token endpoint", () => {
     expect(r.status).toBe(400);
     expect((await j(r)).error).toBe("invalid_target");
   });
-  it("accepts a code once; replaying it revokes what it produced", async () => {
+  it("a retried code exchange gets tokens again and never undoes the connection; a wrong verifier is refused without harm", async () => {
     const g = await fullGrant();
     const again = await f("/token", form({ grant_type: "authorization_code", client_id: g.client.client_id, code: g.code, redirect_uri: REDIRECT, code_verifier: g.pk.verifier }));
-    expect(again.status).toBe(400);
-    expect((await f("/v1/status", { headers: auth(g.tokens.access_token) })).status).toBe(401);
+    expect(again.status).toBe(200);
+    const t2 = await j(again);
+    expect(t2.access_token).toMatch(/^hra_/);
+    const thief = await f("/token", form({ grant_type: "authorization_code", client_id: g.client.client_id, code: g.code, redirect_uri: REDIRECT, code_verifier: "x".repeat(43) }));
+    expect(thief.status).toBe(400);
+    // both the first tokens and the retry's tokens still work
+    expect((await f("/v1/status", { headers: auth(g.tokens.access_token) })).status).toBe(200);
+    expect((await f("/v1/status", { headers: auth(t2.access_token) })).status).toBe(200);
   });
   it("rejects an expired or unapproved code and unknown grant types", async () => {
     const s = await setup();
