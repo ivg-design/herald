@@ -4,6 +4,7 @@ import AppKit
 struct SettingsView: View {
     let controller: AppController
     @State private var tab: Int
+    @ObservedObject private var navigator = SettingsNavigator.shared
     init(controller: AppController, initialTab: Int = 0) {
         self.controller = controller
         _tab = State(initialValue: initialTab)
@@ -19,6 +20,8 @@ struct SettingsView: View {
         }
         .padding(16)
         .frame(minWidth: 600, minHeight: 420)
+        .onAppear { if navigator.app != nil { tab = 1 } }
+        .onChange(of: navigator.app) { if $0 != nil { tab = 1 } }
         #if DEBUG
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.settingsTab"))) { n in
             if let i = n.object as? Int { tab = i }
@@ -83,15 +86,24 @@ struct AppsSettingsView: View {
     let controller: AppController
     @StateObject private var ticker = ChangeTicker()
     @State private var selection: String?
+    @ObservedObject private var navigator = SettingsNavigator.shared
 
     private var records: [AppRecord] { _ = ticker.tick; return controller.registry.all() }
 
     var body: some View {
         content
+        .onAppear(perform: takeRequestedApp)
+        .onChange(of: navigator.app) { _ in takeRequestedApp() }
         #if DEBUG
         // Documentation screenshots: select an app without a click (Debug/ScreenshotMode.swift).
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("herald.debug.appsSelect"))) { n in selection = n.object as? String }
         #endif
+    }
+
+    private func takeRequestedApp() {
+        guard let app = navigator.app else { return }
+        selection = app
+        navigator.app = nil
     }
 
     private var content: some View {

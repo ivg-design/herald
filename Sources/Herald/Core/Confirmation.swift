@@ -89,6 +89,11 @@ public extension BannerConfirmation {
         s.count > limit ? String(s.prefix(limit - 1)) + "\u{2026}" : s
     }
 
+    /// "This banner was left up for 10 minutes, so its follow-up wants to run."
+    static func followUpReason(seconds: Int) -> String {
+        "This banner was left up for \(HeraldFollowUp.describe(seconds: Double(seconds))), so its follow-up wants to run."
+    }
+
     /// A callback to a host that is not this Mac. "Send once" is the default; the lasting approval (per host,
     /// kept on the app's record) is one click further away.
     static func callbackHost(name: String, host: String, url: String) -> BannerConfirmation {
@@ -103,8 +108,11 @@ public extension BannerConfirmation {
 
     /// An issuer's command, script or Shortcut, asked for the first time such a button is pressed. `text` is the
     /// exact command (`ActionRunner.describe`). "Always allow" is per app (`AppRecord.commandsConfirmed`).
-    static func appCommand(kind: HeraldActionKind, name: String, text: String) -> BannerConfirmation {
-        let confirmKind: Kind, title: String, detail: String
+    /// `followUpSeconds` is set when a follow-up asks (nobody pressed anything): the title says "follow-up" and the detail
+    /// starts with why it is asking. The buttons and the gates are the same.
+    static func appCommand(kind: HeraldActionKind, name: String, text: String, followUpSeconds: Int? = nil) -> BannerConfirmation {
+        let confirmKind: Kind
+        var title: String, detail: String
         switch kind {
         case .script:
             confirmKind = .script
@@ -119,6 +127,10 @@ public extension BannerConfirmation {
             title = "Run this command for \(name)?"
             detail = "A notification sent as \(name) asks Herald to run the command below with your user permissions (/bin/zsh -lc). Herald cannot verify who sent it."
         }
+        if let s = followUpSeconds {
+            title = "Run this follow-up for \(name)?"
+            detail = followUpReason(seconds: s) + " " + detail
+        }
         return BannerConfirmation(
             kind: confirmKind, title: title, detail: detail, command: text,
             buttons: [.init(.once, "Run once", .primary), .init(.always, "Always allow \(short(name))", .secondary),
@@ -130,7 +142,7 @@ public extension BannerConfirmation {
     /// "Always allow this template" also covers. `replacedIssuerLabel` names the issuer's own button this one
     /// replaced, since the issuer will not hear about that press.
     static func templateCommand(kind: HeraldActionKind, template: String, name: String, pressedText: String,
-                                others: [String], replacedIssuerLabel: String?) -> BannerConfirmation {
+                                others: [String], replacedIssuerLabel: String?, followUpSeconds: Int? = nil) -> BannerConfirmation {
         let what: String
         switch kind {
         case .script: what = "script"
@@ -143,11 +155,16 @@ public extension BannerConfirmation {
         }
         if !others.isEmpty { detail += " Always allow covers everything listed." }
         detail += " If any of it changes, Herald asks again."
+        var title = "Run a \(what) from the \"\(template)\" template?"
+        if let s = followUpSeconds {
+            title = "Run this follow-up from the \u{201C}\(template)\u{201D} template?"
+            detail = followUpReason(seconds: s) + " " + detail
+        }
         let shown = others.isEmpty
             ? pressedText
             : "Running now:\n\(pressedText)\n\nAlso in this template:\n" + others.joined(separator: "\n")
         return BannerConfirmation(
-            kind: .templateCommand, title: "Run a \(what) from the \"\(template)\" template?", detail: detail,
+            kind: .templateCommand, title: title, detail: detail,
             command: shown,
             buttons: [.init(.once, "Run once", .primary), .init(.always, "Always allow this template", .secondary),
                       .init(.cancel, "Cancel", .cancel)])

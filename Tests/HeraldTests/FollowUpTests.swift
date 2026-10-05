@@ -334,9 +334,13 @@ final class FollowUpTests: XCTestCase {
         store.update(app: "bidbot", id: "n1") { $0.followUp = record }
         let reopened = HistoryStore(directory: dir.appendingPathComponent("history", isDirectory: true))
         XCTAssertEqual(reopened.item(app: "bidbot", id: "n1")?.followUp, record)
-        XCTAssertEqual(record.bannerLine { _ in "14:05" }, "Follow-up ran: Forward \u{00B7} 14:05")
+        XCTAssertEqual(record.bannerLine { _ in "14:05" }, "Follow-up ran: Forward at 14:05.")
         XCTAssertEqual(HeraldFollowUpRecord(ranAt: at, action: "Forward", outcome: .failed, detail: "exit 1").bannerLine { _ in "" },
-                       "Follow-up failed: exit 1")
+                       "Follow-up failed: Forward (exit 1).")
+        let denied = HeraldFollowUpRecord(ranAt: at, action: "Forward", outcome: .failed, detail: HeraldFollowUpRecord.notAllowedDetail(name: "BidBot"))
+        XCTAssertTrue(denied.isNotAllowed)
+        XCTAssertEqual(denied.bannerLine(appName: "BidBot") { _ in "" }, "Follow-up did not run: allow BidBot to run commands in Settings > Apps.")
+        XCTAssertFalse(HeraldFollowUpRecord(ranAt: at, action: "Forward", outcome: .failed, detail: "exit 1").isNotAllowed)
         XCTAssertNil(HeraldFollowUpRecord(ranAt: at, action: "Forward", outcome: .waitingForApproval).bannerLine { _ in "" })
 
         let line = ActionLog.followUpEntry(app: "bidbot", notificationId: "n1",

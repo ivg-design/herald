@@ -175,12 +175,22 @@ public struct HeraldFollowUpRecord: Codable, Equatable, Sendable {
         self.outcome = outcome; self.detail = detail; self.unattendedSeconds = unattendedSeconds
     }
 
-    /// The quiet line under the banner's grid: "Follow-up ran: Forward · 14:05", "Follow-up failed: exit 1".
-    /// nil while it waits for approval (the question is on the banner then).
-    public func bannerLine(timeFormatter: (Date) -> String) -> String? {
+    /// The detail of a follow-up that never ran because the app may not run commands at all.
+    public static func notAllowedDetail(name: String) -> String { "\(name) is not allowed to run commands, scripts and Shortcuts" }
+    /// True for the failure `notAllowedDetail` describes: the one the person fixes in Settings > Apps.
+    public var isNotAllowed: Bool { outcome == .failed && detail?.hasSuffix("is not allowed to run commands, scripts and Shortcuts") == true }
+
+    /// The quiet line under the banner's grid, always a full sentence:
+    /// "Follow-up ran: Forward at 14:05.", "Follow-up failed: Forward (exit 1).",
+    /// "Follow-up did not run: allow Acme to run commands in Settings > Apps." nil while it waits for approval
+    /// (the question is on the banner then).
+    public func bannerLine(appName: String? = nil, timeFormatter: (Date) -> String) -> String? {
         switch outcome {
-        case .ran: return "Follow-up ran: \(action) \u{00B7} \(timeFormatter(ranAt))"
-        case .failed: return "Follow-up failed: " + ((detail?.isEmpty == false) ? detail! : action)
+        case .ran: return "Follow-up ran: \(action) at \(timeFormatter(ranAt))."
+        case .failed:
+            if isNotAllowed { return "Follow-up did not run: allow \(appName ?? "this app") to run commands in Settings > Apps." }
+            if let d = detail, !d.isEmpty { return "Follow-up failed: \(action) (\(d))." }
+            return "Follow-up failed: \(action)."
         case .waitingForApproval: return nil
         }
     }

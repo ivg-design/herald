@@ -112,6 +112,28 @@ final class ConfirmationFlowTests: XCTestCase {
         XCTAssertEqual(surface.shown["acme/1"]?.title, "Run this Shortcut for Acme?")
     }
 
+    func testAFollowUpQuestionSaysItIsAFollowUpAndWhyItAsks() {
+        let c = BannerConfirmation.appCommand(kind: .script, name: "Acme", text: "script: notify.sh", followUpSeconds: 600)
+        XCTAssertEqual(c.title, "Run this follow-up for Acme?")
+        XCTAssertEqual(c.kind, .script)
+        XCTAssertTrue(c.detail.hasPrefix("This banner was left up for 10 minutes, so its follow-up wants to run. A notification sent as Acme asks Herald to run a script"), c.detail)
+        XCTAssertEqual(c.buttons, BannerConfirmation.appCommand(kind: .script, name: "Acme", text: "script: notify.sh").buttons)
+        XCTAssertTrue(BannerConfirmation.appCommand(kind: .shortcut, name: "Acme", text: "x", followUpSeconds: 90).detail
+            .hasPrefix("This banner was left up for 90 seconds, so"))
+        XCTAssertTrue(BannerConfirmation.appCommand(kind: .command, name: "Acme", text: "x", followUpSeconds: 7200).detail
+            .hasPrefix("This banner was left up for 2 hours, so"))
+        // Pressed buttons are unchanged.
+        XCTAssertEqual(BannerConfirmation.appCommand(kind: .script, name: "Acme", text: "x").title, "Run this script for Acme?")
+    }
+
+    func testAFollowUpFromATemplateNamesTheTemplate() {
+        let c = BannerConfirmation.templateCommand(kind: .shortcut, template: "ops", name: "Acme", pressedText: "shortcut: Log",
+                                                   others: [], replacedIssuerLabel: nil, followUpSeconds: 60)
+        XCTAssertEqual(c.title, "Run this follow-up from the \u{201C}ops\u{201D} template?")
+        XCTAssertTrue(c.detail.hasPrefix("This banner was left up for 1 minute, so its follow-up wants to run. This template for Acme runs code"), c.detail)
+        XCTAssertEqual(c.kind, .templateCommand)
+    }
+
     func testTheCallbackRowShowsTheHostAndTheFullAddress() {
         askHost("hooks.example.com")
         let c = surface.shown["acme/1"]!

@@ -2050,13 +2050,64 @@ final class DesignerModel: ObservableObject {
         var factor: Double { self == .seconds ? 1 : (self == .minutes ? 60 : 3600) }
     }
 
-    /// One entry of the follow-up's "run" menu.
+    /// One entry of the follow-up's "run" menu. The menu groups them under "From the issuer" and "Your actions".
     struct FollowUpChoice: Identifiable, Equatable {
         var action: HeraldAction
         var origin: HeraldActionOrigin
         var id: String { action.id }
-        /// "Forward (issuer)" or "Forward (yours)".
-        var title: String { "\(action.label) (\(origin == .issuer ? "issuer" : "yours"))" }
+        var title: String { action.label }
+    }
+
+    /// The one choice the Follow-up block offers. It maps onto what the template stores:
+    /// `off` is `followUp: {enabled: false}` (or no follow-up at all when the issuer declares none), `issuer` is no
+    /// `followUp` on the template (the manifest's applies), `own` is a `followUp` with an action and a delay (it replaces the issuer's).
+    enum FollowUpMode: String, CaseIterable, Identifiable {
+        case off, issuer, own
+        var id: String { rawValue }
+    }
+
+    /// The choices to offer: the issuer's only when the manifest declares a follow-up.
+    var followUpModes: [FollowUpMode] { Self.declaredFollowUp(manifest: manifest) == nil ? [.off, .own] : [.off, .issuer, .own] }
+
+    var followUpMode: FollowUpMode {
+        if followUpIsOn { return .own }
+        if draft.followUp?.enabled == false { return .off }
+        return Self.declaredFollowUp(manifest: manifest) == nil ? .off : .issuer
+    }
+
+    func setFollowUpMode(_ mode: FollowUpMode) {
+        guard mode != followUpMode else { return }
+        switch mode {
+        case .off:
+            if Self.declaredFollowUp(manifest: manifest) != nil { perform { $0.followUp = HeraldFollowUp(enabled: false) } }
+            else { perform { $0.followUp = nil } }
+        case .issuer: perform { $0.followUp = nil }
+        case .own: setFollowUpOn(true)
+        }
+    }
+
+    /// The menu title of a mode: "Off", "The issuer's: Retry after 15 minutes", "My own".
+    func followUpModeTitle(_ mode: FollowUpMode) -> String {
+        switch mode {
+        case .off: return "Off"
+        case .own: return "My own"
+        case .issuer:
+            guard let d = Self.declaredFollowUp(manifest: manifest) else { return "The issuer\u{2019}s" }
+            return "The issuer\u{2019}s: \(d.label) after \(HeraldFollowUp.describe(seconds: d.after))"
+        }
+    }
+
+    /// The line under the block: what applies now.
+    var followUpExplanation: String {
+        switch followUpMode {
+        case .off: return "No follow-up. Nothing runs when a banner is left up."
+        case .issuer:
+            guard let d = Self.declaredFollowUp(manifest: manifest) else { return "" }
+            return "Runs the issuer\u{2019}s \(d.label) once if the banner is still up after \(HeraldFollowUp.describe(seconds: d.after)). The banner stays."
+        case .own:
+            let replaces = Self.declaredFollowUp(manifest: manifest) != nil ? " It replaces the issuer\u{2019}s." : ""
+            return "Runs your action once if the banner is still up after the delay. The banner stays.\(replaces) Approve the action once so it can run while you are away."
+        }
     }
 
     static let defaultFollowUpSeconds: Double = 600

@@ -24,8 +24,16 @@ final class BannerModel: ObservableObject {
     /// "Follow-up ran: Forward · 14:05" (or "Follow-up failed: why"): what the follow-up did, from the item's History
     /// record. Drawn under the grid like `failureLine`, but it stays for as long as the banner does.
     var followUpLine: String? {
-        item.followUp?.bannerLine { DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short) }
+        guard let f = item.followUp else { return nil }
+        if f.outcome == .waitingForApproval {
+            // The question is on the banner; once it is answered with Cancel, the follow-up stays undone.
+            return confirmation == nil ? "Follow-up did not run: you did not approve \(f.action)." : nil
+        }
+        return f.bannerLine(appName: appName) { DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short) }
     }
+    /// The follow-up line opens Settings > Apps on this app when that is where the person fixes it.
+    var followUpLineOpensSettings: Bool { item.followUp?.isNotAllowed == true }
+    var onOpenAppSettings: () -> Void = {}
     /// A question the banner is asking inline (run this command? send to this host?). While it is set it takes the
     /// place of the actions row (`GridBannerView` hides the action cells, `BannerView` draws the question under
     /// the grid) and the panel re-measures. Answered by `answerConfirmation`; never a modal alert (DESIGN 8).
@@ -365,7 +373,8 @@ struct BannerView: View {
                 FailureLine(text: line, inset: model.grid.grid?.padding ?? 14)
             }
             if let line = model.followUpLine {
-                FollowUpLine(text: line, failed: model.item.followUp?.outcome == .failed, inset: model.grid.grid?.padding ?? 14)
+                FollowUpLine(text: line, failed: model.item.followUp?.outcome != .ran, inset: model.grid.grid?.padding ?? 14,
+                             opensSettings: model.followUpLineOpensSettings ? { model.onOpenAppSettings() } : nil)
             }
         }
             .frame(width: model.bannerWidth, alignment: .topLeading)
@@ -404,19 +413,32 @@ struct FollowUpLine: View {
     let text: String
     let failed: Bool
     let inset: Double
+    /// Set when the fix is in Settings > Apps: the whole line is then a button that opens it.
+    var opensSettings: (() -> Void)? = nil
 
     var body: some View {
+        if let open = opensSettings {
+            Button(action: open) { row(underlined: true) }
+                .buttonStyle(.plain)
+                .heraldHelp(name: "Follow-up", detail: "Opens Settings > Apps for this app, where you allow it to run commands, scripts and Shortcuts")
+                .accessibilityLabel(text)
+                .accessibilityHint("Opens Settings, Apps")
+        } else {
+            row(underlined: false).accessibilityElement(children: .combine).accessibilityLabel(text)
+        }
+    }
+
+    private func row(underlined: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: failed ? "exclamationmark.circle" : "arrow.turn.up.right").font(.caption)
-            Text(text).font(.caption).lineLimit(2)
+            Text(text).font(.caption).lineLimit(2).underline(underlined)
             Spacer(minLength: 0)
         }
         .foregroundStyle(failed ? Color.orange : Color.secondary)
         .padding(.horizontal, inset).padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.04))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(text)
+        .contentShape(Rectangle())
     }
 }
 

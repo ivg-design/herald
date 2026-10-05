@@ -188,6 +188,7 @@ final class BannerCenter {
         model.onConfirmationAnswer = { [weak self] confirmation, choice in
             self?.controller.confirmations.answer(app: item.app, id: item.id, confirmation: confirmation, choice)
         }
+        model.onOpenAppSettings = { SettingsNavigator.shared.show(app: item.app) }
         model.onReplySend = { [weak self] prompt, text in self?.controller.sendReply(app: item.app, id: item.id, prompt: prompt, text: text) }
         model.onReplyCancel = { [weak self] prompt in self?.controller.cancelReply(app: item.app, id: item.id, prompt: prompt) }
         model.onRecordStop = { [weak self] p in self?.controller.stopRecording(app: item.app, id: item.id, prompt: p) }

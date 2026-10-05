@@ -42,6 +42,18 @@ final class WindowPresence {
     }
 }
 
+/// Asks Settings to show an app's page (Settings > Apps, that app selected). The views read `app` when they appear and when it changes.
+@MainActor
+final class SettingsNavigator: ObservableObject {
+    static let shared = SettingsNavigator()
+    /// The app to show in Settings > Apps; the Apps page clears it once it has selected it.
+    @Published var app: String?
+    func show(app: String) {
+        self.app = app
+        SettingsWindowController.shared.showSettings()
+    }
+}
+
 /// The one Settings window of the app. Cmd-, from any Herald window, the main menu and the bell menu all end here.
 @MainActor
 final class SettingsWindowController: NSObject {

@@ -73,8 +73,8 @@ public final class ConfirmationFlow {
 
     /// An issuer's command, script or Shortcut. `text` is the exact command (`ActionRunner.describe`).
     public func askCommand(app: String, id: String, name: String, kind: HeraldActionKind, text: String,
-                           run: @escaping () -> Void) {
-        ask(.appCommand(kind: kind, name: name, text: text), app: app, id: id) { [registry, changed] choice in
+                           followUpSeconds: Int? = nil, run: @escaping () -> Void) {
+        ask(.appCommand(kind: kind, name: name, text: text, followUpSeconds: followUpSeconds), app: app, id: id) { [registry, changed] choice in
             switch choice {
             case .once:
                 run()
@@ -93,10 +93,11 @@ public final class ConfirmationFlow {
     /// approves exactly what the row listed.
     public func askTemplateCommand(app: String, id: String, template: String, name: String, kind: HeraldActionKind,
                                    pressedText: String, approvalKey: String, all: [String],
-                                   replacedIssuerLabel: String?, run: @escaping () -> Void) {
+                                   replacedIssuerLabel: String?, followUpSeconds: Int? = nil, run: @escaping () -> Void) {
         let others = all.filter { $0 != approvalKey }
         let c = BannerConfirmation.templateCommand(kind: kind, template: template, name: name, pressedText: pressedText,
-                                                   others: others, replacedIssuerLabel: replacedIssuerLabel)
+                                                   others: others, replacedIssuerLabel: replacedIssuerLabel,
+                                                   followUpSeconds: followUpSeconds)
         ask(c, app: app, id: id) { [approvals, changed] choice in
             switch choice {
             case .once:

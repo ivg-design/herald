@@ -9,65 +9,70 @@ struct FollowUpBlock: View {
     @State private var amount = ""
     @State private var unit = DesignerModel.FollowUpUnit.minutes
 
+    private static let newActionTag = "\u{0}new"
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             PaletteHeader(title: "Follow-up")
-            if let issuer = model.issuerFollowUp {
-                VStack(alignment: .leading, spacing: 4) {
-                    Toggle(isOn: Binding(get: { model.issuerFollowUpIsOn }, set: { model.setIssuerFollowUpOn($0) })) {
-                        Text("From the issuer: \(issuer.label) after \(HeraldFollowUp.describe(seconds: issuer.after))")
-                            .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
-                    }
-                    .toggleStyle(.switch).controlSize(.small)
-                    .heraldHelp(name: "Issuer follow-up", detail: "The follow-up this app declares. Turn it off to stop it for this template; turn it on again to use it")
+            if model.followUpModes.contains(.issuer) {
+                // The issuer declares one: a single choice, so the two can never both seem to apply.
+                Picker("", selection: Binding(get: { model.followUpMode }, set: { model.setFollowUpMode($0); syncFields() })) {
+                    ForEach(model.followUpModes) { Text(model.followUpModeTitle($0)).tag($0) }
                 }
+                .labelsHidden().pickerStyle(.menu).controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Follow-up")
+                .heraldHelp(name: "Follow-up", detail: "Off runs nothing. The issuer's runs the follow-up this app declares. My own replaces it with an action you choose")
+            } else {
+                Toggle(isOn: Binding(get: { model.followUpIsOn }, set: { model.setFollowUpMode($0 ? .own : .off); syncFields() })) {
+                    Text("If not dismissed").font(.system(size: 12))
+                }
+                .toggleStyle(.switch).controlSize(.small)
+                .accessibilityLabel("Follow-up if not dismissed")
+                .heraldHelp(name: "If not dismissed", detail: "Run one action when the banner is still up after the time below. The banner stays")
             }
-            Toggle(isOn: Binding(get: { model.followUpIsOn }, set: { model.setFollowUpOn($0); syncFields() })) {
-                Text("If not dismissed").font(.system(size: 12))
-            }
-            .toggleStyle(.switch).controlSize(.small)
-            .heraldHelp(name: "If not dismissed", detail: "Run one action when the banner is still up after the time below. The banner stays")
 
-            if model.followUpIsOn {
-                HStack(spacing: 6) {
-                    Text("After").font(.caption).foregroundStyle(.secondary)
+            if model.followUpMode == .own {
+                FieldRow("After") {
                     TextField("", text: $amount)
                         .multilineTextAlignment(.trailing).frame(width: 64).controlSize(.small)
                         .onSubmit(commitAmount)
+                        .accessibilityLabel("Follow-up delay")
                         .heraldHelp(name: "Follow-up delay", detail: "How long the banner may stay up before the follow-up runs: 5 seconds to 7 days")
                     Picker("", selection: $unit) {
                         ForEach(DesignerModel.FollowUpUnit.allCases) { Text($0.title).tag($0) }
                     }
                     .labelsHidden().pickerStyle(.menu).controlSize(.small).fixedSize()
                     .onChange(of: unit) { _ in commitAmount() }
+                    .accessibilityLabel("Delay unit")
                     .heraldHelp(name: "Delay unit", detail: "Seconds, minutes or hours")
-                    Spacer(minLength: 0)
                 }
                 if let message = delayMessage {
                     Text(message).font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Run").font(.caption).foregroundStyle(.secondary)
-                    Menu {
-                        ForEach(model.followUpChoices) { c in
-                            Button { model.setFollowUpAction(ref: c.id) } label: {
-                                if model.followUpRunSelection == c.id, model.followUpInlineAction == nil {
-                                    Label(c.title, systemImage: "checkmark")
-                                } else { Text(c.title) }
-                            }
+                FieldRow("Run") {
+                    Picker("", selection: Binding(get: { model.followUpRunSelection ?? "" }, set: pickRun)) {
+                        if model.followUpRunSelection == nil { Text("Choose an action").tag("") }
+                        let issuer = model.followUpChoices.filter { $0.origin == .issuer }
+                        let yours = model.followUpChoices.filter { $0.origin != .issuer }
+                        if !issuer.isEmpty {
+                            Section("From the issuer") { ForEach(issuer) { Text($0.title).tag($0.id) } }
                         }
-                        if !model.followUpChoices.isEmpty { Divider() }
-                        if let a = model.followUpInlineAction {
-                            Button { model.editFollowUpAction() } label: { Label("\(a.label) (this follow-up)", systemImage: "checkmark") }
+                        Section("Your actions") {
+                            ForEach(yours) { Text($0.title).tag($0.id) }
+                            if let a = model.followUpInlineAction { Text(a.label).tag(a.id) }
                         }
-                        Button("New Shortcut action\u{2026}") { model.openActionEditor(model.newFollowUpActionRequest()) }
-                    } label: {
-                        Text(runTitle).font(.system(size: 12)).lineLimit(1).truncationMode(.middle)
+                        Divider()
+                        Text("New Shortcut action\u{2026}").tag(Self.newActionTag)
                     }
-                    .menuStyle(.borderlessButton).controlSize(.small)
+                    .labelsHidden().pickerStyle(.menu).controlSize(.small)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Follow-up action")
                     .heraldHelp(name: "Follow-up action", detail: "The shortcut, script, command or callback to run. Links, apps, replies, snooze and dismiss cannot follow up")
-                    if model.followUpInlineAction != nil {
+                }
+                if model.followUpInlineAction != nil {
+                    FieldRow("") {
                         Button("Edit this action\u{2026}") { model.editFollowUpAction() }
                             .buttonStyle(.borderless).controlSize(.small)
                             .heraldHelp(name: "Edit follow-up action", detail: "Change the shortcut, script, command or callback this follow-up runs")
@@ -77,19 +82,17 @@ struct FollowUpBlock: View {
                     Text(problem).font(.caption2).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text("Runs once if the banner is still up. The banner stays. Approve the action once so it can run while you are away.")
+            Text(model.followUpExplanation)
                 .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .onAppear(perform: syncFields)
         .onChange(of: model.ownFollowUpAfter) { _ in syncFields() }
     }
 
-    private var runTitle: String {
-        if let a = model.followUpInlineAction { return "\(a.label) (this follow-up)" }
-        if let id = model.followUpRunSelection {
-            return model.followUpChoices.first { $0.id == id }?.title ?? id
-        }
-        return "Choose an action"
+    private func pickRun(_ id: String) {
+        if id == Self.newActionTag { model.openActionEditor(model.newFollowUpActionRequest()); return }
+        guard !id.isEmpty, id != model.followUpRunSelection else { return }
+        if model.followUpChoices.contains(where: { $0.id == id }) { model.setFollowUpAction(ref: id) }
     }
 
     /// Only the follow-up's own issues, as the validator words them.

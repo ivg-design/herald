@@ -63,8 +63,8 @@ final class DesignerFollowUpTests: XCTestCase {
         let kinds = Set(m.followUpChoices.map(\.action.kind))
         XCTAssertTrue(kinds.isSubset(of: Set(HeraldFollowUp.allowedKinds)))
         XCTAssertEqual(Set(m.followUpChoices.map(\.id)), ["forward", "log", "mine"])
-        XCTAssertEqual(m.followUpChoices.first { $0.id == "forward" }?.title, "Forward (issuer)")
-        XCTAssertEqual(m.followUpChoices.first { $0.id == "mine" }?.title, "Mine (yours)")
+        XCTAssertEqual(m.followUpChoices.first { $0.id == "forward" }?.title, "Forward")
+        XCTAssertEqual(m.followUpChoices.first { $0.id == "mine" }?.title, "Mine")
     }
 
     func testChoosingAnActionRefReplacesAnInlineAction() throws {
@@ -129,5 +129,61 @@ final class DesignerFollowUpTests: XCTestCase {
         XCTAssertEqual(m.draft.followUp?.after, 1800)
         m.undo()
         XCTAssertEqual(m.draft.followUp?.after, 600)
+    }
+
+    private func storedJSON(_ m: DesignerModel) throws -> String {
+        let t = try HeraldJSON.decoder().decode(HeraldTemplate.self, from: HeraldJSON.encoder().encode(m.draft))
+        XCTAssertEqual(t.followUp, m.draft.followUp, "round-trips through the stored template JSON")
+        let d = try HeraldJSON.encoder().encode(t.followUp)
+        return String(decoding: d, as: UTF8.self)
+    }
+
+    func testTheChoiceMapsToTheStoredTemplateWhenTheIssuerDeclaresAFollowUp() throws {
+        let m = model(try manifest(followUp: #","followUp":{"after":"15m","actionRef":"forward"}"#))
+        XCTAssertEqual(m.followUpModes, [.off, .issuer, .own])
+        XCTAssertEqual(m.followUpMode, .issuer)
+        XCTAssertNil(m.draft.followUp)
+        XCTAssertEqual(m.followUpModeTitle(.issuer), "The issuer\u{2019}s: Forward after 15 minutes")
+        XCTAssertEqual(m.followUpExplanation, "Runs the issuer\u{2019}s Forward once if the banner is still up after 15 minutes. The banner stays.")
+
+        m.setFollowUpMode(.off)
+        XCTAssertEqual(m.followUpMode, .off)
+        XCTAssertEqual(m.draft.followUp, HeraldFollowUp(enabled: false))
+        XCTAssertTrue(try storedJSON(m).contains("\"enabled\":false"))
+        XCTAssertTrue(m.followUpExplanation.hasPrefix("No follow-up"))
+        XCTAssertNil(FollowUpResolver.declaration(manifest: m.manifest, notification: nil, template: m.draft))
+
+        m.setFollowUpMode(.own)
+        XCTAssertEqual(m.followUpMode, .own)
+        XCTAssertEqual(m.draft.followUp?.after, 600)
+        XCTAssertEqual(m.draft.followUp?.actionRef, "forward")
+        XCTAssertNil(m.draft.followUp?.enabled)
+        _ = try storedJSON(m)
+        XCTAssertEqual(FollowUpResolver.declaration(manifest: m.manifest, notification: nil, template: m.draft)?.1, .template)
+        XCTAssertTrue(m.followUpExplanation.contains("It replaces the issuer\u{2019}s."))
+
+        m.setFollowUpMode(.issuer)
+        XCTAssertEqual(m.followUpMode, .issuer)
+        XCTAssertNil(m.draft.followUp)
+        XCTAssertEqual(FollowUpResolver.declaration(manifest: m.manifest, notification: nil, template: m.draft)?.1, .manifest)
+
+        // Off, then straight to my own: the disabled marker is replaced, not kept.
+        m.setFollowUpMode(.off)
+        m.setFollowUpMode(.own)
+        XCTAssertEqual(m.followUpMode, .own)
+        XCTAssertNil(m.draft.followUp?.enabled)
+    }
+
+    func testWithoutAnIssuerFollowUpTheChoicesAreOffAndMyOwn() throws {
+        let m = model(try manifest())
+        XCTAssertEqual(m.followUpModes, [.off, .own])
+        XCTAssertEqual(m.followUpMode, .off)
+        m.setFollowUpMode(.own)
+        XCTAssertEqual(m.followUpMode, .own)
+        XCTAssertNotNil(m.draft.followUp)
+        XCTAssertFalse(m.followUpExplanation.contains("replaces"))
+        m.setFollowUpMode(.off)
+        XCTAssertNil(m.draft.followUp, "nothing to switch off: no marker is stored")
+        XCTAssertEqual(m.followUpMode, .off)
     }
 }

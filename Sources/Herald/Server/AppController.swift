@@ -933,20 +933,22 @@ final class AppController {
             log("\(action.kind.rawValue) action \(action.label) ignored for \(item.app): \(why)")
             if let followUp {
                 recordFollowUp(item: item, action: action, origin: origin, outcome: .failed,
-                               detail: "\(name) is not allowed to run commands, scripts and Shortcuts", unattended: followUp)
+                               detail: HeraldFollowUpRecord.notAllowedDetail(name: name), unattended: followUp)
             } else {
                 flashFailure(app: item.app, id: item.id, reason: "commands are not allowed for \(name)")
             }
         case .askApp(let text):
             waiting()
-            confirmations.askCommand(app: item.app, id: item.id, name: name, kind: action.kind, text: text, run: proceed)
+            confirmations.askCommand(app: item.app, id: item.id, name: name, kind: action.kind, text: text,
+                                      followUpSeconds: followUp, run: proceed)
         case .askTemplate(let key, let all, let text):
             let replaced = ActionRunner.replacedIssuerLabel(for: action, notification: item.notification,
                                                             manifest: manifest, template: template)
             waiting()
             confirmations.askTemplateCommand(app: item.app, id: item.id, template: templateName, name: name,
                                              kind: action.kind, pressedText: text,
-                                             approvalKey: key, all: all, replacedIssuerLabel: replaced, run: proceed)
+                                             approvalKey: key, all: all, replacedIssuerLabel: replaced,
+                                             followUpSeconds: followUp, run: proceed)
         }
     }
 
