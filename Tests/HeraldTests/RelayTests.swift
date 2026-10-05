@@ -317,6 +317,24 @@ final class RelayPolicyTests: XCTestCase {
         XCTAssertNil(n.speak)
     }
 
+    func testExplicitSpeakFalseWinsOverVoiceSpeedAndPresentation() {
+        let n = RelayPolicy.notification(for: env(["title": "T", "speak": false, "voice": "af_heart", "speed": 1.2, "presentation": "both"]), silenceSpeech: false)
+        XCTAssertNil(n.speak)
+        XCTAssertNotEqual(n.presentation, .both)
+    }
+
+    func testUsageCarriesTheRelaysLimits() throws {
+        let json = #"{"day":"2026-10-04","requests":5,"wsMessages":1,"notifications":2,"pollSeconds":0,"audioUploads":0,"audioBytes":0,"queued":0,"storageBytes":10,"limits":{"requestsPerDay":90000,"freePlanRequestsPerDay":100000,"notificationsPerDay":2000,"pollSecondsPerDay":3600,"audioUploadsPerDay":50,"audioBytesPerDay":1000,"queueMax":500},"requestsPercent":0,"budgetExhausted":false}"#
+        let u = try JSONDecoder().decode(RelayUsage.self, from: Data(json.utf8))
+        XCTAssertEqual(u.limits?.requestsPerDay, 90000)
+        XCTAssertEqual(u.limits?.notificationsPerDay, 2000)
+        let again = try JSONSerialization.jsonObject(with: try JSONEncoder().encode(u)) as? [String: Any]
+        XCTAssertEqual((again?["limits"] as? [String: Any])?["queueMax"] as? Int, 500, "relay_usage returns the limits")
+        // an older relay without limits still decodes
+        let old = json.replacingOccurrences(of: #""limits":{"requestsPerDay":90000,"freePlanRequestsPerDay":100000,"notificationsPerDay":2000,"pollSecondsPerDay":3600,"audioUploadsPerDay":50,"audioBytesPerDay":1000,"queueMax":500},"#, with: "")
+        XCTAssertNil(try JSONDecoder().decode(RelayUsage.self, from: Data(old.utf8)).limits)
+    }
+
     func testExpectReplyOnlyAddsReplyAndRecord() {
         let plain = RelayPolicy.notification(for: env(["title": "T", "status": "done"]), silenceSpeech: false)
         let ask = RelayPolicy.notification(for: env(["title": "T", "status": "done", "expectReply": true]), silenceSpeech: false)

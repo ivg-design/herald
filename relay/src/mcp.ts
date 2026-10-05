@@ -103,7 +103,30 @@ function headerValue(v: string): string {
   try { return new TextDecoder().decode(Uint8Array.from(atob(m[1]), (c) => c.charCodeAt(0))); } catch { return "\u0000"; }
 }
 
+const MAILBOX_TOOLS = new Set(["send_notification", "get_receipt", "wait_for_reply", "herald_status"]);
+
+/**
+ * Every MCP request needs a valid agent key. A call that goes to the mailbox anyway (a tool call, an event
+ * subscription) is authenticated by that request, so it costs one mailbox request, not two. Anything answered
+ * locally (initialize, tools/list, ping, events/list, server/discover, an invalid tool call...) is checked with one
+ * `/v1/status` probe, before it is answered when it is known to be local, after it otherwise.
+ */
 export async function handleMcp(req: Request, forward: Forward): Promise<Response> {
+  let authed = false, bound = false;
+  const tracked: Forward = async (path, init) => {
+    const r = await forward(path, init);
+    if (r.status !== 401 && r.status !== 403) authed = true;
+    return r;
+  };
+  const res = await route(req, tracked, (b) => { bound = b; });
+  if (bound && !authed && res.status !== 401 && res.status !== 403) {
+    const probe = await forward("/v1/status");
+    if (probe.status === 401 || probe.status === 403) return probe;
+  }
+  return res;
+}
+
+async function route(req: Request, forward: Forward, markBound: (b: boolean) => void): Promise<Response> {
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
   if (req.method === "GET" || req.method === "DELETE") {
     return new Response(JSON.stringify(fail(null, -32000, "this server answers POST only (no SSE stream, no sessions)")), { status: 405, headers: { ...headers, allow: "POST" } });
@@ -120,8 +143,13 @@ export async function handleMcp(req: Request, forward: Forward): Promise<Respons
   const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers });
   if (msg.method === undefined) return reply(fail(msg.id, -32600, "not a request"), 202); // a response from the client: ignore
   // Every request, even one answered locally, must carry a valid agent key.
-  const probe = await forward("/v1/status");
-  if (probe.status === 401 || probe.status === 403) return probe;
+  const isBound = msg.method === "events/subscribe" || msg.method === "events/unsubscribe" ||
+    (msg.method === "tools/call" && MAILBOX_TOOLS.has(String(msg.params?.name)));
+  markBound(isBound);
+  if (!isBound) {
+    const probe = await forward("/v1/status");
+    if (probe.status === 401 || probe.status === 403) return probe;
+  }
 
   const hv = req.headers.get("mcp-protocol-version");
   const meta = (msg.params?._meta ?? null) as Record<string, unknown> | null;

@@ -2,14 +2,80 @@ import Foundation
 
 /// The two ready-made instruction blocks shown under "Enable relay" in Settings > Cloud. Pure text, so the wording is tested.
 public enum RelayInstructions {
-    /// Cloudflare's Browser Integrity Check rejects Python's default `Python-urllib/3.x` User-Agent with Error 1010 before the
-    /// request reaches the relay (on every Cloudflare-fronted host). Any other value works.
+    /// One line, not a lesson: Cloudflare's Browser Integrity Check rejects Python's default `Python-urllib/3.x` User-Agent
+    /// with Error 1010; the docs page explains. Any other value works.
     public static func userAgentNote(withKey: Bool = true) -> String {
-        """
-        Send a custom User-Agent (for example Herald-Agent/1.0). Cloudflare rejects Python's default "Python-urllib/3.x" with Error 1010 before the request reaches the relay; any other value works. In Python:
-          req = urllib.request.Request(url, headers={"User-Agent": "Herald-Agent/1.0"\(withKey ? ", \"Authorization\": \"Bearer <key>\"" : "")})
-        Other stacks (curl, requests, fetch, aiohttp) are fine as they are. A custom domain (Settings > Cloud > Advanced) turns the check off, so even default library User-Agents work.
-        """
+        "Calling the relay from your own HTTP code? Send a custom User-Agent such as Herald-Agent/1.0 (Cloudflare blocks Python's default). Details: \(docsLink(for: .other))"
+    }
+
+    // MARK: The agents of the picker in Settings > Cloud > Connect an agent
+
+    public enum Agent: String, CaseIterable, Identifiable, Sendable {
+        case chatgpt, claudeCode, codex, other
+        public var id: String { rawValue }
+        public var title: String {
+            switch self {
+            case .chatgpt: return "ChatGPT or an OpenAI dot"
+            case .claudeCode: return "Claude Code"
+            case .codex: return "Codex"
+            case .other: return "Other"
+            }
+        }
+        /// The docs page that explains it, under docs/ (see `HeraldDocs`).
+        public var docsPage: String {
+            switch self {
+            case .chatgpt: return "cloud/connect-chatgpt"
+            case .claudeCode, .codex, .other: return "cloud/connect-agent"
+            }
+        }
+    }
+
+    public static func docsLink(for agent: Agent) -> String { HeraldDocs.baseURL + "/" + agent.docsPage }
+
+    /// A value to copy: a URL, a command or a config block.
+    public struct CopyLine: Equatable, Sendable { public var label: String; public var text: String }
+
+    /// At most five short steps for one agent. `key` nil shows a placeholder until a key is made.
+    public static func steps(for agent: Agent, key: String? = nil) -> [String] {
+        let keyStep = key == nil ? "Create a key below (Agent keys) and copy it. It is shown once."
+                                 : "Use the key you just created. It is shown once; revoke it any time in Settings > Cloud."
+        switch agent {
+        case .chatgpt:
+            return ["In ChatGPT's settings, add a custom MCP server (connector). Developer mode may be required. An OpenAI dot takes the same URL.",
+                    "Name it Herald, paste the MCP server URL below and choose Authentication: OAuth (leave client ID and secret empty).",
+                    "Press Connect, then press Approve on the banner on this Mac. Missed it? Type the 6-digit code from Settings > Cloud > Connector approvals into the browser page.",
+                    "Ask the agent to send you a Herald notification. Revoke the connector any time in Settings > Cloud."]
+        case .claudeCode:
+            return [keyStep, "Run this command in a terminal.", "Ask Claude Code to send you a Herald notification."]
+        case .codex:
+            return [keyStep, "Put the key in the environment.", "Add the server to ~/.codex/config.toml.", "Ask Codex to send you a Herald notification."]
+        case .other:
+            return [keyStep, "Use the MCP URL below and send the key in the Authorization header.",
+                    "From your own HTTP code, also send a custom User-Agent such as Herald-Agent/1.0 (Cloudflare blocks Python's default)."]
+        }
+    }
+
+    /// The values the steps point at, each worth one copy button.
+    public static func copyLines(for agent: Agent, mcpURL: String, key: String? = nil) -> [CopyLine] {
+        let k = key ?? "<your key>"
+        switch agent {
+        case .chatgpt: return [CopyLine(label: "MCP server URL", text: mcpURL)]
+        case .claudeCode: return [CopyLine(label: "Command", text: "claude mcp add --transport http herald \(mcpURL) --header \"Authorization: Bearer \(k)\"")]
+        case .codex:
+            return [CopyLine(label: "Environment", text: "export HERALD_RELAY_KEY=\(k)"),
+                    CopyLine(label: "~/.codex/config.toml", text: "[mcp_servers.herald]\nurl = \"\(mcpURL)\"\nbearer_token_env_var = \"HERALD_RELAY_KEY\"")]
+        case .other: return [CopyLine(label: "MCP URL", text: mcpURL), CopyLine(label: "Header", text: "Authorization: Bearer \(k)")]
+        }
+    }
+
+    /// Everything for one agent as plain text: numbered steps, the values, and the guide's address.
+    public static func text(for agent: Agent, mcpURL: String, key: String? = nil) -> String {
+        var out = [agent.title, ""]
+        for (i, step) in steps(for: agent, key: key).enumerated() { out.append("\(i + 1). \(step)") }
+        for line in copyLines(for: agent, mcpURL: mcpURL, key: key) { out += ["", "\(line.label):", line.text] }
+        if agent == .chatgpt { out += ["", "No browser to sign in with? Use the device flow: ask relay_instructions for client \"device\", or read \(HeraldDocs.baseURL)/cloud/device-flow"] }
+        out += ["", userAgentNote(), "Guide: \(docsLink(for: agent))"]
+        return out.joined(separator: "\n")
     }
 
     /// An agent with no usable browser (a sandbox whose browser reports net::ERR_BLOCKED_BY_CLIENT): the OAuth device flow.
@@ -33,56 +99,16 @@ public enum RelayInstructions {
         5. Call \(o)/mcp with  Authorization: Bearer <access_token>. Keep it: the connection is durable. The token does not expire and is
            never replaced; it works until the user revokes you in Herald. You never need to refresh, and nothing is lost if you do.
 
-        To be told when the user replies, instead of polling: subscribe once to the notification.reply event (MCP Events, protocol 2026-07-28).
-        Your approval already covers it; the user does nothing. POST \(o)/mcp  events/subscribe
-          {"name":"notification.reply","arguments":{},"delivery":{"mode":"webhook","url":"<your https callback>","secret":"whsec_<base64 of 24-64 random bytes>"}}
-        The relay first POSTs {"type":"verification","challenge":...} to the callback: answer 2xx with the same challenge. After that each reply to one
-        of your notifications arrives as a signed POST (Standard Webhooks headers) with data {notificationId, id, kind}; read the answer with get_receipt.
-        The subscription does not expire: it lasts until you unsubscribe or the user revokes you.
+        To be told when the user replies instead of polling, subscribe to the notification.reply event: \(HeraldDocs.baseURL)/cloud/reply-events
+        Guide: \(HeraldDocs.baseURL)/cloud/device-flow
         """
     }
 
-    /// ChatGPT and other cloud agents that sign in with OAuth: nothing is copied but the URL; the approval happens in Herald.
-    public static func oauth(mcpURL: String) -> String {
-        """
-        ChatGPT / OpenAI cloud agents (and any connector that signs in with OAuth)
-
-        1. In ChatGPT open Settings > Connectors (under Advanced, turn on Developer mode if you do not see Create) and make a new connector.
-        2. Name: Herald
-           MCP server URL: \(mcpURL)
-           Authentication: OAuth (leave the client ID and secret empty)
-        3. Press Connect. A page opens in your browser and a banner appears on this Mac: press Approve on the banner. If you miss it, type the 6-digit code from Settings > Cloud > Connector approvals on the browser page.
-        4. Ask the agent to use Herald, for example: "Send me a Herald notification when you are done."
-
-        The connector can send notifications and read their receipts, nothing else. Revoke it any time in Settings > Cloud.
-
-        No browser to sign in with (the agent cannot open the consent page)? Use the device flow: ask for client "device" in relay_instructions,
-        or see docs/CLOUD.md, "No browser? Use the device flow".
-
-        If the agent calls the relay with its own HTTP code (not as a connector):
-        \(userAgentNote(withKey: false))
-        """
-    }
+    /// ChatGPT, an OpenAI dot and other cloud agents that sign in with OAuth: nothing is copied but the URL; the approval happens in Herald.
+    public static func oauth(mcpURL: String) -> String { text(for: .chatgpt, mcpURL: mcpURL) }
 
     /// Claude Code, Codex CLI and anything that takes a static key. `key` nil shows a placeholder until a key is made.
     public static func staticKey(mcpURL: String, key: String? = nil) -> String {
-        let k = key ?? "<your key>"
-        return """
-        Claude Code / Codex CLI (a static key)
-
-        Claude Code:
-        claude mcp add --transport http herald \(mcpURL) --header "Authorization: Bearer \(k)"
-
-        Codex ~/.codex/config.toml (put the key in the environment: export HERALD_RELAY_KEY=\(k)):
-        [mcp_servers.herald]
-        url = "\(mcpURL)"
-        bearer_token_env_var = "HERALD_RELAY_KEY"
-
-        Any other MCP client: URL \(mcpURL), header Authorization: Bearer \(k)
-
-        Scripts that call the relay over HTTP:
-        \(userAgentNote())
-        \(key == nil ? "\nCreate a key below to fill this in. A key is shown once; revoke it any time in Settings > Cloud." : "")
-        """
+        [Agent.claudeCode, .codex, .other].map { text(for: $0, mcpURL: mcpURL, key: key) }.joined(separator: "\n\n")
     }
 }

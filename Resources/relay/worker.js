@@ -355,7 +355,7 @@ function validateNotification(input) {
     if (typeof o.speed !== "number" || !(o.speed >= 0.5 && o.speed <= 2)) return bad("speed must be between 0.5 and 2", ["speed"]);
     speed = o.speed;
   }
-  if (speak === void 0 && (voice !== void 0 || speed !== void 0 || (out.presentation === "voice" || out.presentation === "both") && o.speak !== false)) speak = true;
+  if (speak === void 0 && o.speak !== false && (voice !== void 0 || speed !== void 0 || out.presentation === "voice" || out.presentation === "both")) speak = true;
   if (speak !== void 0) {
     if (voice !== void 0 || speed !== void 0) {
       const base = speak === true ? {} : speak;
@@ -1965,7 +1965,25 @@ function headerValue(v) {
   }
 }
 __name(headerValue, "headerValue");
+var MAILBOX_TOOLS = /* @__PURE__ */ new Set(["send_notification", "get_receipt", "wait_for_reply", "herald_status"]);
 async function handleMcp(req, forward) {
+  let authed = false, bound = false;
+  const tracked = /* @__PURE__ */ __name(async (path, init) => {
+    const r = await forward(path, init);
+    if (r.status !== 401 && r.status !== 403) authed = true;
+    return r;
+  }, "tracked");
+  const res = await route(req, tracked, (b) => {
+    bound = b;
+  });
+  if (bound && !authed && res.status !== 401 && res.status !== 403) {
+    const probe = await forward("/v1/status");
+    if (probe.status === 401 || probe.status === 403) return probe;
+  }
+  return res;
+}
+__name(handleMcp, "handleMcp");
+async function route(req, forward, markBound) {
   const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
   if (req.method === "GET" || req.method === "DELETE") {
     return new Response(JSON.stringify(fail(null, -32e3, "this server answers POST only (no SSE stream, no sessions)")), { status: 405, headers: { ...headers, allow: "POST" } });
@@ -1981,8 +1999,12 @@ async function handleMcp(req, forward) {
   }
   const reply = /* @__PURE__ */ __name((body, status = 200) => new Response(JSON.stringify(body), { status, headers }), "reply");
   if (msg.method === void 0) return reply(fail(msg.id, -32600, "not a request"), 202);
-  const probe = await forward("/v1/status");
-  if (probe.status === 401 || probe.status === 403) return probe;
+  const isBound = msg.method === "events/subscribe" || msg.method === "events/unsubscribe" || msg.method === "tools/call" && MAILBOX_TOOLS.has(String(msg.params?.name));
+  markBound(isBound);
+  if (!isBound) {
+    const probe = await forward("/v1/status");
+    if (probe.status === 401 || probe.status === 403) return probe;
+  }
   const hv = req.headers.get("mcp-protocol-version");
   const meta = msg.params?._meta ?? null;
   const bodyVersion = meta && typeof meta === "object" ? meta[PV] : void 0;
@@ -2051,7 +2073,7 @@ async function handleMcp(req, forward) {
       return reply(fail(msg.id, -32601, `method not found: ${msg.method}`));
   }
 }
-__name(handleMcp, "handleMcp");
+__name(route, "route");
 async function callTool(p, forward) {
   const a = p.arguments ?? {};
   let r;

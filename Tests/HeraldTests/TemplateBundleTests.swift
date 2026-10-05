@@ -160,7 +160,7 @@ final class TemplateBundleTests: XCTestCase {
         XCTAssertEqual(Bundle.sanitizedTemplateName("///"), "---")
         XCTAssertEqual(Bundle.sanitizedTemplateName("."), "Imported template")
         XCTAssertTrue(DesignerModel.isValidName(Bundle.sanitizedTemplateName("../../x")))
-        XCTAssertEqual(Bundle.sanitizedTemplateName(String(repeating: "a", count: 300)).count, 100)
+        XCTAssertEqual(Bundle.sanitizedTemplateName(String(repeating: "a", count: 300)).count, HeraldTemplateName.maxBytes)
         XCTAssertEqual(Bundle.uniqueName("Bell", taken: []), "Bell")
         XCTAssertEqual(Bundle.uniqueName("Bell", taken: ["bell"]), "Bell 2")
         XCTAssertEqual(Bundle.uniqueName("Bell", taken: ["Bell", "Bell 2", "bell 3"]), "Bell 4")

@@ -32,6 +32,12 @@ describe("presentation fields reach the Mac", () => {
     expect((await sendAndReceive({ voice: "am_michael" })).speak).toEqual({ voice: "am_michael" });
     expect((await sendAndReceive({ speak: { voice: "af_bella" }, voice: "bf_emma" })).speak).toEqual({ voice: "af_bella" });
   });
+  it("an explicit speak: false wins over voice, speed and presentation", async () => {
+    for (const extra of [{ voice: "af_heart" }, { speed: 1.2 }, { voice: "af_heart", speed: 1.2, presentation: "both" }, { presentation: "voice" }]) {
+      const got = await sendAndReceive({ speak: false, ...extra });
+      expect(got.speak, JSON.stringify(extra)).toBeUndefined();
+    }
+  });
   it("presentation voice or both implies speak", async () => {
     const v = await sendAndReceive({ presentation: "voice" });
     expect(v).toMatchObject({ presentation: "voice", speak: true });

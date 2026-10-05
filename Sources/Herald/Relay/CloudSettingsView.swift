@@ -14,6 +14,7 @@ struct CloudSettingsView: View {
     @State private var newName = ""
     @State private var newClient = "claude"
     @State private var shown: RelayKeyCreated?
+    @State private var agent: RelayInstructions.Agent = .chatgpt
 
     private var relay: RelayController { controller.relay }
 
@@ -141,26 +142,50 @@ struct CloudSettingsView: View {
         }
     }
 
-    /// The two ready-made blocks: OAuth connectors (ChatGPT / OpenAI cloud agents) and a static key (Claude Code / Codex CLI).
+    /// Connect an agent: pick the agent, follow at most five short steps, copy the URL or command, copy everything, or read the guide.
     @ViewBuilder private var instructionsSection: some View {
         let url = ConnectorConfig.mcpURL(relay: relay.relayURL)
+        let key = agent == .chatgpt ? nil : shown?.key
         Section("Connect an agent") {
-            instructionBlock(RelayInstructions.oauth(mcpURL: url))
-            instructionBlock(RelayInstructions.staticKey(mcpURL: url), extra: AnyView(
-                Button("Create a key and copy the config") { makeStaticKey() }.disabled(busy)
-                    .heraldHelp(name: "Create a key and copy the config", detail: "Makes a notify-only key named after the agent and copies the ready-to-paste connector block")))
-        }
-    }
-
-    private func instructionBlock(_ text: String, extra: AnyView? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(text).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            Picker("Agent", selection: $agent) {
+                ForEach(RelayInstructions.Agent.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .heraldHelp(name: "Agent", detail: "Pick the agent you are connecting; the steps below change to match")
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(RelayInstructions.steps(for: agent, key: key).enumerated()), id: \.offset) { i, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text("\(i + 1).").font(.callout.monospacedDigit()).foregroundStyle(.secondary)
+                        Text(step).font(.callout).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            ForEach(RelayInstructions.copyLines(for: agent, mcpURL: url, key: key), id: \.label) { line in
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(line.label).font(.caption).foregroundStyle(.secondary)
+                        Text(line.text).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Button("Copy") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(line.text, forType: .string) }
+                        .heraldHelp(name: "Copy \(line.label)", detail: "Copies this value to the clipboard")
+                }
+                .padding(8).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+            }
             HStack {
-                Button("Copy instructions") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) } .heraldHelp(.cloudCopyInstructions)
-                if let extra { extra }
+                Button("Copy instructions") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(RelayInstructions.text(for: agent, mcpURL: url, key: key), forType: .string)
+                } .heraldHelp(.cloudCopyInstructions)
+                if agent != .chatgpt {
+                    Button("Create a key and copy the config") { makeStaticKey() }.disabled(busy)
+                        .heraldHelp(name: "Create a key and copy the config", detail: "Makes a notify-only key named after the agent and copies the ready-to-paste connector block")
+                }
+                Button("Read the guide") { if let u = HeraldDocs.url(agent.docsPage) { NSWorkspace.shared.open(u) } }
+                    .heraldHelp(name: "Read the guide", detail: "Opens the documentation page for this agent in your browser")
             }
         }
-        .padding(8).background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func makeStaticKey() {
@@ -272,7 +297,7 @@ struct CloudSettingsView: View {
 
     @ViewBuilder private var usageRows: some View {
         if let u = relay.usage {
-            Text("\(u.requests) requests (\(u.requestsPercent)% of the relay's daily budget) \u{00B7} \(u.notifications) notifications \u{00B7} \(u.queued) queued \u{00B7} \(ByteCountFormatter.string(fromByteCount: Int64(u.storageBytes), countStyle: .file)) stored")
+            Text("\(u.requests) of \(u.limits.map { "\($0.requestsPerDay)" } ?? "?") requests (\(u.requestsPercent)% of the relay's daily budget) \u{00B7} \(u.notifications) notifications \u{00B7} \(u.queued) queued \u{00B7} \(ByteCountFormatter.string(fromByteCount: Int64(u.storageBytes), countStyle: .file)) stored")
                 .font(.caption) .heraldHelp(.cloudUsage)
             if u.budgetExhausted { Text("Daily budget used up; agents get 503 until midnight UTC. Nothing queued is lost.").font(.caption).foregroundStyle(.orange) }
         } else { Text("Not loaded yet.").font(.caption).foregroundStyle(.secondary) }

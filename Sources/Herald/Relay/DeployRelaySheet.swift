@@ -33,7 +33,7 @@ struct DeployRelaySheet: View {
                     }
                     Text("2. Paste it here").font(.headline)
                     SecureField("Cloudflare API token", text: $token).textFieldStyle(.roundedBorder) .heraldHelp(.cloudToken)
-                    Text("It is kept in this Mac's Keychain and only ever sent to api.cloudflare.com.").font(.caption).foregroundStyle(.secondary)
+                    Text("It is stored on this Mac only, in the Keychain when available (a private file otherwise), is never shown again, and is only ever sent to api.cloudflare.com.").font(.caption).foregroundStyle(.secondary)
                 }
             }
 

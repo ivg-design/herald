@@ -333,6 +333,8 @@ describe("free-plan guards", () => {
     expect((await j(r)).error).toBe("budget_exhausted");
     const u = await j(await f("/v1/device/usage", { headers: auth(token) }));
     expect(u.budgetExhausted).toBe(true);
+    expect(u.limits.requestsPerDay).toBeGreaterThan(0);          // the Mac and relay_usage show the relay's own limits
+    expect(u.limits).toHaveProperty("notificationsPerDay");
     // the Mac can still connect and drain the queue
     const c = await connect(token);
     expect((await c.next()).notificationId).toBe("keep");

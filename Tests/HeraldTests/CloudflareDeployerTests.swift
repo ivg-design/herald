@@ -702,10 +702,9 @@ final class RelayInstructionsTests: XCTestCase {
     func testBothBlocksTellAgentsToSendACustomUserAgent() {
         for t in [RelayInstructions.oauth(mcpURL: "https://r.example.com/mcp"), RelayInstructions.staticKey(mcpURL: "https://r.example.com/mcp"),
                   RelayInstructions.staticKey(mcpURL: "https://r.example.com/mcp", key: "hrk_abc")] {
-            XCTAssertTrue(t.contains("Send a custom User-Agent"))
-            XCTAssertTrue(t.contains("Python-urllib/3.x")); XCTAssertTrue(t.contains("Error 1010"))
-            XCTAssertTrue(t.contains(#""User-Agent": "Herald-Agent/1.0""#))
-            XCTAssertTrue(t.contains("custom domain"))
+            XCTAssertTrue(t.contains("custom User-Agent")); XCTAssertTrue(t.contains("Herald-Agent/1.0"))
+            XCTAssertTrue(t.contains("\(HeraldDocs.baseURL)/cloud/"), "one line, then the docs page")
+            XCTAssertFalse(t.contains("Error 1010"), "the long explanation lives in the docs")
         }
     }
 
@@ -717,6 +716,20 @@ final class RelayInstructionsTests: XCTestCase {
             XCTAssertTrue(t.contains(needle), needle)
         }
         XCTAssertFalse(t.contains("hrk_")); XCTAssertFalse(t.contains("Bearer"))
+        XCTAssertFalse(t.contains("Settings > Connectors")); XCTAssertFalse(t.contains("Dotcliffe")); XCTAssertTrue(t.contains("OpenAI dot"))
+        XCTAssertTrue(t.contains("\(HeraldDocs.baseURL)/cloud/connect-chatgpt"))
+        XCTAssertFalse(t.contains("CLOUD.md"))
+    }
+
+    func testEveryAgentHasAtMostFiveShortStepsAndAGuide() {
+        for agent in RelayInstructions.Agent.allCases {
+            let steps = RelayInstructions.steps(for: agent)
+            XCTAssertTrue((1...5).contains(steps.count), agent.title)
+            XCTAssertFalse(RelayInstructions.copyLines(for: agent, mcpURL: url).isEmpty)
+            XCTAssertTrue(RelayInstructions.text(for: agent, mcpURL: url).contains(RelayInstructions.docsLink(for: agent)))
+            XCTAssertNotNil(HeraldDocs.url(agent.docsPage))
+        }
+        XCTAssertEqual(RelayInstructions.Agent.allCases.map(\.title), ["ChatGPT or an OpenAI dot", "Claude Code", "Codex", "Other"])
     }
 
     func testStaticBlockHasClaudeCodeAndCodexAndHidesNothingBehindAPlaceholder() {

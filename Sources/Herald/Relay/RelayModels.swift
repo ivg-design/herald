@@ -10,7 +10,7 @@ public enum RelayDefaults {
     public static let dedupeHours = 24.0
     public static let logLimit = 20
     /// Keepalive: a text "ping" the relay answers itself ("pong", without waking its Durable Object). Every 5 minutes at most
-    /// often: the free plan's budget (docs/CLOUD.md, "Free plan budget").
+    /// often: the free plan's budget (docs/cloud/how-it-works.md).
     public static let pingSeconds = 300.0
     public static let appPrefix = "cloud."
 }
@@ -39,7 +39,7 @@ public struct RelayEnvelope: Codable, Equatable, Sendable {
         public var speak: JSONValue?
         public var expectReply: Bool?
         public var allowVoiceReply: Bool?
-        // Presentation (non-executable; docs/CLOUD.md "Presentation fields"). Every one is optional.
+        // Presentation (non-executable; docs/reference/relay-api.md). Every one is optional.
         public var persistent: Bool?
         public var timeoutSeconds: Double?
         public var sound: String?
@@ -116,7 +116,7 @@ public struct RelayDeviceEntry: Codable, Equatable, Sendable, Identifiable {
     public var title: String { name ?? "Mac" }
 }
 
-/// A connector asking to be approved (the OAuth flow, docs/CLOUD.md "Connect ChatGPT"): the relay pushes it down the socket,
+/// A connector asking to be approved (the OAuth flow, docs/cloud/connect-chatgpt.md): the relay pushes it down the socket,
 /// Herald asks on a banner, and the 6-digit `code` is the fallback the user can type on the consent page.
 public struct RelayConsent: Codable, Equatable, Sendable, Identifiable {
     public var id: String
@@ -183,6 +183,18 @@ public struct RelayUsage: Codable, Equatable, Sendable {
     public var storageBytes: Int
     public var requestsPercent: Int
     public var budgetExhausted: Bool
+    /// The relay's own daily and queue limits (`limits` of GET /v1/device/usage); nil from a relay that does not send them.
+    public var limits: Limits?
+
+    public struct Limits: Codable, Equatable, Sendable {
+        public var requestsPerDay: Int
+        public var freePlanRequestsPerDay: Int?
+        public var notificationsPerDay: Int?
+        public var pollSecondsPerDay: Int?
+        public var audioUploadsPerDay: Int?
+        public var audioBytesPerDay: Int?
+        public var queueMax: Int?
+    }
 }
 
 public struct RelayDeviceInfo: Codable, Equatable, Sendable {

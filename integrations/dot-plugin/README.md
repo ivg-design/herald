@@ -34,7 +34,7 @@ Nothing here contains a secret. `.app.json` holds the registered app id once it 
 - Delivery: Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature: v1,...`) and `X-MCP-Subscription-Id`;
   retries with backoff; 410 ends the subscription.
 - Durable: tokens never expire or rotate; `refreshBefore` is reported ten years ahead; `ttlMs` is accepted and ignored.
-- Full reference: `docs/CLOUD.md`, "Being told about a reply (event subscription)".
+- Full reference: [Reply events](../../docs/cloud/reply-events.md) (`docs/cloud/reply-events.md`).
 
 ## If the host's subscribe call fails
 

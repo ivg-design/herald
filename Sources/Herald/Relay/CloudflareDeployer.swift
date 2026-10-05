@@ -103,7 +103,7 @@ public enum DeployStep: String, CaseIterable, Sendable {
     case verifyToken, account, subdomain, bucket, lifecycle, upload, route, health, delete
     /// After a deploy that changed the relay's signing secret: this Mac pairs again (see `RelayRepair`).
     case repair
-    // The custom domain (only when one is set): see docs/CLOUD.md "Custom domain".
+    // The custom domain (only when one is set): see docs/cloud/custom-domain.md.
     case zone, domain, configRule, wafSkip, botMode, domainHealth
 
     public var title: String {

@@ -209,7 +209,8 @@ export function validateNotification(input: unknown): Validated {
     if (typeof o.speed !== "number" || !(o.speed >= 0.5 && o.speed <= 2)) return bad("speed must be between 0.5 and 2", ["speed"]);
     speed = o.speed;
   }
-  if (speak === undefined && (voice !== undefined || speed !== undefined || ((out.presentation === "voice" || out.presentation === "both") && o.speak !== false))) speak = true;
+  // An explicit speak: false wins over everything that would imply speech (voice, speed, presentation).
+  if (speak === undefined && o.speak !== false && (voice !== undefined || speed !== undefined || out.presentation === "voice" || out.presentation === "both")) speak = true;
   if (speak !== undefined) {
     if (voice !== undefined || speed !== undefined) {
       const base: Speak = speak === true ? {} : speak;
