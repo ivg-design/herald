@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Georama, Fragment_Mono } from "next/font/google";
 import StructuredData from "@/components/StructuredData";
-import { SITE_URL, asset } from "@/lib/config";
+import { SITE_URL, asset, absolute } from "@/lib/config";
 import "./globals.css";
 
 // Georama: one family with a width axis from 62.5 to 150. The hero binds that axis to the cell; titles sit at its wide end.
@@ -21,8 +21,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
   authors: [{ name: "IVG Design" }],
   icons: { icon: asset("/icon.png"), apple: asset("/herald-icon.png") },
-  openGraph: { title: TITLE, description: DESC, type: "website", siteName: "Herald", images: [{ url: asset("/og.png"), width: 1200, height: 630, alt: "Herald: notifications you'd actually design" }] },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESC, images: [asset("/og.png")] },
+  openGraph: { title: TITLE, description: DESC, type: "website", siteName: "Herald", images: [{ url: absolute("/og.png"), width: 1200, height: 630, alt: "Herald: notifications you'd actually design" }] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESC, images: [absolute("/og.png")] },
   alternates: { canonical: "/" },
 };
 

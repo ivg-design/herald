@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.2 (Build 24) - 2026-10-05
+
+### Fixed
+
+- A Rive animation that is built on data binding (a view model, usually with scripts that drive it, such as a
+  character that blinks and looks around by itself) now plays in a banner. Herald attaches the file's own default
+  view model when it starts the animation, as the Rive editor does. Before, such a file showed its first frame and
+  never moved.
+
+### Changed
+
+- The question a follow-up puts on a banner says why it asks and what would run, without repeating the question.
+- The relay's message for a bad access token no longer mentions expiry: connections do not expire.
+
 ## 1.9.1 (Build 23) - 2026-10-04
 
 ### Changed
