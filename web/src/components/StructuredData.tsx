@@ -1,4 +1,4 @@
-import { absolute, asset } from "@/lib/config";
+import { absolute } from "@/lib/config";
 import { getRelease } from "@/lib/release";
 
 export default async function StructuredData() {
@@ -13,10 +13,10 @@ export default async function StructuredData() {
       operatingSystem: "macOS 13.1+",
       softwareVersion: rel.version,
       downloadUrl: rel.dmgUrl,
-      image: absolute(asset("/herald-icon.png")),
+      image: absolute("/herald-icon.png"),
       license: "https://opensource.org/licenses/MIT",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      author: { "@type": "Organization", name: "IVG Design" },
+      author: { "@type": "Organization", "@id": "https://forge.mograph.life/#organization", name: "IVG Design", url: "https://forge.mograph.life/" },
     },
     {
       "@context": "https://schema.org",

@@ -47,8 +47,8 @@ const COLUMNS = [
       ["WebWatcher", "https://forge.mograph.life/apps/webwatcher/"],
       ["RAV", "https://forge.mograph.life/apps/rav/"],
       ["LERP", "https://forge.mograph.life/apps/lerp/"],
-      ["fNav+", "https://forge.mograph.life/apps/fnav-plus/"],
-      ["Services", "https://forge.mograph.life/services/"],
+      ["fNav+", "https://forge.mograph.life/apps/fnav/"],
+      ["Services", "https://services.mograph.life/"],
     ],
   },
 ];

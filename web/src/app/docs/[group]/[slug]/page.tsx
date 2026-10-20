@@ -5,7 +5,7 @@ import SiteLink from "@/components/SiteLink";
 import Toc from "@/components/docs/Toc";
 import { renderHast } from "@/components/docs/render";
 import { getPage, getPages, renderPageTree } from "@/lib/docs";
-import { absolute, asset } from "@/lib/config";
+import { absolute } from "@/lib/config";
 
 export const dynamicParams = false;
 
@@ -19,7 +19,8 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const { group, slug } = await params;
   const page = getPage(group, slug);
   if (!page) return {};
-  const title = `${page.title} | Herald docs`;
+  const repeatedTitle = getPages().some((other) => other !== page && other.title === page.title);
+  const title = `${page.title}${repeatedTitle ? ` — ${page.group}` : ""} | Herald docs`;
   return {
     title: { absolute: title },
     description: page.description,
@@ -30,9 +31,9 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
       type: "article",
       url: absolute(page.href),
       siteName: "Herald",
-      images: [{ url: asset("/og.png"), width: 1200, height: 630, alt: "Herald" }],
+      images: [{ url: absolute("/og.png"), width: 1200, height: 630, alt: "Herald" }],
     },
-    twitter: { card: "summary_large_image", title, description: page.description, images: [asset("/og.png")] },
+    twitter: { card: "summary_large_image", title, description: page.description, images: [absolute("/og.png")] },
   };
 }
 
