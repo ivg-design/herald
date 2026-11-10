@@ -17,7 +17,11 @@ const nextConfig: NextConfig = {
   },
   // Docs pages that moved keep their old URLs (see DOC_REDIRECTS in src/lib/docs-tree.ts).
   async redirects() {
-    return DOC_REDIRECTS.map(([source, destination]) => ({ source, destination, permanent: true }));
+    return DOC_REDIRECTS.map(([source, destination]) => ({
+      source,
+      destination: prefix ? new URL(prefix + destination, process.env.NEXT_PUBLIC_SITE_URL).href : destination,
+      permanent: true,
+    }));
   },
   async headers() {
     return [
